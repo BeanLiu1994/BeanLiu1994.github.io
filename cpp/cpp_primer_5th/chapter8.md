@@ -1,0 +1,137 @@
+注： 以下一些为书上的摘抄，记录仅供参考，不太敢保证完全正确。
+# 8.1.1 IO对象无拷贝或赋值
+IO类:
+> iostream
+>   包含 istream,wistream,ostream,wostream,iostream,wiostream流。
+> fstream
+>   包含 ifstream,wifstream,ofstream,wofstream,fstream,wfstream流
+> sstream
+>   含istringstream,wistringstream,ostringstream,wostringstream,stringstream,wstringstream
+一般使用引用方式传递流。运行中会对流进行操作，所以不能是const的。
+# 8.1.2 条件状态
+```c++
+s.eof()         eofbit置位，则返回true
+s.fail()        failbit或badbit置位，则返回true
+s.bad()         badbit置位，则返回true
+s.good()        如果流有效，则返回true
+s.clear(flags)  复位条件状态为有效
+s.setstate(flags)将给定的状态位置位
+s.rdstate()     返回流当前状态， strm::iostate类型
+strm::badbit    指出流已崩溃
+strm::failbit   指出一个IO操作失败了
+strm::eofbit    指出到达了文件结束
+strm::goodbit   指出流未处于错误状态
+// 比如读取成功，则可以执行，读取出错会跳出while。
+while(cin >> word) //相当于检查!cin.fail()
+{
+    ...
+}
+```
+# 8.1.3 管理输出缓冲
+流在什么情况下会被刷新？
+* 程序正常结束，缓冲刷新被执行。
+* 缓冲区满，需要刷新缓冲。
+* 使用endl、ends、flush等显式刷新缓冲区
+* 在输出操作之后，使用unitbuf设置流的内部状态。一般情况下，cerr是设置unitbuf的，因此写入到cerr的内容是立即刷新的。
+* 一个输出流可以关联到另一个流，在读写被关联的流时，关联到的流缓冲区会被刷新。
+```c++
+// 三种方式都可以刷新缓冲区
+cout << "hi!" << endl;
+cout << "hi!" << flush;
+cout << "hi!" << ends;//输出空字符
+cout << unitbuf;//无缓冲，立刻刷新
+cout << nounitbuf;//正常缓冲
+cin.tie(&cout);//不过标准库的cin和cout本身是关联的
+ostream* old_tie = cin.tie(nullptr);//cin不再与其他流关联，此时不会刷新其他流。
+cin.tie(old_tie);//重新绑。
+```
+# 8.2 文件输入输出
+fstream一些函数
+```c++
+fstream fstrm([str[, mode]]);//用mode对应模式打开文件
+fstrm.open(str);//如果打开失败，failbit会被置位
+fstrm.close();//不调用的话，析构时会做的
+fstrm.is_open();//同样也可以用 if(fstrm)判断是否成功
+//mode:
+ios::in;        //读方式打开
+    //会保留原文件内容
+ios::out;       //写方式打开
+    //默认是trunc的方式
+ios::app;       //每次写操作定位到文件末尾
+    //一定是out且不是trunc，会保留内容
+ios::ate;       //打开文件后定位到文件末尾
+    //没用过。。。。
+ios::trunc;     //截断文件
+    //需要与out一起设置
+ios::binary;    //二进制IO
+```
+# 8.3 string流
+```c++
+sstream strm;//默认初始化
+sstream strm(s);//保存s的一个拷贝
+strm.str();//返回strm中保存的string
+strm.str(s);//将s拷贝到strm中
+```
+可以用来做字符串转数字之类的。
+如果是单个字符串，也可以用
+stoi(string)
+stof(string)
+stod(string)
+...
+这些函数。
+
+# 关于转bool类型
+stream使用两种转换实现if的判断方式：
+* operator *() const 将对象转换为 void * 类型，如果fail返回nullptr，可以进行判断。
+* bool operator !() const 将!(对象)转换为bool，返回了bool值也是可以判断的。
+其实还可以进行一个转换： operator bool() const
+```c++
+class A
+{
+public:
+    operator bool() const
+    {
+        return false;
+    }
+};
+int main()
+{
+    A a;
+    if (a)
+        cout << "yes" << endl;
+    else
+        cout << "no" << endl;
+    return 0;
+}
+// 输出 no
+```
+```c++
+//甚至还可以这样搞
+class B
+{};
+bool operator ==(const B& lhs, const B& rhs)
+{return false;}
+class A
+{
+public:
+    operator B()const
+    {
+        return B();
+    }
+};
+int main()
+{
+    B b;
+    A a;
+    if (a == b)
+    {
+        cout << "yes" << endl;
+    }
+    else
+    {
+        cout << "no" << endl;
+    }
+    return 0;
+}
+```
+这部分以后可能会在书中出现，后续我会更新位置的。
