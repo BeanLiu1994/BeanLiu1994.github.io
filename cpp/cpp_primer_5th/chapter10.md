@@ -88,6 +88,7 @@ void iter_swap(it1,it2);//交换it指向的值，但不交换it
 ```
 
 # 10.3.1 向算法传递函数
+
 English|Chinese|note
 --|--|--
 unary predicate | 一元谓词 | 有一个参数
@@ -131,10 +132,10 @@ sort(vec.begin(), vec.end(),
 接上节，lambda捕获列表：
 ```c++
 int val,res;
-按值捕获    [val]{return ++val;}
-按引用捕获  [&val]{return ++val;}
-隐式捕获    [=]{...}//推断要用的变量并用值捕获
-隐式+显式   [&, val]{...}// res为引用捕获，val为值捕获
+//按值捕获    [val]{return ++val;}
+//按引用捕获  [&val]{return ++val;}
+//隐式捕获    [=]{...}//推断要用的变量并用值捕获
+//隐式+显式   [&, val]{...}// res为引用捕获，val为值捕获
 ```
 引用捕获需要保证引用的变量在使用lambda时是存在的。
 
@@ -407,12 +408,12 @@ int main()
 
 # 10.4.3 反向迭代器
 ```c++
-vec.cbegin()--------->vec.cend()
-    ↓                    ↓
-  ┌──┬──┬──┬──┬──┬──┬──┐——
-——└──┴──┴──┴──┴──┴──┴──┘
-↑                    ↑
-vec.crend()<--------vec.crbegin()
+//vec.cbegin()--------->vec.cend()
+//    ↓                    ↓
+//  ┌──┬──┬──┬──┬──┬──┬──┐——
+//——└──┴──┴──┴──┴──┴──┴──┘
+// ↑                    ↑
+//vec.crend()<--------vec.crbegin()
 //例如：
 vector<int> vec;
 r_iter = vec.crbegin();
@@ -506,7 +507,8 @@ lst.unique(bpred)
 //splice将
 lst.splice(args)
 forward_lst.splice_after(args)
-//args形式:
+/*
+args形式:
 (p,lst2) 将lst2的所有元素移动到lst中p之前的位置
          lst2中的元素会被删除，lst2类型要和lst一样且lst2不能是lst本身。
          如果是flst，插入的是p之后的位置。
@@ -515,5 +517,6 @@ forward_lst.splice_after(args)
             如果是flst，插入的是p之后的位置，移动的是p2后的元素。
 (p,lst2,b,e) 将lst2的b,e范围内元素从lst2移动到lst或flst。
              lst2可以与lst相同，但p不能在b,e区间内。
+*/
 ```
 需要注意迭代器会发生变化。

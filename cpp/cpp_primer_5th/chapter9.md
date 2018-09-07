@@ -1,5 +1,7 @@
 注： 以下一些为书上的摘抄，记录仅供参考，不太敢保证完全正确。
+
 # 9.1 顺序容器概述
+
 类|数据结构|访问方式|插入删除较快的位置
 --|--|--|--|
 vector|可变大小数组|快速随机访问|尾部
@@ -119,7 +121,9 @@ n,char
 b,e
 initializer_list
 ```
+
 string中的replace 和 insert 不是所有格式都能使用，表格：
+
 replace(pos,len,args)|replace(b,e,args)|insert(pos,args)|insert(iter,args)|args类型 |
 --|--|--|--|--
 Yes|Yes|Yes|**No**|str
@@ -169,11 +173,13 @@ s.compare(pos1,n1,cptr);
 s.compare(pos1,n1,cptr,n2);
 ```
 # 栈和队列相关
+
 可用的适配器|stack|queue|priority_queue
 --|--|--|--
 vector\<elem\>|Yes|**No**|Yes(default)
 deque\<elem\>|Yes(default)|Yes(default)|Yes
 list\<elem\>|Yes|Yes|**No**
+
 ```c++
 //栈和队列
 stack<int, vector<int>> s;//表示容器使用vector<int>存储

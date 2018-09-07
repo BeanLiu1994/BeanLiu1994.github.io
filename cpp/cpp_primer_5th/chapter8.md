@@ -1,12 +1,16 @@
 注： 以下一些为书上的摘抄，记录仅供参考，不太敢保证完全正确。
+
 # 8.1.1 IO对象无拷贝或赋值
+
 IO类:
-> iostream
->   包含 istream,wistream,ostream,wostream,iostream,wiostream流。
-> fstream
->   包含 ifstream,wifstream,ofstream,wofstream,fstream,wfstream流
-> sstream
->   含istringstream,wistringstream,ostringstream,wostringstream,stringstream,wstringstream
+
+- iostream
+-   包含 istream,wistream,ostream,wostream,iostream,wiostream流。
+- fstream
+-   包含 ifstream,wifstream,ofstream,wofstream,fstream,wfstream流
+- sstream
+-   含istringstream,wistringstream,ostringstream,wostringstream,stringstream,wstringstream
+
 一般使用引用方式传递流。运行中会对流进行操作，所以不能是const的。
 
 
@@ -76,10 +80,11 @@ strm.str(s);//将s拷贝到strm中
 ```
 可以用来做字符串转数字之类的。
 如果是单个字符串，也可以用
-stoi(string)
-stof(string)
-stod(string)
-...
+* stoi(string)
+* stof(string)
+* stod(string)
+* ...
+  
 这些函数。
 
 # 关于转bool类型

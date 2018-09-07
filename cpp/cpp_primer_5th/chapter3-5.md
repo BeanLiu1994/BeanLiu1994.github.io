@@ -78,7 +78,7 @@ reinterpret_cast<...>(...);// 用起来很危险
 dynamic_cast在以后类的继承部分会详细讲。
 
 # 5.6.3 标准异常
-```c++
+```
 <stdexcept>中的异常类型
 exception 最常见的问题，基类
 runtime_error 运行时出现的问题
@@ -94,6 +94,7 @@ out_of_range 逻辑错误：使用一个超出有效范围的值
 如下两种定义在其它文件
 * bad_alloc (new)
 * bad_cast (type_info)
+  
 ```c++
 try
 {
