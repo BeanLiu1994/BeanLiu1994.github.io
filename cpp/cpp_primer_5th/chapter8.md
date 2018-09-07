@@ -8,6 +8,8 @@ IO类:
 > sstream
 >   含istringstream,wistringstream,ostringstream,wostringstream,stringstream,wstringstream
 一般使用引用方式传递流。运行中会对流进行操作，所以不能是const的。
+
+
 # 8.1.2 条件状态
 ```c++
 s.eof()         eofbit置位，则返回true
