@@ -9,6 +9,27 @@ s.size()<n;//由于类型转换导致结果一直为true
 ```
 字符串字面值是 const char[len] 的，结尾会带有一个'\0'。
 string可访问的部分没有'\0';
+
+一些转换：
+```c++
+// stoi
+int stoi(const string& str, size_t* pos = 0, int base = 10);
+// pos为结束位置的后一个。
+
+// 规则
+// str的开头丢弃isspace(c)==true的字符，直到对应位置可转换的pos。
+// base如果设置为0为自动检测，
+// 开头的0x或0X代表16进制；
+// 开头的0代表数字为8进制。
+
+// 类似函数还有：
+long stol(const string& str, size_t* pos = 0, int base = 10);
+long long stoll(const string& str, size_t* pos = 0, int base = 10);
+float stof(const string& str, size_t* pos = 0);
+double stod(const string& str, size_t* pos = 0);
+long double stold(const string& str, size_t* pos = 0);
+```
+
 # 3.2.3 一些字符的操作
 ```c++
 char c;

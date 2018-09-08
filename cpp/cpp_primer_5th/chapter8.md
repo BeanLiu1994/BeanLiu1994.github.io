@@ -84,6 +84,7 @@ strm.str(s);//将s拷贝到strm中
 * stof(string)
 * stod(string)
 * ...
+* 详见chapter3-5笔记3.2.2部分
   
 这些函数。
 
