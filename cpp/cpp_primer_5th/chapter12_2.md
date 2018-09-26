@@ -1,0 +1,176 @@
+# 12 动态内存
+
+12.1 介绍了智能指针，单个对象的分配和释放等相关内容
+
+# 12.2 动态数组
+
+一次性为很多元素分配空间：
+* 新的new语法
+* allocator类(可分离分配和初始化)
+
+变长数组实际上可以使用vector来存储，这样更安全，使用更方便。
+
+
+
+## 12.2.1 new和数组
+
+```c++
+int * pia = new int[get_size()];//get_size返回整型，不需要一定是常量
+typedef int arrT[42];
+int *p = new arrT;//即new int[42]
+```
+new返回第一个元素类型的指针。
+
+
+### 初始值的情况
+
+默认情况下，new分配的对象都是**默认初始化**：
+```c++
+int *pia = new int[10];          // 10个未初始化的int
+int *pia2 = new int[10]();       // 10个初始化为0的int
+int *pia3 = new int[10]{0,1,2,3,4,5,6,7,8}// 初始化为 0,1,2,3,4,5,6,7,8,0  最终的0为值初始化
+
+string *psa = new string[10];    // 10个空string
+string *psa2 = new string[10](); // 10个空string
+```
+其中int表现不太一样。可以参考**2.2默认初始化**。
+
+初始化器元素太多会失败（报错，抛出bad_array_new_length），不会分配任何内存。
+
+初始化器元素太少，剩余元素会进行**值初始化**，可参考**第三章**。
+
+### 分配长度为0
+```c++
+char arr[0]; //错误，不能定义长度为0的数组
+char *cp = new char[0];//正确，但无法解引用。
+```
+new T[0] 保证返回的指针是一个合法的非空指针，且与new返回的其他指针都不相同。
+
+对于0长度的数组来说，此指针相当于尾后指针。可以用来比较，但不能解引用。
+
+### delete[]
+```c++
+delete p;     // p必须指向一个动态分配的对象，或为空
+delete [] pa; //pa必须指向一个动态分配的数组，或为空
+```
+
+delete [] pa; 会销毁pa指向的数组中的元素，并释放对应的内存。数组中的元素按逆序销毁。（最后一个元素先被销毁）
+
+delete pa; 或 delete[] p; 会产生未定义的行为。
+
+```c++
+//一个正确的样例：
+typedef int arrT[42];
+int *p = new arrT;
+delete[] p;
+```
+
+### unique_ptr 和 T[]
+
+unique_ptr可以管理new分配的数组。
+```c++
+unique_ptr<int[]> up(new int[10]);
+up.release();  //自动用delete[]释放空间
+```
+
+此时的unique_ptr和先前的使用方式不太相同：
+```c++
+unique_ptr<T[]>; //不支持访问运算符，如点和箭头
+//其他操作不变
+unique_ptr<T[]> u;
+unique_ptr<T[]> u(p);
+u[i];            //返回u拥有的数组中位置i处的对象
+```
+
+### shared_ptr 和 T[]
+
+如果要使用，需要使用shared_ptr<T>，且自行提供删除器。
+
+```c++
+shared_ptr<int> sp(new int[10], [](int *p){delete[] p;});
+*(sp.get() + i) = val; //赋值需要如此操作，不够方便。
+sp.reset(); //会调用提供的lambda来使用delete[]释放内存。
+```
+
+## 12.2.2 allocator 类
+
+new T(...); 内存分配和对象构造组合在一起是没有问题的，这种情况下，它的初值是能够按需确定的。
+
+new T[...]的局限性： 内存分配和对象构造组合在了一起，数组元素无法按需构造对象，导致不必要的浪费(两次赋值)。
+
+没有默认构造函数的类也不能直接使用new[]来分配。
+
+### allocator类
+
+allocator将内存分配和对象构造分离开。分配出原始的、未构造的内存。
+
+当allocator对象分配内存时，它会根据给定对象类型来确定恰当的内存大小和对齐位置。
+
+```c++
+allocator<T> a;         //定义了一个名为a的allocator对象，可以为T类型对象分配内存
+a.allocate(n);          //分配一段原始的未构造的内存，可保存n个类型为T的对象
+a.deallocate(p, n);     //释放从T*指针p中地址开始的内存，这个内存保存了n个类型为T的对象。
+//deallocate要求p必须是一个先前由allocate返回的指针，且n必须是p创建时要求的大小。调用deallocate前需要对内存中每个创建的对象调用destroy
+
+a.construct(p, args);   //在p指向的内存中，构造一个使用args进行构造的对象
+a.destroy(p);           //对p指向的对象执行析构函数
+//以上p都必须为T*类型的指针。
+```
+例子：
+```c++
+allocator<string> alloc;            // 可以分配string的allocator对象
+auto const p = alloc.allocate(n);   // 分配n个为初始化的string
+auto q = p;
+alloc.construct(q++);           //构造为空字符串
+alloc.construct(q++, 10, 'c');  //构造为 "cccccccccc"
+alloc.construct(q++, "hi");     //构造为 "hi!"
+
+//注意不要访问未构造的对象。
+cout << *p << endl; //正确。
+cout << *q << endl; //错误。
+
+//回收内存前，只对之前构造的对象进行析构
+while(q != p)
+    alloc.destroy(--q);
+
+//销毁对象后，对应位置的内存可以再次用来构造元素。
+//...
+
+//最终将所有对象析构后，释放内存
+alloc.deallocate(p, n);
+```
+
+头文件memory中有两个allocator类的伴随算法。
+```c++
+uninitialized_copy(b, e, b2);
+uninitialized_copy_n(b, n, b2);
+// b --> e(或b+n) 左闭右开 为输入范围
+// b2 开始为输出范围
+// b2的空间必须要足够大
+// 将区间内的元素拷贝到b2指定的未构造的原始内存中
+// 返回结束位置迭代器 e2
+
+uninitialized_fill(b, e, t);
+uninitialized_fill_n(b, n, t);
+// b --> e(或b+n) 左闭右开 是输出范围
+// 在输入范围内制定的原始内存中创建对象，均为t的拷贝。
+// 没有返回值
+```
+区别在于调用了 placement new 而不是赋值操作符（大概）。
+
+例子：
+```c++
+vector<int> vi = {...};
+allocator<int> alloc;
+
+auto p = alloc.allocate(vi.size() * 2);
+//分配了两倍于vi.size()的内存
+
+auto q = uninitialized_copy(vi.begin(), vi.end(), p);
+//q为拷贝结束位置，分配的前半为从vi拷贝的内容。
+
+uninitialized)fill_n(q, vi.size(), 42);
+//剩余元素初始化为42
+```
+
+
