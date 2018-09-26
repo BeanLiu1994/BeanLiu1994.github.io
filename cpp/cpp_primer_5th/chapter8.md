@@ -90,7 +90,7 @@ strm.str(s);//将s拷贝到strm中
 
 # 关于转bool类型
 stream使用两种转换实现if的判断方式：
-* operator *() const 将对象转换为 void * 类型，如果fail返回nullptr，可以进行判断。
+* operator const void*() const 将对象转换为 void * 类型，如果fail返回nullptr，可以进行判断。
 * bool operator !() const 将!(对象)转换为bool，返回了bool值也是可以判断的。
 其实还可以进行一个转换： operator bool() const
 ```c++

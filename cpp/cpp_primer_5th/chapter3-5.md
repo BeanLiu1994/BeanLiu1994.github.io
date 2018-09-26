@@ -54,6 +54,17 @@ vector<string> t1{ 10,"test" };
 // 与vector<string> t(10,"test")相同;size为10
 vector<string> t2{ "10","test" };
 // 结果为size为2的vector
+// 由于10不能转换为string，匹配了圆括号的初始化方法
+
+//对比：
+string t3{10,'t'};
+// 结果为 "\nt"  由于10可以转为char所以匹配了Initializer_list的方法。
+string t3_5 {149, 't'};//err
+// 不能损失精度，而149越界，此句错误
+
+vector<int> t4{0.1,0.2};//err
+// 因为是初始化列表，不允许损失精度的转换。
+// 参见第二章。
 ```
 # 3.5.3 指针和数组
 ```c++
@@ -126,4 +137,14 @@ catch(exception& e)
 ...
 throw;//再次丢出 not-handled
 }
+```
+可以为函数表明会抛出何种异常
+```c++
+void func() throw() {} //不抛出任何类型的异常
+void func() noexcept {} // 同上
+void func() throw(...) {} //可抛出任何类型的异常
+void func() throw(Ty1, Ty2) //可抛出两种类型的异常
+// 可抛出某种异常表示不一定会抛出异常，但如果抛出一定会是给定的类型
+
+// 看起来大概仅限func内直接的throw，func内调用的函数throw了的话不算。
 ```
