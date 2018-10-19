@@ -204,7 +204,144 @@ F f(int);//错误，不能返回函数类型，只能返回函数指针
 # 7.1.2 关于inline
 定义在类内部的函数是隐式的inline函数。
 # 7.3.1 关于inline
-可以在类外部，用inline修饰成员函数的定义。类内声明可以不添加。不过inline后的函数一般会放在头文件内。
+可以在类外部，用inline修饰成员函数的定义。类内声明可以不添加。不过inline后的函数一般会放在头文件内。因为定义相同才能被inline。
+# 7.1.4 构造函数
+构造函数不能是const的。创建一个const对象时，直到构造函数完成后，对象才真正的获得常量属性。
+
+可以有多个构造函数。
+
+默认初始化需要默认构造函数，默认构造函数不需要输入参数。（默认初始化参见2-2）
+
+（只有当）没有提供任何自定义的构造函数时，编译器会创建合成的默认构造函数。一旦定义了一些其他构造函数，编译器将不合成。
+
+合成的默认构造函数会进行以下初始化：
+如果存在类内的初始值，用它初始化成员；否则默认初始化成员。
+
+当类内有成员没有被赋予类内初始值，且它没有默认构造函数，则无法合成默认构造函数。
+
+```c++
+struct Type
+{
+    Type() = default;
+}
+```
+
+= default 表示要求编译器生成构造函数。同样，它既可以随声明写在类内(inline的)，也可以作为定义写在类外(默认不内联)。
+
+成员变量的初始化可以通过类内初始值，初始值列表 来初始化。构造函数不应轻易覆盖掉类内初始值，除非新赋的值与原值不同。
+
+# 7.1.5 拷贝、赋值和析构
+如果不主动定义这些操作，编译器将合成它们。 
+具体的用法详见13章。
+
+# 7.2 访问控制与封装
+
+struct 和 class 的唯一区别就是默认访问权限。
+
+# 7.2.1 友元
+
+```c++
+class Type
+{
+    //例如 相加：
+    friend Type add(const Type&, const Type&);
+}
+Type add(const Type&, const Type&);
+```
+友元声明不受访问控制级别的影响，所以可以出现在类内任意位置。
+
+一般来说，友元的声明仅指定了访问权限，而非一个通常意义上的声明。一般会在友元声明之外再专门声明这个函数。
+
+# 7.3.1 类成员再探
+
+除了数据和函数成员之外，类还可以自定义某种类型在类中的别名。一样存在访问限制。
+
+```c++
+class Type()
+{
+public:
+    typedef std::string::size_type pos;
+    // 一个等价与typedef的声明方式：
+    //using pos = std::string::size_type;
+private:
+    pos height = 0, width = 0;
+};
+```
+
+类内初始值需要用 ‘=’ 或 ‘{...}’ 的初始化形式。
+
+mutable修饰的成员为可变数据成员，它在const成员函数中也能被修改。
+
+定义上仅在【成员函数是否为const】上不同的两个 const成员函数和非const成员函数 是重载关系。const成员函数如果要返回*this，只能将返回类型声明为const Type&。
+
+# 7.3.3 类类型
+
+class Type; //Type类的声明
+
+这叫做前向声明，引入了名字Type为类类型。在声明之后定义之前，它是一个不完全类型，只能在很有限的情况下使用（使用其引用、指针，**声明**其作为参数或返回值的函数）。
+
+# 7.3.4 友元再探
+
+```c++
+class Type{
+    friend class Type2;
+};
+```
+此时友元类Type2的成员函数可以访问Type类中，包括非公有成员在内的所有成员。
+
+友元不存在传递性。
+
+```c++
+class Type{
+    friend void Type2::func();
+};
+```
+此时Type2类的成员函数成为了Type的友元。
+
+```c++
+class Type{
+    friend void f() {/* 友元函数可以直接在类内定义 */}
+    Type() {f();} // error: f还未声明
+    void g();
+    void h();
+};
+void Type::g() {f();} // error: f还未声明
+void f(); //此处为声明
+void Type::h() {f();} // ok
+```
+一般来说，友元函数需要有函数声明，类内的友元声明不能代替它。
+
+上面代码中的void f();如果改为定义，则会因f()重定义出错。
+
+# 7.4.1 作用域相关
+
+```c++
+int height = 0;
+struct Type{
+    public:
+    void f(int height){
+        cout << height;
+    }
+private:
+    int height = 0;
+};
+```
+此时使用的height为函数Type::f的参数。
+为了使用成员或全局变量，参考以下写法。
+
+```c++
+void f(int height){
+    cout << Type::height;//成员
+}
+void f(int height){
+    cout << this->height;//成员
+}
+void f(int height){
+    cout << ::height;//全局
+}
+```
+当然最好还是避免出现同名的情况。
+
 # 7.5.2 委托构造函数
 ```c++
 class A
@@ -215,6 +352,42 @@ public:
     A() :A(0) {}
 };
 ```
+# 7.5.4 隐式的类类型转换
+
+如果构造函数只接受一个实参，则实际上定义了转换为此类类型的隐式转换机制(14章)。
+
+编译器只进行一步隐式类型转换：
+```c++
+struct T{
+    T(const string&){...}
+};
+struct R{
+    R(const T&){...}
+};
+
+R v("test_string");// error，需要两步。
+R v(string("test_string")); // ok, string显式，T隐式。
+R v(T("test_string"));  //ok，string隐式，T显式。
+```
+
+通过explicit可以抑制这种隐式转换：
+```c++
+struct T{
+    explicit T(const string&){...}
+};
+struct R{
+    R(const T&){...}
+};
+R v(string("test_string")); // error，无法调用运算符，不能隐式转换。
+T v1(string("test_string")); // ok，直接初始化
+T v2 = string("test_string"); // error，因为不能隐式转换类型，所以不能用于拷贝形式的初始化过程。
+T v3 = static_cast<T>(string("test_string")); // ok
+```
+explicit仅对一个实参的构造函数有效。
+explicit仅写在类内声明构造函数的时候，类外定义不能使用。
+static_cast可以使用explicit的构造函数。
+
+
 # 7.5.5 聚合类
 聚合类：
 * 所有成员都是public的。
