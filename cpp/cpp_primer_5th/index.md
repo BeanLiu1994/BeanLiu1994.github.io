@@ -14,3 +14,4 @@ c++以前没有完整的看过这本书，在拿到muduo的书之后，感到c++
 * [Chapter 12.2](chapter12_2.md) *2018-09-26*
 * [Chapter 13.1](chapter13_1.md) *2018-10-20*
 * [Chapter 13.2](chapter13_2.md) *2018-11-01*
+* [Chapter 13.3](chapter13_3.md) *2018-11-05*
