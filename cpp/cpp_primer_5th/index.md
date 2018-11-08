@@ -16,4 +16,5 @@ c++以前没有完整的看过这本书，在拿到muduo的书之后，感到c++
 * [Chapter 13.2 STL 交换操作swap](chapter13_2.md) *2018-11-01*
 * [Chapter 13.3 移动对象](chapter13_3.md) *2018-11-05*
 * [Chapter 14.1 对象的重载操作符](chapter14_1.md) *2018-11-08*
+* [Chapter 14.2 函数对象和类型转换二义性](chapter14_2.md) *2018-11-08*
   
