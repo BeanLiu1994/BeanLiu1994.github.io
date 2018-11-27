@@ -3,7 +3,7 @@ layout: post
 title:  "Computer Graphics CMU15462 OverView"
 date:   2018-09-08 09:00:13
 categories: CG
-permalink: /archivers/computer_graphics
+permalink: /archivers/computer_graphics_cmu
 ---
 
 # Computer Graphics CMU15462

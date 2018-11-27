@@ -3,7 +3,7 @@ layout: post
 title:  "C++ Primer 5th OverView"
 date:   2018-09-08 09:00:13
 categories: c++
-permalink: /archivers/c++_primer_5th
+permalink: /archivers/c++_primer_5th_overview
 ---
 
 # C++ Primer 5th
