@@ -6,6 +6,10 @@ categories: graphics
 permalink: /archivers/RTR_01
 ---
 
+# Introduction
+
+主要是 介绍-概览-符号约定-大致概念解释
+
 # display rate
 frames per second(FPS) or Hertz(Hz)是描述图像显示速率的单位。
 
@@ -79,7 +83,7 @@ geometric entity|capital italic|$A_{OBB},T,B_{AABB}$
 
 矩阵有一个特殊的表示，以3x3为例，$M=(m_{,0},m_{,1},m_{,2})=(m_{x},m_{y},m_{z})$，$m_{,j}$为列向量，表示第j列的内容。同样的，$m_{i,}$为列向量，表示第i行的内容。
 
--|Operator|Description
+Index|Operator|Description
 -|-|-
 1.|$\cdot$|dot product
 2.|$\times$|cross product
@@ -97,7 +101,7 @@ geometric entity|capital italic|$A_{OBB},T,B_{AABB}$
 
 第4个操作符用于向量。$\mathbf{v}=(v_x,v_y)^T$，则$\mathbf{v^\perp}=(-v_y,v_x)^T$。
 
-第5和第6个操作符为 $\left|\dots\right|$ 。由于markdown列表语法原因打不出来。可以计算方阵的行列式和标量的绝对值。方阵的用法也可以写为$\left|A\right|=\left|\mathbf(a\ b\ c)\right|=det(\mathbf{a,b,c})$
+<text>第5和第6个操作符为 $\left|\dots\right|$ 。由于markdown列表语法原因打不出来。可以计算方阵的行列式和标量的绝对值。方阵的用法也可以写为$\left|A\right|=\left|\mathbf(a\ b\ c)\right|=det(\mathbf{a,b,c})$</text>
 
 第8个操作符为
 $$x^+=\left\{\begin{matrix}x & if\ x>0,\\0 & otherwise\end{matrix}\right.$$
@@ -137,7 +141,7 @@ Shading: computer-generated visual appearance. 比如 shading model, shading equ
 
 Shader: programmable component of a rendering system. 比如 vertex shader, shading language。
 
-# 
+# About book
 
 CG领域变化很快，书上内容说不定什么时候就不够新了。
 可以去书的网站查看一些相关信息。
