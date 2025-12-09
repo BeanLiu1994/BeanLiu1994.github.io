@@ -1,44 +1,71 @@
----
-layout: default
----
-
-<div class="home">
-  <h1 class="page-heading">Articles</h1>
-
-  <ul class="post-list">
-    {% for post in paginator.posts %}
-      <li>
-        <h2>
-          <a class="post-link" href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a>
-        </h2>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peng Liu - GitHub Pages</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .greeting {
+            text-align: center;
+            padding: 30px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            max-width: 500px;
+        }
+        .avatar {
+            width: 135px;
+            height: 135px;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            border: 4px solid #f0f0f0;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        p {
+            color: #666;
+            font-size: 18px;
+            margin: 5px 0;
+        }
+        .contact-info {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .contact-info a {
+            color: #0366d6;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 16px;
+        }
+        .contact-info a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="greeting">
+        <img src="//www.gravatar.com/avatar/fde39dcaf99551408486c753d5456c96?d=mm&s=135" alt="Peng Liu" class="avatar">
+        <h1>Hello! 👋</h1>
+        <p>I'm Peng Liu</p>
+        <p>Welcome to my GitHub Pages site</p>
         
-        <div class="post-meta">{{ post.date | date: "%b %-d, %Y" }}</div>
-
-        <div class="post-excerpt">
-          {%   if post.content contains site.excerpt_separator or post.content != post.excerpt %}{{ post.excerpt }}
-          {%   else %}{{ post.content | lstrip | split: "
-" | first }}{% endif %}
-          <p>
-            <a class="post-link" href="{{ post.url | prepend: site.baseurl }}">Read More &raquo;</a>
-          </p>
+        <div class="contact-info">
+            <a href="mailto:njueebeanliu@hotmail.com">📧 Email</a>
+            <a href="https://github.com/BeanLiu1994">🐙 GitHub</a>
         </div>
-      </li>
-    {% endfor %}
-  </ul>
-  
-  <!-- Pagination links -->
-<div class="pagination">
-  {% if paginator.previous_page %}
-    <a href="{{ paginator.previous_page_path | prepend: site.baseurl }}" class="previous">PREV</a>
-  {% else %}
-    <span class="previous">PREV</span>
-  {% endif %}
-  <span class="page_number ">{{ paginator.page }} of {{ paginator.total_pages }}</span>
-  {% if paginator.next_page %}
-    <a href="{{ paginator.next_page_path | prepend: site.baseurl }}" class="next">NEXT</a>
-  {% else %}
-    <span class="next ">NEXT</span>
-  {% endif %}
-</div>
-
-</div>
+    </div>
+</body>
+</html>

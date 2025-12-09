@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tone Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .control-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .value-display {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .play-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .play-btn:hover {
+            background-color: #218838;
+        }
+        .stop-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+        .stop-btn:hover {
+            background-color: #c82333;
+        }
+        .refresh-btn {
+            background-color: #007bff;
+            color: white;
+        }
+        .refresh-btn:hover {
+            background-color: #0056b3;
+        }
+        .preset-btn {
+            background-color: #6c757d;
+            color: white;
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+        .preset-btn:hover {
+            background-color: #5a6268;
+        }
+        .freq-control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .freq-input {
+            width: 120px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            text-align: center;
+        }
+        .freq-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .freq-btn {
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .freq-btn:hover {
+            background-color: #0056b3;
+        }
+        .presets-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .playing {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .stopped {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .range-control-group {
+            margin: 15px 0;
+        }
+        .range-inputs {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .range-input {
+            width: 100px;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .range-separator {
+            font-weight: bold;
+            color: #666;
+        }
+        .range-btn {
+            padding: 6px 12px;
+            background-color: #17a2b8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .range-btn:hover {
+            background-color: #138496;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tone Generator</h1>
+        
+        <div class="control-group">
+            <label for="frequency">Frequency (Hz):</label>
+            
+            <!-- Frequency input and buttons -->
+            <div class="freq-control-group">
+                <button class="freq-btn" id="freq-down">-</button>
+                <input type="number" id="freq-input" class="freq-input" min="0.5" max="20000" value="440" step="0.1">
+                <button class="freq-btn" id="freq-up">+</button>
+            </div>
+            
+            <input type="range" id="frequency" min="20" max="4000" value="440" step="0.1">
+
+            <div class="value-display" id="frequency-value">440 Hz</div>
+            
+            <!-- Frequency presets -->
+            <div class="presets-group">
+                <button class="preset-btn" data-freq="20">20Hz</button>
+                <button class="preset-btn" data-freq="50">50Hz</button>
+                <button class="preset-btn" data-freq="60">60Hz</button>
+                <button class="preset-btn" data-freq="100">100Hz</button>
+                <button class="preset-btn" data-freq="261.63">C4</button>
+                <button class="preset-btn" data-freq="440.00">A4</button>
+                <button class="preset-btn" data-freq="523.25">C5</button>
+                <button class="preset-btn" data-freq="1000">1k</button>
+                <button class="preset-btn" data-freq="2000">2k</button>
+                <button class="preset-btn" data-freq="5000">5k</button>
+                <button class="preset-btn" data-freq="10000">10k</button>
+                <button class="preset-btn" data-freq="15000">15k</button>
+            </div>
+
+            <!-- Frequency range limiter -->
+            <div class="range-control-group">
+                <label for="range-start">Frequency Range:</label>
+                <div class="range-inputs">
+                    <input type="number" id="range-start" class="range-input" min="0.5" max="200000" value="20" step="0.1" placeholder="Start Hz">
+                    <span class="range-separator">to</span>
+                    <input type="number" id="range-end" class="range-input" min="0.5" max="200000" value="4000" step="1" placeholder="End Hz">
+
+                    <button class="range-btn" id="apply-range">Apply Range</button>
+                </div>
+            </div>
+
+        </div>
+
+
+        <div class="control-group">
+            <label for="volume">Volume:</label>
+            <input type="range" id="volume" min="0" max="100" value="50" step="1">
+            <div class="value-display" id="volume-value">50%</div>
+        </div>
+
+        <div class="control-group">
+            <label for="duration">Duration (seconds):</label>
+            <input type="range" id="duration" min="1" max="60" value="5" step="1">
+            <div class="value-display" id="duration-value">5 seconds</div>
+        </div>
+
+        <div class="control-group">
+            <label for="waveform">Waveform:</label>
+            <select id="waveform">
+                <option value="sine">Sine</option>
+                <option value="square">Square</option>
+                <option value="sawtooth">Sawtooth</option>
+                <option value="triangle">Triangle</option>
+            </select>
+        </div>
+
+        <div class="button-group">
+            <button class="play-btn" id="play-btn">Play Tone</button>
+            <button class="stop-btn" id="stop-btn">Stop Tone</button>
+            <button class="refresh-btn" id="refresh-btn">Extend Stop Time</button>
+
+        </div>
+
+        <div class="status stopped" id="status">Ready to play</div>
+        <div class="value-display" id="stop-time">Stop time: Not set</div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
