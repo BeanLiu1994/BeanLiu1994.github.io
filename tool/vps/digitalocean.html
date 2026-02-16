@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigitalOcean Manager</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            color: #58a6ff;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            color: #58a6ff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .auth-section {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        input[type="text"], input[type="password"], select {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        input[type="text"]:focus, input[type="password"]:focus, select:focus {
+            border-color: #58a6ff;
+        }
+        .auth-input {
+            flex: 1;
+            min-width: 300px;
+        }
+        button {
+            padding: 8px 16px;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #238636;
+            color: #fff;
+            border-color: #238636;
+        }
+        .btn-primary:hover { background: #2ea043; }
+        .btn-danger {
+            background: #da3633;
+            color: #fff;
+            border-color: #da3633;
+        }
+        .btn-danger:hover { background: #f85149; }
+        .btn-secondary {
+            background: #21262d;
+            color: #c9d1d9;
+        }
+        .btn-secondary:hover { background: #30363d; }
+        .btn-info {
+            background: #1f6feb;
+            color: #fff;
+            border-color: #1f6feb;
+        }
+        .btn-info:hover { background: #388bfd; }
+        .btn-warning {
+            background: #9e6a03;
+            color: #fff;
+            border-color: #9e6a03;
+        }
+        .btn-warning:hover { background: #bb8009; }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #21262d;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #8b949e; }
+        .info-value { color: #c9d1d9; font-weight: 500; }
+        .balance-amount {
+            font-size: 32px;
+            font-weight: 700;
+            color: #3fb950;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid #30363d;
+            color: #8b949e;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #21262d;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-active {
+            background: #0d2818;
+            color: #3fb950;
+            border: 1px solid #238636;
+        }
+        .status-new, .status-off {
+            background: #2d1b00;
+            color: #d29922;
+            border: 1px solid #9e6a03;
+        }
+        .status-archive {
+            background: #1c1c1c;
+            color: #8b949e;
+            border: 1px solid #484f58;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #8b949e;
+        }
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #30363d;
+            border-top-color: #58a6ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            max-width: 400px;
+        }
+        .toast-success { background: #238636; }
+        .toast-error { background: #da3633; }
+        .toast-info { background: #1f6feb; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .modal {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal h3 {
+            color: #58a6ff;
+            margin-bottom: 16px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #8b949e;
+            font-size: 14px;
+        }
+        .form-group select, .form-group input {
+            width: 100%;
+        }
+        .proxy-config {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 16px;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 13px;
+            color: #3fb950;
+            word-break: break-all;
+            position: relative;
+        }
+        .proxy-config .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #1c2d41;
+            color: #58a6ff;
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 2px;
+        }
+        .tag-proxy {
+            background: #2d1b41;
+            color: #bc8cff;
+        }
+        .droplet-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: #8b949e;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #21262d;
+            border-radius: 2px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: #58a6ff;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        .log-area {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            color: #8b949e;
+        }
+        .log-area .log-info { color: #58a6ff; }
+        .log-area .log-success { color: #3fb950; }
+        .log-area .log-error { color: #f85149; }
+        .log-area .log-warn { color: #d29922; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌊 DigitalOcean Manager</h1>
+        <div class="header-actions">
+            <span id="auth-status" style="font-size:13px; color:#8b949e;">Not authenticated</span>
+            <button class="btn-secondary btn-sm" onclick="showAuthModal()">⚙️ Auth Settings</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Auth prompt when no token -->
+        <div id="auth-prompt" class="card">
+            <h2>🔑 Authentication Required</h2>
+            <p style="color:#8b949e; margin-bottom:16px;">Enter your DigitalOcean API Bearer Token to get started. Your token is stored locally in your browser.</p>
+            <div class="auth-section">
+                <input type="password" id="token-input" class="auth-input" placeholder="Enter your DigitalOcean API token..." />
+                <button class="btn-primary" onclick="saveToken()">Save & Connect</button>
+            </div>
+        </div>
+
+        <!-- Dashboard (hidden until authenticated) -->
+        <div id="dashboard" class="hidden">
+            <!-- Balance & Account -->
+            <div class="grid-2">
+                <div class="card">
+                    <h2>💰 Balance</h2>
+                    <div id="balance-loading" class="loading">Loading balance</div>
+                    <div id="balance-content" class="hidden">
+                        <div class="balance-amount" id="balance-amount">$0.00</div>
+                        <div class="info-row">
+                            <span class="info-label">Month-to-date usage</span>
+                            <span class="info-value" id="balance-mtd">$0.00</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Account balance</span>
+                            <span class="info-value" id="balance-account">$0.00</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Generated at</span>
+                            <span class="info-value" id="balance-generated">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🔐 SSH Keys</h2>
+                    <div id="sshkeys-loading" class="loading">Loading SSH keys</div>
+                    <div id="sshkeys-content" class="hidden">
+                        <table>
+                            <thead><tr><th>Name</th><th>Fingerprint</th></tr></thead>
+                            <tbody id="sshkeys-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create Proxy Server -->
+            <div class="card">
+                <h2>🚀 Create Proxy Server</h2>
+                <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <div class="form-group" style="margin-bottom:0; min-width:200px;">
+                        <label>Region</label>
+                        <select id="create-region">
+                            <option value="">Loading regions...</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Config</label>
+                        <input type="text" value="s-1vcpu-512mb-10gb" disabled style="width:180px;" />
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>OS</label>
+                        <input type="text" value="Ubuntu 22.04 x64" disabled style="width:160px;" />
+                    </div>
+                    <div style="align-self:flex-end;">
+                        <button class="btn-primary" onclick="createProxyServer()" id="btn-create-proxy">Create Proxy Server</button>
+                    </div>
+                </div>
+                <!-- Creation progress -->
+                <div id="create-progress" class="hidden" style="margin-top:16px;">
+                    <div class="progress-bar"><div class="progress-bar-fill" id="create-progress-bar" style="width:0%"></div></div>
+                    <div class="log-area" id="create-log"></div>
+                </div>
+            </div>
+
+            <!-- Droplets -->
+            <div class="card">
+                <h2>💧 Droplets <button class="btn-secondary btn-sm" onclick="refreshAll()" style="margin-left:auto;">🔄 Refresh</button></h2>
+                <div id="droplets-loading" class="loading">Loading droplets</div>
+                <div id="droplets-content" class="hidden">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>IP</th>
+                                <th>Region</th>
+                                <th>Size</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="droplets-table"></tbody>
+                    </table>
+                    <div id="droplets-empty" class="empty-state hidden">No droplets found.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>🔑 API Token Settings</h3>
+            <div class="form-group">
+                <label>Bearer Token</label>
+                <input type="password" id="modal-token-input" style="width:100%;" placeholder="Enter your DigitalOcean API token..." />
+            </div>
+            <div class="modal-actions">
+                <button class="btn-danger btn-sm" onclick="clearToken()">Clear Token</button>
+                <button class="btn-secondary" onclick="closeAuthModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveTokenFromModal()">Save & Reconnect</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Proxy Info Modal -->
+    <div id="proxy-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>🔗 Proxy Connection Info</h3>
+            <div id="proxy-modal-loading" class="loading">Configuring sing-box proxy</div>
+            <div id="proxy-modal-content" class="hidden">
+                <p style="color:#8b949e; margin-bottom:12px;">Use the following connection string in your sing-box client:</p>
+                <div class="proxy-config">
+                    <button class="btn-secondary btn-sm copy-btn" onclick="copyProxyConfig()">📋 Copy</button>
+                    <div id="proxy-config-text"></div>
+                </div>
+                <div style="margin-top:12px;">
+                    <div class="info-row">
+                        <span class="info-label">Server IP</span>
+                        <span class="info-value" id="proxy-ip">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Port</span>
+                        <span class="info-value" id="proxy-port">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Protocol</span>
+                        <span class="info-value" id="proxy-protocol">-</span>
+                    </div>
+                </div>
+            </div>
+            <div id="proxy-modal-log" class="log-area hidden" style="margin-top:12px;"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeProxyModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Console Modal -->
+    <div id="console-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:800px;">
+            <h3>🖥️ Web Console</h3>
+            <p style="color:#8b949e; margin-bottom:12px;">Opening DigitalOcean web console in a new window...</p>
+            <div id="console-info"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeConsoleModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="delete-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>⚠️ Delete Droplet</h3>
+            <p style="color:#f85149; margin-bottom:12px;">Are you sure you want to permanently delete this droplet?</p>
+            <div id="delete-droplet-info" style="margin-bottom:16px;"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn-danger" id="btn-confirm-delete" onclick="confirmDelete()">Delete Permanently</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ======================= Constants & State =======================
+    const API_BASE = 'https://api.digitalocean.com/v2';
+    const STORAGE_KEY = 'do_api_token';
+    const PROXY_TAG = 'proxy-server';
+    const PROXY_SIZE = 's-1vcpu-512mb-10gb';
+    const PROXY_IMAGE = 'ubuntu-22-04-x64';
+    const SINGBOX_PORT = 1080;
+    const SINGBOX_UUID_KEY = 'do_singbox_uuids'; // dropletId -> uuid mapping
+
+    let currentToken = '';
+    let allSSHKeys = [];
+    let allDroplets = [];
+    let deleteTargetId = null;
+
+    // ======================= Utility Functions =======================
+    function getToken() {
+        return localStorage.getItem(STORAGE_KEY) || '';
+    }
+    function setToken(token) {
+        localStorage.setItem(STORAGE_KEY, token);
+        currentToken = token;
+    }
+    function removeToken() {
+        localStorage.removeItem(STORAGE_KEY);
+        currentToken = '';
+    }
+
+    function getSingboxUUIDs() {
+        try { return JSON.parse(localStorage.getItem(SINGBOX_UUID_KEY) || '{}'); } catch { return {}; }
+    }
+    function setSingboxUUID(dropletId, uuid) {
+        const uuids = getSingboxUUIDs();
+        uuids[dropletId] = uuid;
+        localStorage.setItem(SINGBOX_UUID_KEY, JSON.stringify(uuids));
+    }
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
+    function showToast(msg, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    function formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function getPublicIP(droplet) {
+        if (!droplet.networks || !droplet.networks.v4) return '-';
+        const pub = droplet.networks.v4.find(n => n.type === 'public');
+        return pub ? pub.ip_address : '-';
+    }
+
+    function isProxyDroplet(droplet) {
+        return droplet.tags && droplet.tags.includes(PROXY_TAG);
+    }
+
+    // ======================= API Calls =======================
+    async function apiCall(endpoint, method = 'GET', body = null) {
+        const opts = {
+            method,
+            headers: {
+                'Authorization': `Bearer ${currentToken}`,
+                'Content-Type': 'application/json'
+            }
+        };
+        if (body) opts.body = JSON.stringify(body);
+        const resp = await fetch(`${API_BASE}${endpoint}`, opts);
+        if (resp.status === 204) return null;
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.message || `API error: ${resp.status}`);
+        }
+        return resp.json();
+    }
+
+    async function fetchBalance() {
+        return apiCall('/customers/my/balance');
+    }
+
+    async function fetchSSHKeys() {
+        const data = await apiCall('/account/keys?per_page=200');
+        return data.ssh_keys || [];
+    }
+
+    async function fetchDroplets() {
+        const data = await apiCall('/droplets?per_page=200');
+        return data.droplets || [];
+    }
+
+    async function fetchRegions() {
+        const data = await apiCall('/regions?per_page=200');
+        return (data.regions || []).filter(r => r.available);
+    }
+
+    async function deleteDroplet(id) {
+        await apiCall(`/droplets/${id}`, 'DELETE');
+    }
+
+    async function createDroplet(name, region, sshKeyIds) {
+        return apiCall('/droplets', 'POST', {
+            name,
+            region,
+            size: PROXY_SIZE,
+            image: PROXY_IMAGE,
+            ssh_keys: sshKeyIds,
+            tags: [PROXY_TAG],
+            ipv6: false,
+            monitoring: false
+        });
+    }
+
+    async function getDropletConsoleUrl(id) {
+        // DigitalOcean provides console access via their web interface
+        // The API endpoint is: POST /v2/droplets/{droplet_id}/console
+        // It returns a WebSocket-based VNC console URL
+        return `https://cloud.digitalocean.com/droplets/${id}/console`;
+    }
+
+    async function waitForDropletActive(dropletId, logFn, maxWait = 180) {
+        const start = Date.now();
+        while ((Date.now() - start) / 1000 < maxWait) {
+            const data = await apiCall(`/droplets/${dropletId}`);
+            const droplet = data.droplet;
+            const ip = getPublicIP(droplet);
+            logFn(`Status: ${droplet.status}, IP: ${ip}`, 'info');
+            if (droplet.status === 'active' && ip !== '-') {
+                return droplet;
+            }
+            await new Promise(r => setTimeout(r, 5000));
+        }
+        throw new Error('Droplet did not become active in time');
+    }
+
+    // ======================= SSH Command Execution via DigitalOcean Console =======================
+    // Since we can't SSH directly from the browser, we use DigitalOcean's
+    // user-data (cloud-init) to automatically configure sing-box on droplet creation.
+    function buildCloudInitScript(uuid) {
+        // This script will be passed as user_data during droplet creation
+        // It installs and configures sing-box as a VLESS + Reality proxy
+        return `#!/bin/bash
+set -e
+
+# Install sing-box
+curl -fsSL https://sing-box.app/gpg.key -o /etc/apt/keyrings/sagernet.asc
+chmod a+r /etc/apt/keyrings/sagernet.asc
+echo "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/sagernet.asc] https://deb.sagernet.org/ * *" | tee /etc/apt/sources.list.d/sagernet.list > /dev/null
+apt-get update
+apt-get install -y sing-box
+
+# Generate reality keypair
+KEYPAIR=\$(sing-box generate reality-keypair)
+PRIVATE_KEY=\$(echo "\$KEYPAIR" | grep PrivateKey | awk '{print \$2}')
+PUBLIC_KEY=\$(echo "\$KEYPAIR" | grep PublicKey | awk '{print \$2}')
+SHORT_ID=\$(sing-box generate rand --hex 8)
+
+# Save public key and short_id for retrieval
+echo "{\\"public_key\\": \\"\$PUBLIC_KEY\\", \\"short_id\\": \\"\$SHORT_ID\\", \\"uuid\\": \\"${uuid}\\"}" > /root/singbox-info.json
+
+# Write config
+cat > /etc/sing-box/config.json << SINGBOXEOF
+{
+  "log": { "level": "info" },
+  "inbounds": [
+    {
+      "type": "vless",
+      "listen": "::",
+      "listen_port": ${SINGBOX_PORT},
+      "users": [
+        { "uuid": "${uuid}", "flow": "xtls-rprx-vision" }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.microsoft.com",
+            "server_port": 443
+          },
+          "private_key": "\$PRIVATE_KEY",
+          "short_id": ["\$SHORT_ID"]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    { "type": "direct" }
+  ]
+}
+SINGBOXEOF
+
+# Enable and start
+systemctl enable sing-box
+systemctl restart sing-box
+
+# Signal completion
+echo "SINGBOX_READY" > /root/singbox-status.txt
+`;
+    }
+
+    // Create droplet with user_data for sing-box auto-setup
+    async function createDropletWithProxy(name, region, sshKeyIds, uuid) {
+        return apiCall('/droplets', 'POST', {
+            name,
+            region,
+            size: PROXY_SIZE,
+            image: PROXY_IMAGE,
+            ssh_keys: sshKeyIds,
+            tags: [PROXY_TAG],
+            ipv6: false,
+            monitoring: false,
+            user_data: buildCloudInitScript(uuid)
+        });
+    }
+
+    // ======================= UI Functions =======================
+    function showAuthModal() {
+        document.getElementById('modal-token-input').value = currentToken;
+        document.getElementById('auth-modal').classList.remove('hidden');
+    }
+    function closeAuthModal() {
+        document.getElementById('auth-modal').classList.add('hidden');
+    }
+    function closeProxyModal() {
+        document.getElementById('proxy-modal').classList.add('hidden');
+    }
+    function closeConsoleModal() {
+        document.getElementById('console-modal').classList.add('hidden');
+    }
+    function closeDeleteModal() {
+        document.getElementById('delete-modal').classList.add('hidden');
+        deleteTargetId = null;
+    }
+
+    function saveToken() {
+        const token = document.getElementById('token-input').value.trim();
+        if (!token) { showToast('Please enter a token', 'error'); return; }
+        setToken(token);
+        init();
+    }
+
+    function saveTokenFromModal() {
+        const token = document.getElementById('modal-token-input').value.trim();
+        if (!token) { showToast('Please enter a token', 'error'); return; }
+        setToken(token);
+        closeAuthModal();
+        init();
+    }
+
+    function clearToken() {
+        removeToken();
+        closeAuthModal();
+        location.reload();
+    }
+
+    function updateAuthStatus(ok) {
+        const el = document.getElementById('auth-status');
+        if (ok) {
+            el.textContent = '✅ Connected';
+            el.style.color = '#3fb950';
+        } else {
+            el.textContent = '❌ Not authenticated';
+            el.style.color = '#f85149';
+        }
+    }
+
+    // ======================= Render Functions =======================
+    async function loadBalance() {
+        const loadingEl = document.getElementById('balance-loading');
+        const contentEl = document.getElementById('balance-content');
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+        try {
+            const data = await fetchBalance();
+            document.getElementById('balance-amount').textContent =
+                `$${Math.abs(parseFloat(data.month_to_date_balance)).toFixed(2)}`;
+            document.getElementById('balance-mtd').textContent =
+                `$${parseFloat(data.month_to_date_usage).toFixed(2)}`;
+            document.getElementById('balance-account').textContent =
+                `$${parseFloat(data.account_balance).toFixed(2)}`;
+            document.getElementById('balance-generated').textContent =
+                formatDate(data.generated_at);
+            loadingEl.classList.add('hidden');
+            contentEl.classList.remove('hidden');
+        } catch (e) {
+            loadingEl.textContent = 'Failed to load balance: ' + e.message;
+        }
+    }
+
+    async function loadSSHKeys() {
+        const loadingEl = document.getElementById('sshkeys-loading');
+        const contentEl = document.getElementById('sshkeys-content');
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+        try {
+            allSSHKeys = await fetchSSHKeys();
+            const tbody = document.getElementById('sshkeys-table');
+            if (allSSHKeys.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#8b949e;">No SSH keys found</td></tr>';
+            } else {
+                tbody.innerHTML = allSSHKeys.map(k => `
+                    <tr>
+                        <td>${escapeHtml(k.name)}</td>
+                        <td style="font-family:monospace;font-size:12px;">${escapeHtml(k.fingerprint)}</td>
+                    </tr>
+                `).join('');
+            }
+            loadingEl.classList.add('hidden');
+            contentEl.classList.remove('hidden');
+        } catch (e) {
+            loadingEl.textContent = 'Failed to load SSH keys: ' + e.message;
+        }
+    }
+
+    async function loadDroplets() {
+        const loadingEl = document.getElementById('droplets-loading');
+        const contentEl = document.getElementById('droplets-content');
+        const emptyEl = document.getElementById('droplets-empty');
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+        try {
+            allDroplets = await fetchDroplets();
+            const tbody = document.getElementById('droplets-table');
+            if (allDroplets.length === 0) {
+                tbody.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+            } else {
+                emptyEl.classList.add('hidden');
+                tbody.innerHTML = allDroplets.map(d => {
+                    const ip = getPublicIP(d);
+                    const isProxy = isProxyDroplet(d);
+                    const statusClass = d.status === 'active' ? 'status-active' :
+                        d.status === 'off' ? 'status-off' : 'status-new';
+                    return `
+                        <tr>
+                            <td>
+                                ${escapeHtml(d.name)}
+                                ${isProxy ? '<span class="tag tag-proxy">proxy</span>' : ''}
+                            </td>
+                            <td style="font-family:monospace;">${ip}</td>
+                            <td>${d.region ? d.region.slug : '-'}</td>
+                            <td>${d.size_slug || '-'}</td>
+                            <td><span class="status-badge ${statusClass}">${d.status}</span></td>
+                            <td>${formatDate(d.created_at)}</td>
+                            <td>
+                                <div class="droplet-actions">
+                                    <button class="btn-info btn-sm" onclick="openConsole(${d.id})">🖥️ Console</button>
+                                    ${isProxy ? `<button class="btn-warning btn-sm" onclick="showProxyInfo(${d.id})">🔗 Proxy</button>` : ''}
+                                    <button class="btn-danger btn-sm" onclick="promptDelete(${d.id}, '${escapeHtml(d.name)}')">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            loadingEl.classList.add('hidden');
+            contentEl.classList.remove('hidden');
+        } catch (e) {
+            loadingEl.textContent = 'Failed to load droplets: ' + e.message;
+        }
+    }
+
+    async function loadRegions() {
+        const select = document.getElementById('create-region');
+        try {
+            const regions = await fetchRegions();
+            // Filter for sgp and sfo regions, and also show all available
+            const preferred = ['sgp1', 'sfo1', 'sfo2', 'sfo3'];
+            const preferredRegions = regions.filter(r => preferred.some(p => r.slug.startsWith(p.replace(/\d+$/, ''))));
+            const otherRegions = regions.filter(r => !preferred.some(p => r.slug.startsWith(p.replace(/\d+$/, ''))));
+
+            let html = '<optgroup label="⭐ Preferred (SGP/SFO)">';
+            // Show matching SGP/SFO regions
+            const sgpSfo = regions.filter(r => r.slug.startsWith('sgp') || r.slug.startsWith('sfo'));
+            if (sgpSfo.length === 0) {
+                html += '<option value="" disabled>No SGP/SFO regions available</option>';
+            } else {
+                sgpSfo.forEach(r => {
+                    const sizeAvail = r.sizes && r.sizes.includes(PROXY_SIZE);
+                    html += `<option value="${r.slug}" ${!sizeAvail ? 'disabled' : ''}>${r.name} (${r.slug})${!sizeAvail ? ' - size unavailable' : ''}</option>`;
+                });
+            }
+            html += '</optgroup>';
+
+            html += '<optgroup label="Other Regions">';
+            const others = regions.filter(r => !r.slug.startsWith('sgp') && !r.slug.startsWith('sfo'));
+            others.forEach(r => {
+                const sizeAvail = r.sizes && r.sizes.includes(PROXY_SIZE);
+                html += `<option value="${r.slug}" ${!sizeAvail ? 'disabled' : ''}>${r.name} (${r.slug})${!sizeAvail ? ' - size unavailable' : ''}</option>`;
+            });
+            html += '</optgroup>';
+
+            select.innerHTML = html;
+
+            // Default select first available preferred
+            const firstAvail = sgpSfo.find(r => r.sizes && r.sizes.includes(PROXY_SIZE));
+            if (firstAvail) select.value = firstAvail.slug;
+        } catch (e) {
+            select.innerHTML = '<option value="">Failed to load regions</option>';
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // ======================= Droplet Actions =======================
+    function openConsole(dropletId) {
+        const url = `https://cloud.digitalocean.com/droplets/${dropletId}/console`;
+        window.open(url, '_blank', 'width=900,height=600');
+        showToast('Opening DigitalOcean console in new window', 'info');
+    }
+
+    function promptDelete(dropletId, name) {
+        deleteTargetId = dropletId;
+        document.getElementById('delete-droplet-info').innerHTML = `
+            <div class="info-row">
+                <span class="info-label">Droplet</span>
+                <span class="info-value">${escapeHtml(name)} (ID: ${dropletId})</span>
+            </div>
+        `;
+        document.getElementById('delete-modal').classList.remove('hidden');
+    }
+
+    async function confirmDelete() {
+        if (!deleteTargetId) return;
+        const btn = document.getElementById('btn-confirm-delete');
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+        try {
+            await deleteDroplet(deleteTargetId);
+            // Also clean up singbox UUID mapping
+            const uuids = getSingboxUUIDs();
+            delete uuids[deleteTargetId];
+            localStorage.setItem(SINGBOX_UUID_KEY, JSON.stringify(uuids));
+
+            showToast('Droplet deleted successfully', 'success');
+            closeDeleteModal();
+            await loadDroplets();
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Delete Permanently';
+        }
+    }
+
+    // ======================= Create Proxy Server =======================
+    async function createProxyServer() {
+        const region = document.getElementById('create-region').value;
+        if (!region) {
+            showToast('Please select a region', 'error');
+            return;
+        }
+        if (allSSHKeys.length === 0) {
+            showToast('No SSH keys found. Please add SSH keys to your DigitalOcean account first.', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('btn-create-proxy');
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+
+        const progressDiv = document.getElementById('create-progress');
+        const progressBar = document.getElementById('create-progress-bar');
+        const logArea = document.getElementById('create-log');
+        progressDiv.classList.remove('hidden');
+        logArea.innerHTML = '';
+        progressBar.style.width = '0%';
+
+        function log(msg, type = 'info') {
+            const span = document.createElement('span');
+            span.className = `log-${type}`;
+            span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            logArea.appendChild(span);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        try {
+            const uuid = generateUUID();
+            const name = `proxy-${region}-${Date.now().toString(36)}`;
+            const sshKeyIds = allSSHKeys.map(k => k.id);
+
+            log(`Creating droplet "${name}" in ${region}...`);
+            progressBar.style.width = '10%';
+
+            const result = await createDropletWithProxy(name, region, sshKeyIds, uuid);
+            const dropletId = result.droplet.id;
+
+            // Save UUID mapping
+            setSingboxUUID(dropletId, uuid);
+
+            log(`Droplet created (ID: ${dropletId}). Waiting for it to become active...`, 'info');
+            progressBar.style.width = '30%';
+
+            // Wait for active
+            const activeDroplet = await waitForDropletActive(dropletId, log);
+            const ip = getPublicIP(activeDroplet);
+            progressBar.style.width = '60%';
+            log(`Droplet is active! IP: ${ip}`, 'success');
+
+            // Wait extra time for cloud-init to complete sing-box setup
+            log('Waiting for sing-box to install and configure (this may take 1-3 minutes)...', 'info');
+            progressBar.style.width = '70%';
+
+            // Poll by checking if we can connect to the sing-box port
+            let singboxReady = false;
+            for (let i = 0; i < 36; i++) { // ~3 minutes
+                await new Promise(r => setTimeout(r, 5000));
+                progressBar.style.width = `${70 + Math.min(i, 25)}%`;
+                log(`Checking sing-box status... (attempt ${i + 1})`, 'info');
+                // We can't directly check the port from browser, so we just wait a reasonable time
+                if (i >= 12) { // After ~1 minute, assume it might be ready
+                    singboxReady = true;
+                    break;
+                }
+            }
+
+            progressBar.style.width = '95%';
+
+            if (singboxReady) {
+                log('sing-box should be configured!', 'success');
+            } else {
+                log('sing-box may still be configuring. You can check proxy info later.', 'warn');
+            }
+
+            // Show proxy connection info
+            const uuids = getSingboxUUIDs();
+            const proxyUuid = uuids[dropletId] || uuid;
+            const connStr = buildConnectionString(ip, proxyUuid);
+
+            log('=== Proxy Connection String ===', 'success');
+            log(connStr, 'success');
+
+            progressBar.style.width = '100%';
+            showToast('Proxy server created successfully!', 'success');
+            await loadDroplets();
+
+        } catch (e) {
+            log(`Error: ${e.message}`, 'error');
+            showToast('Failed to create proxy server: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Create Proxy Server';
+        }
+    }
+
+    function buildConnectionString(ip, uuid) {
+        // Build a VLESS connection string (standard URI format)
+        // vless://uuid@ip:port?security=reality&sni=www.microsoft.com&fp=chrome&pbk=PUBLIC_KEY&sid=SHORT_ID&type=tcp&flow=xtls-rprx-vision#name
+        // Note: public_key and short_id are generated on the server side
+        // We provide a template - user needs to get pbk and sid from the server's /root/singbox-info.json
+        return `vless://${uuid}@${ip}:${SINGBOX_PORT}?security=reality&sni=www.microsoft.com&fp=chrome&type=tcp&flow=xtls-rprx-vision&pbk=<GET_FROM_SERVER>&sid=<GET_FROM_SERVER>#proxy-${ip}`;
+    }
+
+    function buildConnectionStringFull(ip, uuid, publicKey, shortId) {
+        return `vless://${uuid}@${ip}:${SINGBOX_PORT}?security=reality&sni=www.microsoft.com&fp=chrome&type=tcp&flow=xtls-rprx-vision&pbk=${publicKey}&sid=${shortId}#proxy-${ip}`;
+    }
+
+    // ======================= Show Proxy Info =======================
+    async function showProxyInfo(dropletId) {
+        const modal = document.getElementById('proxy-modal');
+        const loadingEl = document.getElementById('proxy-modal-loading');
+        const contentEl = document.getElementById('proxy-modal-content');
+        const logEl = document.getElementById('proxy-modal-log');
+
+        modal.classList.remove('hidden');
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+        logEl.classList.add('hidden');
+        logEl.innerHTML = '';
+
+        function log(msg, type = 'info') {
+            logEl.classList.remove('hidden');
+            const span = document.createElement('span');
+            span.className = `log-${type}`;
+            span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            logEl.appendChild(span);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        try {
+            // Get droplet info
+            const data = await apiCall(`/droplets/${dropletId}`);
+            const droplet = data.droplet;
+            const ip = getPublicIP(droplet);
+
+            log(`Droplet IP: ${ip}`, 'info');
+
+            // Get stored UUID
+            const uuids = getSingboxUUIDs();
+            let uuid = uuids[dropletId];
+
+            if (!uuid) {
+                log('No UUID found locally. Generating new one...', 'warn');
+                uuid = generateUUID();
+                setSingboxUUID(dropletId, uuid);
+                log('Note: This UUID may not match the server config. You may need to reconfigure.', 'warn');
+            }
+
+            log(`UUID: ${uuid}`, 'info');
+            log('', 'info');
+            log('To get the full connection string, SSH into the server and run:', 'info');
+            log('  cat /root/singbox-info.json', 'info');
+            log('This will give you the public_key and short_id needed for the connection.', 'info');
+
+            // Build partial connection string
+            const connStr = buildConnectionString(ip, uuid);
+
+            document.getElementById('proxy-config-text').textContent = connStr;
+            document.getElementById('proxy-ip').textContent = ip;
+            document.getElementById('proxy-port').textContent = SINGBOX_PORT;
+            document.getElementById('proxy-protocol').textContent = 'VLESS + Reality';
+
+            loadingEl.classList.add('hidden');
+            contentEl.classList.remove('hidden');
+
+        } catch (e) {
+            log(`Error: ${e.message}`, 'error');
+            loadingEl.textContent = 'Failed to load proxy info';
+        }
+    }
+
+    function copyProxyConfig() {
+        const text = document.getElementById('proxy-config-text').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Copied to clipboard!', 'success');
+        }).catch(() => {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+            showToast('Copied to clipboard!', 'success');
+        });
+    }
+
+    // ======================= Refresh & Init =======================
+    async function refreshAll() {
+        showToast('Refreshing...', 'info');
+        await Promise.all([loadBalance(), loadSSHKeys(), loadDroplets()]);
+        showToast('Data refreshed', 'success');
+    }
+
+    async function init() {
+        currentToken = getToken();
+        if (!currentToken) {
+            document.getElementById('auth-prompt').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+            updateAuthStatus(false);
+            return;
+        }
+
+        // Verify token works
+        try {
+            await apiCall('/account');
+            updateAuthStatus(true);
+        } catch (e) {
+            updateAuthStatus(false);
+            document.getElementById('auth-prompt').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+            showToast('Invalid token or API error: ' + e.message, 'error');
+            return;
+        }
+
+        document.getElementById('auth-prompt').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+
+        // Load all data in parallel
+        await Promise.all([
+            loadBalance(),
+            loadSSHKeys(),
+            loadDroplets(),
+            loadRegions()
+        ]);
+    }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) {
+                overlay.classList.add('hidden');
+            }
+        });
+    });
+
+    // Start
+    init();
+    </script>
+</body>
+</html>
