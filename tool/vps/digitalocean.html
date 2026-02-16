@@ -284,6 +284,18 @@
             background: #2d1b41;
             color: #bc8cff;
         }
+        .tag-setup-ok {
+            background: #0d2818;
+            color: #3fb950;
+        }
+        .tag-setup-failed {
+            background: #3d1214;
+            color: #f85149;
+        }
+        .tag-external {
+            background: #2d2a1b;
+            color: #d29922;
+        }
         .droplet-actions {
             display: flex;
             gap: 6px;
@@ -477,6 +489,15 @@
                         <span class="info-value" id="proxy-protocol">-</span>
                     </div>
                 </div>
+                <!-- 粘贴 singbox-info.json 区域 -->
+                <div id="proxy-paste-section" style="margin-top:16px; padding-top:16px; border-top:1px solid #30363d;">
+                    <p style="color:#8b949e; margin-bottom:8px; font-size:13px;">⬇️ Paste the content of <code style="color:#58a6ff;">/root/singbox-info.json</code> from the server to complete the connection string:</p>
+                    <textarea id="proxy-paste-input" style="width:100%; height:60px; background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:6px; padding:8px; font-family:monospace; font-size:13px; resize:vertical;" placeholder='{"public_key": "...", "short_id": "...", "uuid": "..."}'></textarea>
+                    <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                        <button class="btn-primary btn-sm" onclick="saveProxyServerInfo()">💾 Save & Update</button>
+                        <span id="proxy-paste-status" style="font-size:12px; color:#8b949e;"></span>
+                    </div>
+                </div>
             </div>
             <div id="proxy-modal-log" class="log-area hidden" style="margin-top:12px;"></div>
             <div class="modal-actions">
@@ -518,6 +539,8 @@
     const PROXY_SIZE = 's-1vcpu-512mb-10gb';
     const PROXY_IMAGE = 'ubuntu-22-04-x64';
     const SINGBOX_PORT = 1080;
+    const SETUP_OK_TAG = 'setup-ok';
+    const SETUP_FAILED_TAG = 'setup-failed';
     const SINGBOX_UUID_KEY = 'do_singbox_uuids'; // dropletId -> uuid mapping
 
     let currentToken = '';
@@ -538,13 +561,32 @@
         currentToken = '';
     }
 
-    function getSingboxUUIDs() {
-        try { return JSON.parse(localStorage.getItem(SINGBOX_UUID_KEY) || '{}'); } catch { return {}; }
+    // 存储结构: { dropletId: { uuid, publicKey, shortId } }
+    function getSingboxInfos() {
+        try {
+            const data = JSON.parse(localStorage.getItem(SINGBOX_UUID_KEY) || '{}');
+            // 兼容旧格式 (dropletId -> uuid string)
+            for (const [k, v] of Object.entries(data)) {
+                if (typeof v === 'string') {
+                    data[k] = { uuid: v, publicKey: '', shortId: '' };
+                }
+            }
+            return data;
+        } catch { return {}; }
     }
-    function setSingboxUUID(dropletId, uuid) {
-        const uuids = getSingboxUUIDs();
-        uuids[dropletId] = uuid;
-        localStorage.setItem(SINGBOX_UUID_KEY, JSON.stringify(uuids));
+    function getSingboxInfo(dropletId) {
+        const infos = getSingboxInfos();
+        return infos[dropletId] || null;
+    }
+    function setSingboxInfo(dropletId, info) {
+        const infos = getSingboxInfos();
+        infos[dropletId] = { ...((infos[dropletId]) || {}), ...info };
+        localStorage.setItem(SINGBOX_UUID_KEY, JSON.stringify(infos));
+    }
+    function removeSingboxInfo(dropletId) {
+        const infos = getSingboxInfos();
+        delete infos[dropletId];
+        localStorage.setItem(SINGBOX_UUID_KEY, JSON.stringify(infos));
     }
 
     function generateUUID() {
@@ -552,6 +594,39 @@
             const r = Math.random() * 16 | 0;
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
+    }
+
+    function generateShortId() {
+        const bytes = new Uint8Array(8);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // X25519 密钥生成 (使用 sing-box 兼容的 base64 raw url 编码)
+    // sing-box reality keypair 本质是 X25519，输出为 base64 raw url (no padding)
+    // 我们在浏览器端用 Web Crypto API 生成
+    async function generateRealityKeypair() {
+        // 生成 X25519 密钥对
+        const keyPair = await crypto.subtle.generateKey(
+            { name: 'X25519' },
+            true, // extractable
+            ['deriveBits']
+        );
+        // 导出私钥 (PKCS8 格式) 和公钥 (SPKI 格式)
+        const privRaw = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+        const pubRaw = await crypto.subtle.exportKey('spki', keyPair.publicKey);
+        // PKCS8 X25519 私钥: 前 16 字节是 ASN.1 头部, 后 32 字节是原始密钥
+        // 格式: 302e020100300506032b656e04220420 + 32字节私钥
+        const privBytes = new Uint8Array(privRaw).slice(-32);
+        // SPKI X25519 公钥: 前 12 字节是 ASN.1 头部, 后 32 字节是原始密钥
+        // 格式: 302a300506032b656e032100 + 32字节公钥
+        const pubBytes = new Uint8Array(pubRaw).slice(-32);
+        // Base64 Raw URL 编码 (无 padding)
+        const privateKey = btoa(String.fromCharCode(...privBytes))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const publicKey = btoa(String.fromCharCode(...pubBytes))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        return { privateKey, publicKey };
     }
 
     function showToast(msg, type = 'info') {
@@ -633,10 +708,10 @@
         });
     }
 
-    async function getDropletConsoleUrl(id) {
-        // 使用 DigitalOcean API 获取带认证的控制台 URL
-        const data = await apiCall(`/droplets/${id}/console`, 'POST');
-        return data.console_url || data.url;
+    function getDropletConsoleUrl(id) {
+        // DigitalOcean 没有公开的 console REST API 端点
+        // 直接使用 web 控制台 URL（需要用户已登录 DO 账户）
+        return `https://cloud.digitalocean.com/droplets/${id}/console`;
     }
 
     async function waitForDropletActive(dropletId, logFn, maxWait = 180) {
@@ -657,10 +732,37 @@
     // ======================= SSH Command Execution via DigitalOcean Console =======================
     // Since we can't SSH directly from the browser, we use DigitalOcean's
     // user-data (cloud-init) to automatically configure sing-box on droplet creation.
-    function buildCloudInitScript(uuid) {
-        // This script will be passed as user_data during droplet creation
-        // It installs and configures sing-box as a VLESS + Reality proxy
+    function buildCloudInitScript(uuid, privateKey, publicKey, shortId, apiToken) {
+        // 所有密钥都由浏览器预生成，直接写入配置
+        // apiToken 用于在 cloud-init 完成后通过 DO API 给 droplet 打 tag
         return `#!/bin/bash
+
+DO_TOKEN="${apiToken}"
+DROPLET_ID=$(curl -s http://169.254.169.254/metadata/v1/id)
+
+# 定义打 tag 的函数
+tag_droplet() {
+  local TAG_NAME="$1"
+  curl -s -X POST "https://api.digitalocean.com/v2/tags/$TAG_NAME/resources" \
+    -H "Authorization: Bearer $DO_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"resources\":[{\"resource_id\":\"$DROPLET_ID\",\"resource_type\":\"droplet\"}]}"
+}
+
+# 确保 tag 存在
+ensure_tag() {
+  local TAG_NAME="$1"
+  curl -s -X POST "https://api.digitalocean.com/v2/tags" \
+    -H "Authorization: Bearer $DO_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"$TAG_NAME\"}" > /dev/null 2>&1 || true
+}
+
+ensure_tag "${SETUP_OK_TAG}"
+ensure_tag "${SETUP_FAILED_TAG}"
+
+# 安装和配置 sing-box，失败则打 setup-failed tag
+(
 set -e
 
 # Install sing-box
@@ -670,17 +772,13 @@ echo "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/sagern
 apt-get update
 apt-get install -y sing-box
 
-# Generate reality keypair
-KEYPAIR=\$(sing-box generate reality-keypair)
-PRIVATE_KEY=\$(echo "\$KEYPAIR" | grep PrivateKey | awk '{print \$2}')
-PUBLIC_KEY=\$(echo "\$KEYPAIR" | grep PublicKey | awk '{print \$2}')
-SHORT_ID=\$(sing-box generate rand --hex 8)
+# Save info for reference
+cat > /root/singbox-info.json << 'INFOEOF'
+{"public_key": "${publicKey}", "short_id": "${shortId}", "uuid": "${uuid}"}
+INFOEOF
 
-# Save public key and short_id for retrieval
-echo "{\\"public_key\\": \\"\$PUBLIC_KEY\\", \\"short_id\\": \\"\$SHORT_ID\\", \\"uuid\\": \\"${uuid}\\"}" > /root/singbox-info.json
-
-# Write config
-cat > /etc/sing-box/config.json << SINGBOXEOF
+# Write config (keys are pre-generated by browser)
+cat > /etc/sing-box/config.json << 'SINGBOXEOF'
 {
   "log": { "level": "info" },
   "inbounds": [
@@ -700,8 +798,8 @@ cat > /etc/sing-box/config.json << SINGBOXEOF
             "server": "www.microsoft.com",
             "server_port": 443
           },
-          "private_key": "\$PRIVATE_KEY",
-          "short_id": ["\$SHORT_ID"]
+          "private_key": "${privateKey}",
+          "short_id": ["${shortId}"]
         }
       }
     }
@@ -718,11 +816,19 @@ systemctl restart sing-box
 
 # Signal completion
 echo "SINGBOX_READY" > /root/singbox-status.txt
+
+# 成功：打 setup-ok tag
+tag_droplet "${SETUP_OK_TAG}"
+) || {
+  # 失败：打 setup-failed tag
+  echo "SINGBOX_FAILED" > /root/singbox-status.txt
+  tag_droplet "${SETUP_FAILED_TAG}"
+}
 `;
     }
 
     // Create droplet with user_data for sing-box auto-setup
-    async function createDropletWithProxy(name, region, sshKeyIds, uuid) {
+    async function createDropletWithProxy(name, region, sshKeyIds, uuid, privateKey, publicKey, shortId) {
         return apiCall('/droplets', 'POST', {
             name,
             region,
@@ -732,8 +838,17 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
             tags: [PROXY_TAG],
             ipv6: false,
             monitoring: false,
-            user_data: buildCloudInitScript(uuid)
+            user_data: buildCloudInitScript(uuid, privateKey, publicKey, shortId, currentToken)
         });
+    }
+
+    // 通过轮询 droplet tags 检查 cloud-init 是否完成
+    async function pollDropletSetupTag(dropletId) {
+        const data = await apiCall(`/droplets/${dropletId}`);
+        const tags = data.droplet.tags || [];
+        if (tags.includes(SETUP_OK_TAG)) return 'ok';
+        if (tags.includes(SETUP_FAILED_TAG)) return 'failed';
+        return 'pending';
     }
 
     // ======================= UI Functions =======================
@@ -852,6 +967,7 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
                 tbody.innerHTML = allDroplets.map(d => {
                     const ip = getPublicIP(d);
                     const isProxy = isProxyDroplet(d);
+                    const hasLocalInfo = isProxy && getSingboxInfo(d.id);
                     const statusClass = d.status === 'active' ? 'status-active' :
                         d.status === 'off' ? 'status-off' : 'status-new';
                     return `
@@ -859,6 +975,9 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
                             <td>
                                 ${escapeHtml(d.name)}
                                 ${isProxy ? '<span class="tag tag-proxy">proxy</span>' : ''}
+                                ${d.tags && d.tags.includes(SETUP_OK_TAG) ? '<span class="tag tag-setup-ok">✅ ready</span>' : ''}
+                                ${d.tags && d.tags.includes(SETUP_FAILED_TAG) ? '<span class="tag tag-setup-failed">❌ failed</span>' : ''}
+                                ${isProxy && !hasLocalInfo ? '<span class="tag tag-external" title="本地没有此 droplet 的密钥信息，可能由其他设备创建">⚠️ external</span>' : ''}
                             </td>
                             <td style="font-family:monospace;">${ip}</td>
                             <td>${d.region ? d.region.slug : '-'}</td>
@@ -931,26 +1050,10 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
     }
 
     // ======================= Droplet Actions =======================
-    async function openConsole(dropletId) {
-        showToast('Requesting console access...', 'info');
-        try {
-            const url = await getDropletConsoleUrl(dropletId);
-            if (url) {
-                window.open(url, '_blank', 'width=900,height=600');
-                showToast('Console opened in new window', 'success');
-            } else {
-                // API 不支持时回退到 web 界面
-                const fallbackUrl = `https://cloud.digitalocean.com/droplets/${dropletId}/console`;
-                window.open(fallbackUrl, '_blank', 'width=900,height=600');
-                showToast('Opened DigitalOcean web console (requires DO login)', 'info');
-            }
-        } catch (e) {
-            // 如果 API 调用失败，回退到 web 界面
-            console.warn('Console API failed, falling back to web UI:', e.message);
-            const fallbackUrl = `https://cloud.digitalocean.com/droplets/${dropletId}/console`;
-            window.open(fallbackUrl, '_blank', 'width=900,height=600');
-            showToast('API console unavailable, opened web console (requires DO login)', 'info');
-        }
+    function openConsole(dropletId) {
+        const url = getDropletConsoleUrl(dropletId);
+        window.open(url, '_blank', 'width=900,height=600');
+        showToast('Console opened in new window (requires DO login)', 'info');
     }
 
     function promptDelete(dropletId, name) {
@@ -971,10 +1074,8 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
         btn.textContent = 'Deleting...';
         try {
             await deleteDroplet(deleteTargetId);
-            // Also clean up singbox UUID mapping
-            const uuids = getSingboxUUIDs();
-            delete uuids[deleteTargetId];
-            localStorage.setItem(SINGBOX_UUID_KEY, JSON.stringify(uuids));
+            // Also clean up singbox info mapping
+            removeSingboxInfo(deleteTargetId);
 
             showToast('Droplet deleted successfully', 'success');
             closeDeleteModal();
@@ -1019,18 +1120,26 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
         }
 
         try {
+            // 在浏览器端预生成所有密钥
+            log('Generating X25519 reality keypair in browser...', 'info');
             const uuid = generateUUID();
+            const { privateKey, publicKey } = await generateRealityKeypair();
+            const shortId = generateShortId();
+            log(`UUID: ${uuid}`, 'info');
+            log(`Public Key: ${publicKey}`, 'info');
+            log(`Short ID: ${shortId}`, 'info');
+
             const name = `proxy-${region}-${Date.now().toString(36)}`;
             const sshKeyIds = allSSHKeys.map(k => k.id);
 
             log(`Creating droplet "${name}" in ${region}...`);
             progressBar.style.width = '10%';
 
-            const result = await createDropletWithProxy(name, region, sshKeyIds, uuid);
+            const result = await createDropletWithProxy(name, region, sshKeyIds, uuid, privateKey, publicKey, shortId);
             const dropletId = result.droplet.id;
 
-            // Save UUID mapping
-            setSingboxUUID(dropletId, uuid);
+            // 立即保存完整信息 (浏览器已知所有密钥)
+            setSingboxInfo(dropletId, { uuid, publicKey, shortId });
 
             log(`Droplet created (ID: ${dropletId}). Waiting for it to become active...`, 'info');
             progressBar.style.width = '30%';
@@ -1041,38 +1150,40 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
             progressBar.style.width = '60%';
             log(`Droplet is active! IP: ${ip}`, 'success');
 
-            // Wait extra time for cloud-init to complete sing-box setup
-            log('Waiting for sing-box to install and configure (this may take 1-3 minutes)...', 'info');
-            progressBar.style.width = '70%';
+            // 连接字符串已完整（密钥在浏览器端预生成），可以立即显示
+            const connStr = buildConnectionStringFull(ip, uuid, publicKey, shortId);
 
-            // Poll by checking if we can connect to the sing-box port
-            let singboxReady = false;
-            for (let i = 0; i < 36; i++) { // ~3 minutes
+            log('=== ✅ Proxy Connection String (完整，可直接使用) ===', 'success');
+            log(connStr, 'success');
+            log('', 'info');
+
+            // 通过轮询 droplet tags 检查 cloud-init 是否完成
+            log('⏳ Waiting for cloud-init to finish installing sing-box...', 'info');
+            log(`   Polling droplet tags for ${SETUP_OK_TAG} / ${SETUP_FAILED_TAG}...`, 'info');
+            progressBar.style.width = '70%';
+            const maxPollAttempts = 60; // 最多轮询 5 分钟 (60 * 5s)
+            let setupResult = 'pending';
+            for (let i = 0; i < maxPollAttempts; i++) {
                 await new Promise(r => setTimeout(r, 5000));
-                progressBar.style.width = `${70 + Math.min(i, 25)}%`;
-                log(`Checking sing-box status... (attempt ${i + 1})`, 'info');
-                // We can't directly check the port from browser, so we just wait a reasonable time
-                if (i >= 12) { // After ~1 minute, assume it might be ready
-                    singboxReady = true;
+                const elapsed = (i + 1) * 5;
+                progressBar.style.width = `${70 + Math.min(elapsed / 10, 25)}%`;
+                setupResult = await pollDropletSetupTag(dropletId);
+                if (setupResult === 'ok') {
+                    log(`✅ Setup completed after ${elapsed}s! sing-box is ready.`, 'success');
                     break;
                 }
+                if (setupResult === 'failed') {
+                    log(`❌ Setup failed after ${elapsed}s. Check server logs for details.`, 'error');
+                    break;
+                }
+                log(`Polling tags... (${elapsed}s elapsed)`, 'info');
             }
-
-            progressBar.style.width = '95%';
-
-            if (singboxReady) {
-                log('sing-box should be configured!', 'success');
-            } else {
-                log('sing-box may still be configuring. You can check proxy info later.', 'warn');
+            if (setupResult === 'pending') {
+                log('⚠️ Setup timed out after 5 min. sing-box may still be installing.', 'warn');
+                log('You can try using the connection string - it may work if sing-box finished.', 'warn');
+            } else if (setupResult === 'ok') {
+                log('sing-box is ready! 🎉', 'success');
             }
-
-            // Show proxy connection info
-            const uuids = getSingboxUUIDs();
-            const proxyUuid = uuids[dropletId] || uuid;
-            const connStr = buildConnectionString(ip, proxyUuid);
-
-            log('=== Proxy Connection String ===', 'success');
-            log(connStr, 'success');
 
             progressBar.style.width = '100%';
             showToast('Proxy server created successfully!', 'success');
@@ -1087,11 +1198,8 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
         }
     }
 
+    // Build a VLESS connection string (template, missing pbk & sid)
     function buildConnectionString(ip, uuid) {
-        // Build a VLESS connection string (standard URI format)
-        // vless://uuid@ip:port?security=reality&sni=www.microsoft.com&fp=chrome&pbk=PUBLIC_KEY&sid=SHORT_ID&type=tcp&flow=xtls-rprx-vision#name
-        // Note: public_key and short_id are generated on the server side
-        // We provide a template - user needs to get pbk and sid from the server's /root/singbox-info.json
         return `vless://${uuid}@${ip}:${SINGBOX_PORT}?security=reality&sni=www.microsoft.com&fp=chrome&type=tcp&flow=xtls-rprx-vision&pbk=<GET_FROM_SERVER>&sid=<GET_FROM_SERVER>#proxy-${ip}`;
     }
 
@@ -1100,17 +1208,25 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
     }
 
     // ======================= Show Proxy Info =======================
+    let currentProxyDropletId = null; // 当前查看的 droplet ID
+
     async function showProxyInfo(dropletId) {
+        currentProxyDropletId = dropletId;
         const modal = document.getElementById('proxy-modal');
         const loadingEl = document.getElementById('proxy-modal-loading');
         const contentEl = document.getElementById('proxy-modal-content');
         const logEl = document.getElementById('proxy-modal-log');
+        const pasteInput = document.getElementById('proxy-paste-input');
+        const pasteStatus = document.getElementById('proxy-paste-status');
+        const pasteSection = document.getElementById('proxy-paste-section');
 
         modal.classList.remove('hidden');
         loadingEl.classList.remove('hidden');
         contentEl.classList.add('hidden');
         logEl.classList.add('hidden');
         logEl.innerHTML = '';
+        pasteInput.value = '';
+        pasteStatus.textContent = '';
 
         function log(msg, type = 'info') {
             logEl.classList.remove('hidden');
@@ -1129,27 +1245,38 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
 
             log(`Droplet IP: ${ip}`, 'info');
 
-            // Get stored UUID
-            const uuids = getSingboxUUIDs();
-            let uuid = uuids[dropletId];
+            // Get stored info
+            let info = getSingboxInfo(dropletId);
 
-            if (!uuid) {
-                log('No UUID found locally. Generating new one...', 'warn');
-                uuid = generateUUID();
-                setSingboxUUID(dropletId, uuid);
-                log('Note: This UUID may not match the server config. You may need to reconfigure.', 'warn');
+            if (!info || !info.uuid) {
+                log('No local info found for this droplet.', 'warn');
+                log('This droplet may have been created before the auto-keygen feature.', 'warn');
+                // 为旧版创建的 droplet 生成占位 uuid
+                const uuid = generateUUID();
+                setSingboxInfo(dropletId, { uuid, publicKey: '', shortId: '' });
+                info = getSingboxInfo(dropletId);
             }
 
-            log(`UUID: ${uuid}`, 'info');
-            log('', 'info');
-            log('To get the full connection string, SSH into the server and run:', 'info');
-            log('  cat /root/singbox-info.json', 'info');
-            log('This will give you the public_key and short_id needed for the connection.', 'info');
+            log(`UUID: ${info.uuid}`, 'info');
 
-            // Build partial connection string
-            const connStr = buildConnectionString(ip, uuid);
+            const hasFullInfo = info.publicKey && info.shortId;
 
-            document.getElementById('proxy-config-text').textContent = connStr;
+            if (hasFullInfo) {
+                // 已有完整信息，直接显示完整连接字符串
+                const connStr = buildConnectionStringFull(ip, info.uuid, info.publicKey, info.shortId);
+                document.getElementById('proxy-config-text').textContent = connStr;
+                log('Full connection info available ✅ (keys were pre-generated by browser)', 'success');
+                // 仍然保留粘贴入口用于手动覆盖
+                pasteSection.querySelector('p').textContent = '✅ Connection info complete. Paste singbox-info.json below to override if needed:';
+            } else {
+                // 旧版 droplet，没有完整信息
+                const connStr = buildConnectionString(ip, info.uuid);
+                document.getElementById('proxy-config-text').textContent = connStr;
+                log('⚠️ This droplet was created before auto-keygen. Keys were generated on server.', 'warn');
+                log('SSH into the server and run: cat /root/singbox-info.json', 'info');
+                log('Then paste the output below to complete the connection string.', 'info');
+            }
+
             document.getElementById('proxy-ip').textContent = ip;
             document.getElementById('proxy-port').textContent = SINGBOX_PORT;
             document.getElementById('proxy-protocol').textContent = 'VLESS + Reality';
@@ -1160,6 +1287,55 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
         } catch (e) {
             log(`Error: ${e.message}`, 'error');
             loadingEl.textContent = 'Failed to load proxy info';
+        }
+    }
+
+    function saveProxyServerInfo() {
+        const dropletId = currentProxyDropletId;
+        if (!dropletId) { showToast('No droplet selected', 'error'); return; }
+
+        const pasteInput = document.getElementById('proxy-paste-input');
+        const pasteStatus = document.getElementById('proxy-paste-status');
+        const raw = pasteInput.value.trim();
+
+        if (!raw) {
+            pasteStatus.textContent = '❌ Please paste the singbox-info.json content';
+            pasteStatus.style.color = '#f85149';
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(raw);
+            const publicKey = parsed.public_key || parsed.publicKey || '';
+            const shortId = parsed.short_id || parsed.shortId || '';
+            const uuid = parsed.uuid || '';
+
+            if (!publicKey || !shortId) {
+                pasteStatus.textContent = '❌ Missing public_key or short_id in JSON';
+                pasteStatus.style.color = '#f85149';
+                return;
+            }
+
+            // 更新存储，如果 JSON 中包含 uuid 也同步更新
+            const updateData = { publicKey, shortId };
+            if (uuid) updateData.uuid = uuid;
+            setSingboxInfo(dropletId, updateData);
+
+            // 重新获取完整 info 并更新显示
+            const info = getSingboxInfo(dropletId);
+            const ip = document.getElementById('proxy-ip').textContent;
+            const connStr = buildConnectionStringFull(ip, info.uuid, info.publicKey, info.shortId);
+            document.getElementById('proxy-config-text').textContent = connStr;
+
+            pasteStatus.textContent = '✅ Saved! Connection string updated.';
+            pasteStatus.style.color = '#3fb950';
+            document.getElementById('proxy-paste-section').querySelector('p').textContent =
+                '✅ Server info saved. Paste new singbox-info.json below to update:';
+
+            showToast('Proxy info saved to local storage!', 'success');
+        } catch (e) {
+            pasteStatus.textContent = '❌ Invalid JSON: ' + e.message;
+            pasteStatus.style.color = '#f85149';
         }
     }
 
