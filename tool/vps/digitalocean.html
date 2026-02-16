@@ -634,10 +634,9 @@
     }
 
     async function getDropletConsoleUrl(id) {
-        // DigitalOcean provides console access via their web interface
-        // The API endpoint is: POST /v2/droplets/{droplet_id}/console
-        // It returns a WebSocket-based VNC console URL
-        return `https://cloud.digitalocean.com/droplets/${id}/console`;
+        // 使用 DigitalOcean API 获取带认证的控制台 URL
+        const data = await apiCall(`/droplets/${id}/console`, 'POST');
+        return data.console_url || data.url;
     }
 
     async function waitForDropletActive(dropletId, logFn, maxWait = 180) {
@@ -932,10 +931,26 @@ echo "SINGBOX_READY" > /root/singbox-status.txt
     }
 
     // ======================= Droplet Actions =======================
-    function openConsole(dropletId) {
-        const url = `https://cloud.digitalocean.com/droplets/${dropletId}/console`;
-        window.open(url, '_blank', 'width=900,height=600');
-        showToast('Opening DigitalOcean console in new window', 'info');
+    async function openConsole(dropletId) {
+        showToast('Requesting console access...', 'info');
+        try {
+            const url = await getDropletConsoleUrl(dropletId);
+            if (url) {
+                window.open(url, '_blank', 'width=900,height=600');
+                showToast('Console opened in new window', 'success');
+            } else {
+                // API 不支持时回退到 web 界面
+                const fallbackUrl = `https://cloud.digitalocean.com/droplets/${dropletId}/console`;
+                window.open(fallbackUrl, '_blank', 'width=900,height=600');
+                showToast('Opened DigitalOcean web console (requires DO login)', 'info');
+            }
+        } catch (e) {
+            // 如果 API 调用失败，回退到 web 界面
+            console.warn('Console API failed, falling back to web UI:', e.message);
+            const fallbackUrl = `https://cloud.digitalocean.com/droplets/${dropletId}/console`;
+            window.open(fallbackUrl, '_blank', 'width=900,height=600');
+            showToast('API console unavailable, opened web console (requires DO login)', 'info');
+        }
     }
 
     function promptDelete(dropletId, name) {
