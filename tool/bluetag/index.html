@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bluetag Sender</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#1a1a2e;color:#eee;min-height:100vh;display:flex;justify-content:center;align-items:center}
+.card{background:#16213e;border-radius:16px;padding:30px;width:90%;max-width:600px}
+h1{text-align:center;color:#00d4ff;margin-bottom:20px;font-size:24px}
+.btn{padding:12px 24px;border:none;border-radius:8px;cursor:pointer;font-size:16px;font-weight:bold;transition:.2s;width:100%;margin:8px 0}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn-primary{background:#0f9;color:#1a1a2e}
+.btn-secondary{background:transparent;border:2px solid #0f9;color:#0f9}
+.btn-danger{background:#ff4757;color:#fff}
+select,input[type=file]{width:100%;padding:10px;border:1px solid #333;border-radius:8px;background:#1e2a3a;color:#eee;font-size:14px;margin:8px 0}
+.status{padding:10px;border-radius:8px;margin:10px 0;font-size:14px;display:none}
+.status.ok{background:#0f9;color:#1a1a2e;display:block}
+.status.err{background:#ff4757;color:#fff;display:block}
+.status.info{background:#00d4ff;color:#1a1a2e;display:block}
+.preview{max-width:100%;border-radius:8px;margin:10px 0;display:none}
+.device{display:flex;justify-content:space-between;align-items:center;padding:10px 15px;background:#1e2a3a;border-radius:8px;margin:8px 0}
+.device-name{font-weight:bold}
+.device-info{font-size:12px;color:#888}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.col{flex:1;min-width:150px}
+label{font-size:13px;color:#888;margin-bottom:4px;display:block}
+input[type=checkbox]{margin-right:5px}
+#upload-zone{border:2px dashed #333;border-radius:8px;padding:20px;text-align:center;cursor:pointer;margin:8px 0;transition:.2s}
+#upload-zone:hover{border-color:#0f9}
+canvas{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>📟 Bluetag Sender</h1>
+
+<div id="device-status" class="device">
+  <div><span class="device-name">未连接</span><br><span class="device-info">点击下方按钮连接标签</span></div>
+</div>
+
+<button class="btn btn-primary" id="btn-connect" onclick="connectDevice()">🔗 连接标签</button>
+<button class="btn btn-secondary" id="btn-disconnect" onclick="disconnectDevice()" style="display:none">断开</button>
+
+<div id="upload-zone" onclick="document.getElementById('img-file').click()">
+  <p>📁 点击选择图片</p>
+  <p style="font-size:11px;color:#666">PNG / JPG / 支持拖拽</p>
+</div>
+<input type="file" id="img-file" accept="image/*" style="display:none" onchange="loadImage(this)">
+
+<div class="row">
+  <div class="col">
+    <label>屏幕</label>
+    <select id="screen-select">
+      <option value="2.9">2.9" (288x128)</option>
+      <option value="2.13">2.13" (250×122)</option>
+      <option value="3.7">3.7" (240×416)</option>
+    </select>
+  </div>
+  <div class="col">
+    <label>旋转</label>
+    <select id="rotate-select">
+      <option value="0">0°</option><option value="90">90°</option>
+      <option value="180">180°</option><option value="270">270°</option>
+    </select>
+  </div>
+</div>
+
+<div class="flex-center" style="margin-top:10px">
+    <input type="checkbox" id="dither-check" checked>
+    <label for="dither-check" style="margin:0">启用抖动 (Dither)</label>
+</div>
+<img id="preview" class="preview">
+
+<button class="btn btn-danger" id="btn-send" disabled onclick="sendImage()">📤 发送到标签</button>
+
+<div id="status" class="status"></div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// ===================== CONFIG =====================
+const SCREENS = {
+  '2.13': {w:250, h:122},
+  '2.9':  {w:292, h:128},
+  '3.7':  {w:240, h:416}
+};
+const SERVICE = '0000ffe0-0000-1000-8000-00805f9b34fb';
+const WRITE_CHAR = '0000ffe2-0000-1000-8000-00805f9b34fb';
+const BLACK_TYPE = 0x13, RED_TYPE = 0x12;
+const MAX_PAYLOAD = 20;
+
+let device = null, server = null, writeChar = null;
+let currentImage = null;
+
+// ===================== UI =====================
+function setStatus(msg, type) {
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  s.className = 'status ' + type;
+}
+
+async function connectDevice() {
+  try {
+    setStatus('正在扫描...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE] }],
+      optionalServices: [SERVICE]
+    });
+    setStatus('连接中...', 'info');
+    device.addEventListener('gattserverdisconnected', () => {
+      setStatus('设备断开', 'err');
+      document.getElementById('btn-connect').style.display = '';
+      document.getElementById('btn-disconnect').style.display = 'none';
+    });
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE);
+    writeChar = await svc.getCharacteristic(WRITE_CHAR);
+    
+    document.getElementById('device-status').innerHTML = 
+      `<div><span class="device-name">✅ ${device.name||'已连接'}</span><br><span class="device-info">${device.id}</span></div>`;
+    document.getElementById('btn-connect').style.display = 'none';
+    document.getElementById('btn-disconnect').style.display = '';
+    document.getElementById('btn-send').disabled = false;
+    setStatus('已连接！', 'ok');
+  } catch(e) {
+    setStatus('连接失败: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+function disconnectDevice() {
+  if (device && device.gatt.connected) device.gatt.disconnect();
+  document.getElementById('btn-connect').style.display = '';
+  document.getElementById('btn-disconnect').style.display = 'none';
+}
+
+// ===================== IMAGE PROCESSING =====================
+function loadImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      currentImage = img;
+      // Generate preview via canvas
+      const canvas = document.getElementById('canvas');
+      const screen = document.getElementById('screen-select').value;
+      const s = SCREENS[screen] || SCREENS['2.9'];
+      canvas.width = s.w; canvas.height = s.h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, s.w, s.h);
+      let dw = s.w, dh = s.h;
+      if (img.width/img.height > s.w/s.h) { dh = Math.round(s.w*img.height/img.width); }
+      else { dw = Math.round(s.h*img.width/img.height); }
+      const dx = Math.floor((s.w-dw)/2), dy = Math.floor((s.h-dh)/2);
+      ctx.drawImage(img, dx, dy, dw, dh);
+      document.getElementById('preview').src = canvas.toDataURL();
+      document.getElementById('preview').style.display = 'block';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function processImage(img, screenType, rotate) {
+  const s = SCREENS[screenType] || SCREENS['2.9'];
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Resize to fit screen maintaining aspect ratio, center on white canvas
+  canvas.width = s.w;
+  canvas.height = s.h;
+  
+  // Calculate fit
+  let dw = s.w, dh = s.h;
+  if (img.width / img.height > s.w / s.h) {
+    dh = Math.round(s.w * img.height / img.width);
+  } else {
+    dw = Math.round(s.h * img.width / img.height);
+  }
+  const dx = Math.floor((s.w - dw) / 2);
+  const dy = Math.floor((s.h - dh) / 2);
+
+  // White background
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, s.w, s.h);
+
+  ctx.save();
+  if (rotate) {
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.rotate(rotate * Math.PI / 180);
+    ctx.translate(-canvas.width/2, -canvas.height/2);
+  }
+  // Mirror for display: flip left-right
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+
+  const pixels = ctx.getImageData(0, 0, s.w, s.h).data;
+  const total = s.w * s.h;
+
+  // Black layer: gray > 128 -> 1 (white), gray <= 128 -> 0 (black)
+  const black = new Uint8Array(total);
+  const red = new Uint8Array(total);
+
+  // Extract grayscale values
+  const grayVals = new Float32Array(total);
+  for (let i = 0; i < total; i++) {
+    const r = pixels[i*4], g = pixels[i*4+1], b = pixels[i*4+2];
+    grayVals[i] = r*0.299 + g*0.587 + b*0.114;
+  }
+
+  // Floyd-Steinberg dithering if enabled (simulates grayscale)
+  const ditherEl = document.getElementById('dither-check');
+  const useDither = ditherEl ? ditherEl.checked : false;
+  if (useDither) {
+    for (let y = 0; y < s.h; y++) {
+      for (let x = 0; x < s.w; x++) {
+        const idx = y * s.w + x;
+        const old = grayVals[idx];
+        const newVal = old < 128 ? 0 : 255;
+        grayVals[idx] = newVal;
+        const err = old - newVal;
+        if (x + 1 < s.w) grayVals[y*s.w + x + 1] += err * 7/16;
+        if (y + 1 < s.h) {
+          if (x > 0) grayVals[(y+1)*s.w + x - 1] += err * 3/16;
+          grayVals[(y+1)*s.w + x] += err * 5/16;
+          if (x + 1 < s.w) grayVals[(y+1)*s.w + x + 1] += err * 1/16;
+        }
+      }
+    }
+  }
+
+  for (let i = 0; i < total; i++) {
+    const r = pixels[i*4], g = pixels[i*4+1], b = pixels[i*4+2];
+    const gray = useDither ? grayVals[i] : (r*0.299 + g*0.587 + b*0.114);
+
+    const isRed = r > 150 && g < 100 && b < 100;
+    if (isRed) {
+      red[i] = 1;
+      black[i] = 1;
+    } else {
+      red[i] = 0;
+      black[i] = gray >= 128 ? 1 : 0;
+    }
+  }
+
+  return { black, red, w: s.w, h: s.h };
+}
+
+function layerToBytes(layer, width, height) {
+  // Column-major: byte groups bottom-to-top, bits top-to-bottom within group
+  const bytesPerCol = Math.ceil(height / 8);
+  const data = [];
+  for (let col = 0; col < width; col++) {
+    for (let bi = bytesPerCol - 1; bi >= 0; bi--) {
+      let val = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const row = bi * 8 + bit;  // top-to-bottom within group
+        if (row < height && layer[row * width + col]) {
+          val |= (1 << bit);
+        }
+      }
+      data.push(val);
+    }
+  }
+  return new Uint8Array(data);
+}
+
+// ===================== SEND =====================
+async function sendImage() {
+  if (!writeChar) { setStatus('请先连接标签', 'err'); return; }
+
+  const screen = document.getElementById('screen-select').value;
+  const s = SCREENS[screen] || SCREENS['2.9'];
+  setStatus('处理中...', 'info');
+
+  let black, red, w, h;
+  
+  if (currentImage) {
+    const rotate = parseInt(document.getElementById('rotate-select').value);
+    ({ black, red, w, h } = processImage(currentImage, screen, rotate));
+  } else {
+    // Test pattern: white bg + black border + cross
+    w = s.w; h = s.h;
+    black = new Uint8Array(w * h);
+    red = new Uint8Array(w * h);
+    for (let row = 0; row < h; row++) {
+      for (let col = 0; col < w; col++) {
+        const border = row < 3 || row >= h-3 || col < 3 || col >= w-3;
+        const cross = Math.abs(col - w/2) < 2 || Math.abs(row - h/2) < 2;
+        red[row*w+col] = 0;   // 0 = no red
+        black[row*w+col] = (border || cross) ? 0 : 1;  // 0=black, 1=white
+      }
+    }
+    // Show preview of test pattern on canvas
+    const canvas = document.getElementById('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(w, h);
+    for (let i = 0; i < w*h; i++) {
+      imgData.data[i*4] = black[i] ? 255 : 0;
+      imgData.data[i*4+1] = black[i] ? 255 : 0;
+      imgData.data[i*4+2] = black[i] ? 255 : 0;
+      imgData.data[i*4+3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    document.getElementById('preview').src = canvas.toDataURL();
+    document.getElementById('preview').style.display = 'block';
+  }
+  
+  const blackBytes = layerToBytes(black, w, h);
+  const redBytes = layerToBytes(red, w, h);
+
+  setStatus(`发送中 (黑${blackBytes.length}B + 红${redBytes.length}B)...`, 'info');
+
+  try {
+    await writeChar.writeValueWithoutResponse(new Uint8Array([BLACK_TYPE,0,0,0,0]));
+    await sleep(80);
+    await sendChunks(blackBytes, BLACK_TYPE);
+    await writeChar.writeValueWithoutResponse(new Uint8Array([BLACK_TYPE,0xFF,0xFF,0xFF,0xFF]));
+    await sleep(200);
+
+    await writeChar.writeValueWithoutResponse(new Uint8Array([RED_TYPE,0,0,0,0]));
+    await sleep(80);
+    await sendChunks(redBytes, RED_TYPE);
+    await writeChar.writeValueWithoutResponse(new Uint8Array([RED_TYPE,0xFF,0xFF,0xFF,0xFF]));
+
+    setStatus('✓ 发送完成！屏幕即将刷新', 'ok');
+  } catch(e) {
+    setStatus('发送失败: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+async function sendChunks(data, type) {
+  let offset = 0;
+  let idx = 1;
+  while (offset < data.length) {
+    const sz = Math.min(MAX_PAYLOAD, data.length - offset);
+    const pkt = new Uint8Array(3 + sz);  // [type, idx(1B), len, data]
+    pkt[0] = type;
+    pkt[1] = idx & 0xFF;
+    pkt[2] = sz;
+    pkt.set(data.subarray(offset, offset + sz), 3);
+    await writeChar.writeValueWithoutResponse(pkt);
+    await sleep(40);
+    offset += sz;
+    idx++;
+  }
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// ===================== INIT =====================
+document.getElementById('upload-zone').addEventListener('dragover', e => { e.preventDefault(); });
+document.getElementById('upload-zone').addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    document.getElementById('img-file').files = e.dataTransfer.files;
+    loadImage(document.getElementById('img-file'));
+  }
+});
+</script>
+</body>
+</html>
