@@ -1,0 +1,15 @@
+[Unit]
+Description=Pastebin text service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/bin/python3 /opt/pastebin/server.py
+Restart=always
+RestartSec=5
+WorkingDirectory=/opt/pastebin
+
+[Install]
+WantedBy=multi-user.target
