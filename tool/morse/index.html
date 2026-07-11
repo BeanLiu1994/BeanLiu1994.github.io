@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>摩斯密码编解码 · Morse Code</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:150px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:14px;line-height:1.6;resize:vertical}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📻 摩斯密码编解码</h1>
+    <div class="sub">纯本地 · 英文 / 数字 / 常用标点 · Morse Code</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSwap">⇄ 交换</button>
+    <button id="bClear">清空</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>文本 Text</h2>
+    <textarea id="in" spellcheck="false" placeholder="输入文本，例如：SOS HELLO WORLD"></textarea>
+    <div class="row"><button id="bEnc" class="primary">编码 →</button></div>
+  </section>
+  <section class="card">
+    <h2>摩斯 Morse（字母间空格，词间 “/”）</h2>
+    <textarea id="out" spellcheck="false" placeholder="编码结果 / 或将摩斯粘贴到此点“解码”"></textarea>
+    <div class="row"><button id="bDec">← 解码</button><button id="bCopy">复制结果</button></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const M={A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+    0:'-----',1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.',
+    '.':'.-.-.-',',':'--..--','?':'..--..',"'":'.----.','!':'-.-.--','/':'-..-.','(':'-.--.',')':'-.--.-','&':'.-...',':':'---...',';':'-.-.-.','=':'-...-','+':'.-.-.','-':'-....-','_':'..--.-','"':'.-..-.','$':'...-..-','@':'.--.-.'};
+  const RM={};for(const k in M)RM[M[k]]=k;
+  function enc(){
+    const text=$('in').value.toUpperCase();
+    if(!text.trim()){setStatus('请先输入文本','err');return;}
+    const res=text.split('').map(ch=>{
+      if(ch===' ')return'/';
+      if(M[ch])return M[ch];
+      if(ch==='\n')return'\n';
+      return ch;
+    }).join(' ').replace(/\s*\/\s*/g,' / ').replace(/\n /g,'\n').trim();
+    $('out').value=res;
+    setStatus('✓ 已编码','ok');
+  }
+  function dec(){
+    const text=$('out').value.trim();
+    if(!text){setStatus('请先粘贴摩斯码','err');return;}
+    let res=text.split('\n').map(line=>line.split(' ').map(tok=>{
+      if(tok==='/')return' ';
+      if(RM[tok])return RM[tok];
+      return'';
+    }).join('')).join('\n');
+    if(/[^ A-Za-z0-9]/.test(res.replace(/\s/g,''))){setStatus('⚠ 部分符号无法识别，已忽略','err');}
+    $('in').value=res;
+    setStatus('✓ 已解码','ok');
+  }
+  $('bEnc').onclick=enc;
+  $('bDec').onclick=dec;
+  $('bSwap').onclick=()=>{const a=$('in').value;$('in').value=$('out').value;$('out').value=a;};
+  $('bClear').onclick=()=>{$('in').value='';$('out').value='';setStatus('已清空');};
+  $('bCopy').onclick=async()=>{const t=$('out').value;if(!t){setStatus('没有可复制的内容','err');return;}try{await navigator.clipboard.writeText(t);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败：'+e.message,'err');}};
+  setStatus('就绪 · 仅支持拉丁字母、数字与常用标点');
+})();
+</script>
+</body>
+</html>

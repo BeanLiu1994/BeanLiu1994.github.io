@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>字符编码查询 · Character Code</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input.fld{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;font-family:"SF Mono",Consolas,monospace;font-size:15px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;text-transform:uppercase;font-size:11px;letter-spacing:1px}
+  td{font-family:"SF Mono",Consolas,monospace;color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔣 字符编码查询</h1>
+    <div class="sub">字符 ⇄ Unicode / UTF-8 / UTF-16 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bClear">清空</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>编码：输入字符 / 文本</h2>
+    <input class="fld" id="enc" placeholder="例如：A 中 🌟 （每个字符展开编码）">
+  </section>
+  <section class="card">
+    <h2>结果（点击任意单元格复制）</h2>
+    <table id="out"><thead><tr><th>字符</th><th>码点</th><th>十进制</th><th>UTF-8</th><th>UTF-16</th><th>HTML</th></tr></thead><tbody></tbody></table>
+  </section>
+  <section class="card">
+    <h2>解码：输入码点还原字符</h2>
+    <input class="fld" id="dec" placeholder="例如：U+4E2D 或 20013 或 0x4E2D（空格分隔多个）">
+    <div class="row" style="margin-top:12px"><button id="bDec" class="primary">解码 →</button><span id="decOut" class="hint"></span></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function utf8(cp){
+    if(cp<0x80)return[cp];
+    if(cp<0x800)return[(0xC0|(cp>>6)),(0x80|(cp&0x3F))];
+    if(cp<0x10000)return[(0xE0|(cp>>12)),(0x80|((cp>>6)&0x3F)),(0x80|(cp&0x3F))];
+    return[(0xF0|(cp>>18)),(0x80|((cp>>12)&0x3F)),(0x80|((cp>>6)&0x3F)),(0x80|(cp&0x3F))];
+  }
+  function utf16(cp){
+    if(cp<0x10000)return[cp];
+    const v=cp-0x10000;return[0xD800+(v>>10),0xDC00+(v&0x3FF)];
+  }
+  const tbody=$('out').querySelector('tbody');
+  function encode(){
+    const s=$('enc').value;
+    if(!s){tbody.innerHTML='';setStatus('等待输入…');return;}
+    let rows='';
+    for(const ch of s){
+      const cp=ch.codePointAt(0);
+      const u8=utf8(cp).map(b=>'0x'+b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+      const u16=utf16(cp).map(b=>'0x'+b.toString(16).toUpperCase().padStart(4,'0')).join(' ');
+      const disp=ch===' '?'␣':(ch==='\n'?'⏎':ch);
+      const isCtrl=cp<32;
+      rows+=`<tr><td data-v="${esc(ch)}">${isCtrl?'<控制符 '+cp+'>':esc(ch)}</td>`+
+        `<td data-v="U+${cp.toString(16).toUpperCase().padStart(4,'0')}">U+${cp.toString(16).toUpperCase().padStart(4,'0')}</td>`+
+        `<td data-v="${cp}">${cp}</td>`+
+        `<td data-v="${u8}">${u8}</td>`+
+        `<td data-v="${u16}">${u16}</td>`+
+        `<td data-v="&#${cp};">&#amp;#${cp};</td></tr>`;
+    }
+    tbody.innerHTML=rows;
+    tbody.querySelectorAll('td').forEach(td=>td.onclick=()=>copy(td.dataset.v)));
+    setStatus('✓ 共 '+[...s].length+' 个字符','ok');
+  }
+  function decode(){
+    const s=$('dec').value.trim();
+    if(!s){setStatus('请先输入码点','err');return;}
+    const parts=s.split(/[\s,]+/).filter(Boolean);
+    let out='';
+    for(const p of parts){
+      let n;
+      if(/^u\+/i.test(p))n=parseInt(p.slice(2),16);
+      else if(/^0x/i.test(p))n=parseInt(p,16);
+      else n=parseInt(p,10);
+      if(isNaN(n)||n<0||n>0x10FFFF){$('decOut').textContent='无效码点：'+p;setStatus('✗ 无效码点：'+p,'err');return;}
+      out+=String.fromCodePoint(n);
+    }
+    $('decOut').textContent='→ '+out;
+    setStatus('✓ 解码完成','ok');
+    copy(out);
+  }
+  async function copy(t){try{await navigator.clipboard.writeText(t);}catch(e){}}
+  function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  $('enc').addEventListener('input',encode);
+  $('bDec').onclick=decode;
+  $('dec').addEventListener('keydown',e=>{if(e.key==='Enter')decode();});
+  $('bClear').onclick=()=>{$('enc').value='';$('dec').value='';$('decOut').textContent='';encode();};
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

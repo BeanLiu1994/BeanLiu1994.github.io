@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>罗马数字转换 · Roman Numerals</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input.fld{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;font-family:"SF Mono",Consolas,monospace;font-size:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  .range{color:var(--muted);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Ⅿ 罗马数字转换</h1>
+    <div class="sub">阿拉伯 ⇄ 罗马 · 纯本地 · Roman Numerals</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSwap">⇄ 交换</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>阿拉伯数字 (1–3999)</h2>
+    <input class="fld" id="num" inputmode="numeric" placeholder="例如 2026" value="2026">
+    <div class="row"><button id="bToRom" class="primary">→ 转罗马数字</button><span class="range">支持 1–3999</span></div>
+  </section>
+  <section class="card">
+    <h2>罗马数字</h2>
+    <input class="fld" id="rom" placeholder="例如 MMXXVI">
+    <div class="row"><button id="bToNum">→ 转阿拉伯数字</button><button id="bCopy">复制结果</button></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const map=[[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  function toRoman(n){
+    n=parseInt(n,10);
+    if(isNaN(n)||n<1||n>3999) throw new Error('请输入 1–3999 之间的整数');
+    let r='';for(const[v,s]of map){while(n>=v){r+=s;n-=v;}}return r;
+  }
+  function toNum(rom){
+    rom=rom.trim().toUpperCase();
+    if(!rom) throw new Error('请输入罗马数字');
+    let total=0,i=0;
+    for(const[v,s]of map){
+      while(rom.startsWith(s,i)){total+=v;i+=s.length;}
+    }
+    if(i!==rom.length) throw new Error('包含无效字符或非法组合：'+rom.slice(i));
+    // 回环校验，确保结果是合法罗马数字
+    if(toRoman(total)!==rom) throw new Error('非标准罗马数字（建议：'+toRoman(total)+'）');
+    return total;
+  }
+  $('bToRom').onclick=()=>{try{$('rom').value=toRoman($('num').value);setStatus('✓ '+ $('num').value+' = '+$('rom').value,'ok');}catch(e){setStatus('✗ '+e.message,'err');}};
+  $('bToNum').onclick=()=>{try{const n=toNum($('rom').value);$('num').value=n;setStatus('✓ '+$('rom').value+' = '+n,'ok');}catch(e){setStatus('✗ '+e.message,'err');}};
+  $('bSwap').onclick=()=>{const a=$('num').value;$('num').value=$('rom').value;$('rom').value=a;};
+  $('bCopy').onclick=async()=>{const t=$('rom').value||$('num').value;if(!t){setStatus('没有可复制的内容','err');return;}try{await navigator.clipboard.writeText(t);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败：'+e.message,'err');}};
+  $('num').addEventListener('input',()=>{const v=$('num').value.trim();if(/^\d+$/.test(v)){$('bToRom').onclick();}});
+  $('rom').addEventListener('input',()=>{const v=$('rom').value.trim();if(v){$('bToNum').onclick();}});
+  $('bToRom').onclick();
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

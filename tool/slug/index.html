@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>命名风格转换 · Case / Slug Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input.fld{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;font-family:"SF Mono",Consolas,monospace;font-size:15px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:12px}
+  .item{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:.15s}
+  .item:hover{border-color:var(--accent)}
+  .item .name{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .item .val{font-family:"SF Mono",Consolas,monospace;font-size:14px;margin-top:4px;word-break:break-all}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🅰️ 命名风格转换</h1>
+    <div class="sub">camel / snake / kebab / Pascal / CONST · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bClear">清空</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入（支持中文 / 空格 / 连字符 / 下划线混合）</h2>
+    <input class="fld" id="in" placeholder="例如：Hello World foo-bar 用户名称">
+  </section>
+  <section class="card">
+    <h2>结果（点击任意一项复制）</h2>
+    <div class="grid" id="out"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function words(s){
+    return (s
+      .replace(/([a-z0-9])([A-Z])/g,'$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2')
+      .replace(/[_\-\s]+/g,' ')
+      .trim()
+      .split(' ')
+      .filter(Boolean)
+      .map(w=>w.normalize('NFKC')));
+  }
+  function conv(s){
+    const ws=words(s);
+    const lower=ws.map(w=>w.toLowerCase());
+    const upper=ws.map(w=>w.toUpperCase());
+    const cap=ws.map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase());
+    const title=ws.map(w=>{const c=[...w];return c[0].toUpperCase()+c.slice(1).toLowerCase();}).join(' ');
+    return {
+      'camelCase': lower.map((w,i)=>i?cap[i]:w).join(''),
+      'PascalCase': cap.join(''),
+      'snake_case': lower.join('_'),
+      'CONSTANT_CASE': upper.join('_'),
+      'kebab-case': lower.join('-'),
+      'dot.case': lower.join('.'),
+      'Title Case': title,
+      'Train-Case': cap.join('-'),
+      'path/case': lower.join('/'),
+    };
+  }
+  function run(){
+    const v=$('in').value;
+    const out=$('out');
+    if(!v.trim()){ out.innerHTML=''; setStatus('等待输入…'); return; }
+    const r=conv(v);
+    out.innerHTML=Object.entries(r).map(([k,val])=>
+      `<div class="item" data-v="${encodeURIComponent(val)}"><div class="name">${k}</div><div class="val">${esc(val)||'&nbsp;'}</div></div>`).join('');
+    out.querySelectorAll('.item').forEach(el=>el.onclick=async()=>{
+      const val=decodeURIComponent(el.dataset.v);
+      try{await navigator.clipboard.writeText(val);setStatus('✓ 已复制：'+val,'ok');}catch(e){setStatus('复制失败：'+e.message,'err');}
+    });
+    setStatus('✓ 已生成 '+Object.keys(r).length+' 种风格','ok');
+  }
+  function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  $('in').addEventListener('input',run);
+  $('bClear').onclick=()=>{$('in').value='';run();$('in').focus();};
+  setStatus('等待输入…');
+})();
+</script>
+</body>
+</html>

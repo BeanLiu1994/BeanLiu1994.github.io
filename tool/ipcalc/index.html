@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP 地址工具 · IPv4 Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input.fld{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:9px 12px;font-family:"SF Mono",Consolas,monospace;font-size:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;width:42%;text-transform:uppercase;font-size:11px;letter-spacing:1px}
+  td{font-family:"SF Mono",Consolas,monospace;color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🛰️ IP 地址工具</h1>
+    <div class="sub">IPv4 ⇄ 整数 · 子网 / 掩码计算 · 纯本地</div>
+  </div>
+  <div class="toolbar"><a class="btn" href="../../">🏠 首页</a></div>
+</header>
+<main>
+  <section class="card">
+    <h2>IPv4 地址 + 掩码</h2>
+    <div class="row">
+      <input class="fld" id="ip" placeholder="192.168.1.10" style="width:180px">
+      <span class="hint">/</span>
+      <input class="fld" id="mask" placeholder="24" style="width:64px" inputmode="numeric">
+      <button id="bCalc" class="fld" style="background:var(--accent);border-color:var(--accent);color:#fff;cursor:pointer">计算</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <span class="hint">整数转 IP：</span>
+      <input class="fld" id="long" placeholder="3232235770" style="width:180px" inputmode="numeric">
+      <button id="bFromLong" class="fld" style="background:var(--panel);cursor:pointer">→ IP</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>计算结果</h2>
+    <table id="out"><tbody><tr><td colspan="2" class="hint">输入 IP 与掩码后点击计算…</td></tr></tbody></table>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function toLong(ip){const p=ip.split('.').map(Number);if(p.length!==4||p.some(n=>isNaN(n)||n<0||n>255))throw new Error('无效的 IPv4 地址');return((p[0]<<24)+(p[1]<<16)+(p[2]<<8)+p[3))>>>0;}
+  function toIp(n){return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.');}
+  function maskFromPrefix(p){if(p<0||p>32||isNaN(p))throw new Error('掩码位数 0–32');return p===0?0:((0xFFFFFFFF<<(32-p))>>>0);}
+  function calc(){
+    try{
+      const ip=$('ip').value.trim();
+      let p=parseInt($('mask').value.trim(),10);
+      if(isNaN(p)) p=32;
+      const ipLong=toLong(ip);
+      const m=maskFromPrefix(p);
+      const net=(ipLong&m)>>>0;
+      const bcast=(net|(~m>>>0))>>>0;
+      const hosts=p>=31?0:(bcast-net-1);
+      const rows=[
+        ['IP 地址',ip],
+        ['整数表示',ipLong.toLocaleString('en-US')+'  ('+ipLong+')'],
+        ['CIDR 前缀','/'+p],
+        ['子网掩码',toIp(m)+'  ('+m+')'],
+        ['通配符掩码',toIp((~m>>>0))],
+        ['网络地址',toIp(net)],
+        ['广播地址',toIp(bcast)],
+        ['可用主机范围',p>=31?'—':toIp(net+1)+' ～ '+toIp(bcast-1)],
+        ['可用主机数',hosts.toLocaleString('en-US')],
+      ];
+      $('out').innerHTML='<tbody>'+rows.map(([k,v])=>`<tr><th>${k}</th><td>${v}</td></tr>`).join('')+'</tbody>';
+      setStatus('✓ 计算完成','ok');
+    }catch(e){ setStatus('✗ '+e.message,'err'); }
+  }
+  function fromLong(){
+    try{const n=parseInt($('long').value.trim(),10);if(isNaN(n)||n<0||n>0xFFFFFFFF)throw new Error('请输入 0–4294967295');
+      $('ip').value=toIp(n>>>0);$('mask').value='32';calc();}catch(e){setStatus('✗ '+e.message,'err');}
+  }
+  $('bCalc').onclick=calc;
+  $('bFromLong').onclick=fromLong;
+  $('ip').addEventListener('keydown',e=>{if(e.key==='Enter')calc();});
+  $('mask').addEventListener('keydown',e=>{if(e.key==='Enter')calc();});
+  $('ip').value='192.168.1.10';$('mask').value='24';
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

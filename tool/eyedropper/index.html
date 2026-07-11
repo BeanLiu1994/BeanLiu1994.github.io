@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>屏幕取色器 · Color Eyedropper</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .pick{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .swatch{width:96px;height:96px;border-radius:12px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;text-transform:uppercase;font-size:11px;letter-spacing:1px;width:34%}
+  td{font-family:"SF Mono",Consolas,monospace;color:var(--accent);cursor:pointer}
+  .history{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+  .hsw{width:40px;height:40px;border-radius:8px;border:1px solid var(--border);cursor:pointer;position:relative}
+  .hsw span{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--muted);white-space:nowrap}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎯 屏幕取色器</h1>
+    <div class="sub">调用浏览器取色 API · 纯本地 · Color Eyedropper</div>
+  </div>
+  <div class="toolbar">
+    <button id="bClear">清历史</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>取色</h2>
+    <div class="pick">
+      <div class="swatch" id="sw" style="background:#222"></div>
+      <div>
+        <button id="bPick" class="primary">🎯 从屏幕取色</button>
+        <p class="hint" id="support" style="margin:10px 0 0"></p>
+      </div>
+    </div>
+    <table id="vals"><tbody>
+      <tr><th>HEX</th><td id="vHex">—</td></tr>
+      <tr><th>RGB</th><td id="vRgb">—</td></tr>
+      <tr><th>HSL</th><td id="vHsl">—</td></tr>
+    </tbody></table>
+  </section>
+  <section class="card">
+    <h2>历史（点击复制）</h2>
+    <div class="history" id="hist"><span class="hint">暂无记录</span></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const supported='EyeDropper' in window;
+  if(!supported){ $('bPick').disabled=true; $('support').textContent='当前浏览器不支持取色 API（建议使用 Chrome / Edge 桌面版）。下方仍可手动输入 HEX 取色。'; }
+  else { $('support').textContent='支持 EyeDropper API，点击按钮即可吸取屏幕上任意像素颜色。'; }
+  function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+  function rgbToHsl(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h,s,l=(mx+mn)/2;if(mx===mn){h=s=0;}else{const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);switch(mx){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;}h/=6;}return[h*360,s*100,l*100].map((v,i)=>i===0?Math.round(v):Math.round(v));}
+  function show(hex){
+    hex=hex.toUpperCase();
+    const [r,g,b]=hexToRgb(hex);
+    const [h,s,l]=rgbToHsl(r,g,b);
+    $('sw').style.background=hex;
+    $('vHex').textContent=hex;$('vHex').dataset.v=hex;
+    $('vRgb').textContent=`rgb(${r}, ${g}, ${b})`;$('vRgb').dataset.v=`rgb(${r}, ${g}, ${b})`;
+    $('vHsl').textContent=`hsl(${h}, ${s}%, ${l}%)`;$('vHsl').dataset.v=`hsl(${h}, ${s}%, ${l}%)`;
+    addHist(hex);
+    setStatus('✓ 已取色 '+hex,'ok');
+  }
+  function addHist(hex){
+    const h=$('hist');
+    if(h.querySelector('.hint'))h.innerHTML='';
+    const el=document.createElement('div');el.className='hsw';el.style.background=hex;el.dataset.v=hex;
+    el.innerHTML='<span>'+hex+'</span>';
+    el.onclick=()=>copy(hex);
+    h.insertBefore(el,h.firstChild);
+    while(h.querySelectorAll('.hsw').length>12)h.removeChild(h.lastChild);
+  }
+  async function copy(t){try{await navigator.clipboard.writeText(t);setStatus('✓ 已复制 '+t,'ok');}catch(e){setStatus('复制失败：'+e.message,'err');}}
+  $('vals').querySelectorAll('td').forEach(td=>td.onclick=()=>{if(td.dataset.v&&td.dataset.v!=='—')copy(td.dataset.v);});
+  $('bPick').onclick=async()=>{
+    try{
+      const ed=new EyeDropper();
+      const res=await ed.open();
+      show(res.sRGBHex);
+    }catch(e){ if(e.name!=='AbortError') setStatus('✗ '+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ $('hist').innerHTML='<span class="hint">暂无记录</span>'; setStatus('已清空历史'); };
+  // 手动输入 hex 支持
+  $('sw').title='点击手动粘贴 HEX 取色';
+  $('sw').onclick=async()=>{ try{const t=await navigator.clipboard.readText();if(/^#?[0-9a-fA-F]{6}$/.test(t.trim()))show(t.trim().startsWith('#')?t.trim():'#'+t.trim());}catch(e){} };
+  setStatus(supported?'就绪 · 点击“从屏幕取色”':'就绪 · 当前浏览器不支持屏幕取色');
+})();
+</script>
+</body>
+</html>
