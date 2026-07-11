@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Connect Four · Neon</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#10243a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ff4d6a; --accent-glow:#ff4d6a66; --danger:#ff4d6a; --gold:#ffd700; --r:#ff4d6a; --y:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 20%, #301020 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, #20301f 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:16px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; }
+  .title-block h1 { font-size:1.7rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#ff9fb0,#ff4d6a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.58rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:6px 12px; text-align:center; min-width:50px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:84px; padding:11px 14px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.82rem; font-weight:600; cursor:pointer; transition:all .2s; letter-spacing:.5px; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#fff; animation:pulse-glow 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse-glow { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:8px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  @media (max-width:400px){ .title-block h1{font-size:1.3rem;} .btn{padding:10px 10px; font-size:.76rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Connect Four</h1><div class="sub">N E O N &nbsp; G R I D</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Turn</div><div class="value" id="turn" style="color:var(--r)">R</div></div>
+      <div class="score-card best"><div class="label">Draws</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game" width="400" height="340"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">You Win!</h2><p id="win-msg">Four in a row</p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI thinking...</span>
+  </div>
+
+  <div class="stats-bar">
+    <span id="col-stat">Tap a column</span>
+    <span id="move-stat">Moves: 0</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const COLS=7, ROWS=6, DEPTH=5;
+  function fitCanvas(){ const w=canvas.clientWidth||400; const dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=w*ROWS/COLS*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); return w; }
+  class CF{
+    constructor(){
+      this.draws=parseInt(localStorage.getItem('bestCF')||'0');
+      this.autoPlay=false; this.autoTimer=null; this.raf=null; this.last=0;
+      this.hoverCol=-1;
+      this.bindInput(); this.restart();
+    }
+    restart(){
+      this.stopAuto(); this.stopLoop();
+      this.W=fitCanvas(); this.cs=this.W/COLS;
+      this.board=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+      this.current='R'; this.over=false; this.winLine=null; this.moves=0;
+      this.anim=null; this.hoverCol=-1;
+      document.getElementById('overlay-win').classList.remove('active');
+      this.updateUI(); this.loop();
+    }
+    validCols(){ const r=[]; for(let c=0;c<COLS;c++) if(!this.board[0][c]) r.push(c); return r; }
+    dropRow(c){ for(let r=ROWS-1;r>=0;r--) if(!this.board[r][c]) return r; return -1; }
+    winnerOf(b){
+      const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(!b[r][c]) continue;
+        for(const [dr,dc] of dirs){ const cells=[]; for(let k=0;k<4;k++){ const nr=r+dr*k,nc=c+dc*k; if(nr<0||nr>=ROWS||nc<0||nc>=COLS) break; if(b[nr][nc]!==b[r][c]) break; cells.push([nr,nc]); if(k===3) return {who:b[r][c],line:cells}; } }
+      }
+      if(this.validCols().length===0) return {who:'draw'};
+      return null;
+    }
+    // ---- minimax ----
+    evalBoard(b){
+      let s=0; const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+      const windows=[];
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) for(const [dr,dc] of dirs){ const w=[]; let ok=true; for(let k=0;k<4;k++){ const nr=r+dr*k,nc=c+dc*k; if(nr<0||nr>=ROWS||nc<0||nc>=COLS){ok=false;break;} w.push([nr,nc]); } if(ok) windows.push(w); }
+      for(const w of windows){ let R=0,Y=0; for(const [r,c] of w){ if(b[r][c]==='R')R++; else if(b[r][c]==='Y')Y++; }
+        if(R&&!Y) s-=[0,1,10,100,10000][R];
+        else if(Y&&!R) s+=[0,1,10,100,10000][Y];
+      }
+      return s;
+    }
+    score(b,depth,alpha,beta,maxing){
+      const w=this.winnerOf(b);
+      if(w){ if(w.who==='Y') return 1e7-depth; if(w.who==='R') return depth-1e7; if(w.who==='draw') return 0; }
+      if(depth===0) return this.evalBoard(b);
+      const cols=this.validCols();
+      if(maxing){ let best=-1e9; for(const c of cols){ const r=this.dropRow(c); b[r][c]='Y'; const v=this.score(b,depth-1,alpha,beta,false); b[r][c]=null; best=Math.max(best,v); alpha=Math.max(alpha,best); if(alpha>=beta) break; } return best; }
+      else { let best=1e9; for(const c of cols){ const r=this.dropRow(c); b[r][c]='R'; const v=this.score(b,depth-1,alpha,beta,true); b[r][c]=null; best=Math.min(best,v); beta=Math.min(beta,best); if(alpha>=beta) break; } return best; }
+    }
+    bestMove(b,player){
+      const maxing=(player==='Y'); const cols=this.validCols().sort((a,b2)=>Math.abs(3-a)-Math.abs(3-b2));
+      let best=maxing?-1e9:1e9, move=cols[0];
+      for(const c of cols){ const r=this.dropRow(c); b[r][c]=player; const v=this.score(b,DEPTH-1,-1e9,1e9,!maxing); b[r][c]=null; if(maxing? v>best : v<best){ best=v; move=c; } }
+      return move;
+    }
+    place(col){
+      if(this.over||this.anim||col<0||col>=COLS) return;
+      if(this.board[0][col]) return; // full
+      const r=this.dropRow(col); const color=this.current;
+      this.anim={col,color,r,y:-this.cs,targetY:(r+0.5)*this.cs,vy:this.cs*0.04};
+      this.updateUI();
+    }
+    finalizeDrop(){
+      const a=this.anim; this.board[a.r][a.col]=a.color; this.anim=null; this.moves++;
+      const w=this.winnerOf(this.board);
+      if(w){
+        this.over=true;
+        if(w.who==='draw'){ const sc=this.draws+1; this.draws=sc; localStorage.setItem('bestCF',this.draws); document.getElementById('win-title').textContent='Draw'; document.getElementById('win-msg').textContent='Board full'; }
+        else { this.winLine=w.line; if(this.autoPlay){ document.getElementById('win-title').textContent='AI: '+w.who+' wins'; } else { document.getElementById('win-title').textContent=w.who==='R'?'You Win!':'AI Wins'; document.getElementById('win-msg').textContent='Four in a row'; }
+          document.getElementById('turn').textContent=w.who; }
+        if(this.autoPlay) this.stopAuto();
+        document.getElementById('overlay-win').classList.add('active'); this.updateUI(); return;
+      }
+      this.current=this.current==='R'?'Y':'R';
+      this.updateUI();
+      if(this.autoPlay) this.autoTimer=setTimeout(()=>this.autoStep(), 620);
+      else if(this.current==='Y') this.autoTimer=setTimeout(()=>this.aiMove(), 480);
+    }
+    aiMove(){ if(this.over||this.anim||this.autoPlay) return; const m=this.bestMove(this.board,'Y'); this.place(m); }
+    autoStep(){ if(!this.autoPlay||this.over||this.anim) return; const m=this.bestMove(this.board,this.current); this.place(m); }
+    updateUI(){
+      document.getElementById('best').textContent=this.draws;
+      const t=document.getElementById('turn'); t.textContent=this.current; t.style.color=this.current==='R'?'var(--r)':'var(--y)';
+      document.getElementById('move-stat').textContent='Moves: '+this.moves;
+      if(this.autoPlay) document.getElementById('ai-status').textContent='AI: '+this.current+' to move';
+      document.getElementById('col-stat').textContent=this.over?'Game over':(this.current==='R'?'Your turn (R)':'AI thinking (Y)');
+    }
+    loop(){ this.stopLoop(); this.last=performance.now(); const f=(t)=>{ const dt=Math.min(40,t-this.last); this.last=t; this.update(dt); this.draw(); if(!this.over||this.winLine) this.raf=requestAnimationFrame(f); }; this.raf=requestAnimationFrame(f); }
+    stopLoop(){ if(this.raf) cancelAnimationFrame(this.raf); this.raf=null; }
+    update(dt){
+      const f=dt/16.67;
+      if(this.anim){
+        this.anim.vy+=this.cs*0.012*f; this.anim.y+=this.anim.vy*f;
+        if(this.anim.y>=this.anim.targetY){ this.anim.y=this.anim.targetY; this.finalizeDrop(); }
+      }
+    }
+    draw(){
+      const cs=this.cs; ctx.clearRect(0,0,this.W,this.H);
+      // hover column highlight
+      if(this.hoverCol>=0 && !this.over && !this.anim && !this.autoPlay){
+        ctx.fillStyle=(this.current==='R'?'#ff4d6a':'#ffd700')+'14'; ctx.fillRect(this.hoverCol*cs,0,cs,this.H);
+      }
+      // board holes
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const cx=(c+0.5)*cs, cy=(r+0.5)*cs;
+        ctx.fillStyle='#0a1626'; ctx.beginPath(); ctx.arc(cx,cy,cs*0.4,0,7); ctx.fill();
+        const p=this.board[r][c];
+        if(p){ this.drawDisc(cx,cy,cs*0.4,p, this.winLine&&this.winLine.some(([wr,wc])=>wr===r&&wc===c)); }
+      }
+      if(this.anim){ const cx=(this.anim.col+0.5)*cs; this.drawDisc(cx,this.anim.y,cs*0.4,this.anim.color,false); }
+    }
+    drawDisc(cx,cy,r,color,win){
+      ctx.save(); ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=win?18:10;
+      ctx.beginPath(); ctx.arc(cx,cy,r*0.92,0,7); ctx.fill();
+      ctx.shadowBlur=0; ctx.fillStyle='#ffffff33'; ctx.beginPath(); ctx.arc(cx-r*0.28,cy-r*0.28,r*0.3,0,7); ctx.fill();
+      ctx.restore();
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); else if(!this.anim&&this.current==='R') this.autoStep(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bindInput(){
+      const wrap=document.getElementById('board-wrap');
+      const colAt=(clientX)=>{ const rect=canvas.getBoundingClientRect(); const x=(clientX-rect.left)*(this.W/rect.width); return Math.floor(x/this.cs); };
+      wrap.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.autoPlay||this.over||this.anim) return; const c=colAt(e.clientX); if(c>=0&&c<COLS) this.place(c); });
+      wrap.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over||this.anim) return; this.hoverCol=colAt(e.clientX); this.draw(); });
+      wrap.addEventListener('pointerleave',()=>{ this.hoverCol=-1; });
+      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.cs=this.W/COLS; this.draw(); });
+    }
+  }
+  window.game=new CF();
+})();
+</script>
+</body>
+</html>

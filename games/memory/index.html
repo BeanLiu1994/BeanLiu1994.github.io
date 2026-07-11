@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Memory · Match</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#b388ff; --accent-glow:#b388ff66; --danger:#ff4d6a; --gold:#ffd700; --success:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 20%, #201040 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, #102038 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:16px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; }
+  .title-block h1 { font-size:1.8rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#d7b8ff,#b388ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:6px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.54rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.15rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:12px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .card { aspect-ratio:1; perspective:600px; cursor:pointer; }
+  .card-inner { position:relative; width:100%; height:100%; transition:transform .4s cubic-bezier(.4,.1,.2,1); transform-style:preserve-3d; }
+  .card.flipped .card-inner, .card.matched .card-inner { transform:rotateY(180deg); }
+  .face { position:absolute; inset:0; border-radius:12px; display:flex; align-items:center; justify-content:center; backface-visibility:hidden; font-size:1.8rem; font-weight:800; box-shadow:inset 0 0 0 1px #ffffff14; }
+  .front { background:linear-gradient(145deg,#241c44,#16163a); color:var(--muted); }
+  .back { background:linear-gradient(145deg,#2a2350,#1a1a3a); transform:rotateY(180deg); color:#fff; }
+  .card.matched .back { box-shadow:0 0 16px var(--success); }
+  .card.matched { animation:pop .35s ease; }
+  @keyframes pop { 0%{transform:scale(1);} 45%{transform:scale(1.08);} 100%{transform:scale(1);} }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; color:var(--gold); }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:84px; padding:11px 14px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.82rem; font-weight:600; cursor:pointer; transition:all .2s; letter-spacing:.5px; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#fff; animation:pulse-glow 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse-glow { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:8px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  @media (max-width:400px){ .title-block h1{font-size:1.35rem;} .btn{padding:10px 10px; font-size:.76rem;} .grid{gap:6px;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Memory</h1><div class="sub">N E O N &nbsp; M A T C H</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Moves</div><div class="value" id="moves">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="board-wrap">
+    <div class="grid" id="grid"></div>
+    <div class="overlay" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Solved!</h2><p id="win-msg">Perfect memory</p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI memorizing...</span>
+  </div>
+
+  <div class="stats-bar">
+    <span id="pairs-stat">Pairs: 0/8</span>
+    <span id="mem-stat">Remembered: 0</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const SYMS=['🍎','🌟','🔮','🌈','🍇','🎲','🌸','🐬','🍋','⚡'];
+  const PAIRS=8;
+  class Memory{
+    constructor(){
+      this.best=parseInt(localStorage.getItem('bestMem')||'0');
+      this.autoPlay=false; this.autoTimer=null;
+      this.build();
+      this.restart();
+    }
+    build(){
+      const g=document.getElementById('grid'); g.innerHTML='';
+      this.cards=[];
+      for(let i=0;i<PAIRS*2;i++){
+        const c=document.createElement('div'); c.className='card';
+        c.innerHTML='<div class="card-inner"><div class="face front">?</div><div class="face back"></div></div>';
+        g.appendChild(c); this.cards.push(c);
+      }
+    }
+    restart(){
+      this.stopAuto();
+      const syms=SYMS.slice(0,PAIRS);
+      let deck=[]; syms.forEach((s,i)=>{ deck.push(i); deck.push(i); });
+      for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; }
+      this.state=this.cards.map((c,i)=>({sym:deck[i], el:c, flipped:false, matched:false}));
+      this.cards.forEach((c,i)=>{ const s=this.state[i]; c.className='card'; c.querySelector('.back').textContent=SYMS[s.sym]; });
+      this.flip1=null; this.moves=0; this.matched=0; this.over=false; this.busy=false;
+      this.seen={}; // auto memory: index -> sym
+      document.getElementById('overlay-win').classList.remove('active');
+      this.updateUI();
+      this.bindInput();
+    }
+    flip(i, remember){
+      const s=this.state[i]; if(s.flipped||s.matched||this.busy||this.over) return;
+      s.flipped=true; s.el.classList.add('flipped');
+      if(this.autoPlay && remember) this.seen[i]=s.sym;
+    }
+    resolve(){
+      const ups=this.state.map((s,i)=>({s,i})).filter(o=>o.s.flipped&&!o.s.matched);
+      if(ups.length>=2){
+        const [u1,u2]=ups; this.busy=true;
+        if(u1.s.sym===u2.s.sym){
+          setTimeout(()=>{ u1.s.matched=u2.s.matched=true; u1.s.el.classList.add('matched'); u2.s.el.classList.add('matched');
+            if(this.autoPlay){ this.seen[u1.i]=u1.s.sym; this.seen[u2.i]=u2.s.sym; }
+            this.matched++; this.busy=false; this.updateUI(); this.checkWin();
+            if(!this.over && this.autoPlay) this.autoStep();
+          }, 360);
+        } else {
+          setTimeout(()=>{ u1.s.flipped=u2.s.flipped=false; u1.s.el.classList.remove('flipped'); u2.s.el.classList.remove('flipped'); this.busy=false;
+            if(!this.over && this.autoPlay) this.autoStep();
+          }, 720);
+        }
+      } else if(this.autoPlay && !this.over){
+        // exactly one card up — flip its partner next
+        this.autoTimer=setTimeout(()=>this.autoStep(), 360);
+      }
+    }
+    checkWin(){ if(this.matched===PAIRS){ this.over=true; const sc=this.best+1; if(sc>this.best){ this.best=sc; localStorage.setItem('bestMem',this.best); }
+      if(this.autoPlay) this.stopAuto();
+      document.getElementById('win-msg').textContent='Solved in '+this.moves+' moves';
+      document.getElementById('overlay-win').classList.add('active'); } }
+    updateUI(){
+      document.getElementById('moves').textContent=this.moves;
+      document.getElementById('best').textContent=this.best;
+      document.getElementById('pairs-stat').textContent='Pairs: '+this.matched+'/'+PAIRS;
+      document.getElementById('mem-stat').textContent='Remembered: '+Object.keys(this.seen).length;
+    }
+    // auto: memory-based solver
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){
+      if(!this.autoPlay||this.over||this.busy) return;
+      const ups=this.state.map((s,i)=>({s,i})).filter(o=>o.s.flipped&&!o.s.matched);
+      if(ups.length>=1){
+        // a card is up: find its match
+        const up=ups[0];
+        // match already known?
+        let target=this.findMatch(up);
+        if(target==null){ // learn: flip a random down card
+          const downs=this.state.map((s,i)=>({s,i})).filter(o=>!o.s.flipped&&!o.s.matched);
+          if(!downs.length){ this.stopAuto(); return; }
+          target=downs[Math.floor(Math.random()*downs.length)].i;
+          this.flip(target,true);
+        } else {
+          this.flip(target,false);
+        }
+        this.moves++; this.updateUI();
+        setTimeout(()=>this.resolve(), 420);
+        return;
+      }
+      // no card up: pick first move (learn or use memory)
+      const downs=this.state.map((s,i)=>({s,i})).filter(o=>!o.s.flipped&&!o.s.matched);
+      if(!downs.length){ this.stopAuto(); return; }
+      // if we know a pair both down, flip one
+      const known=Object.keys(this.seen);
+      let pick=downs[0].i;
+      for(const k of known){ const idx=+k; if(!this.state[idx].flipped&&!this.state[idx].matched){ const partner=this.findMatch({i:idx,s:this.state[idx]}); if(partner!=null && !this.state[partner].flipped && !this.state[partner].matched){ pick=idx; break; } } }
+      this.flip(pick,true); this.moves++; this.updateUI();
+      setTimeout(()=>this.resolve(), 420);
+    }
+    findMatch(up){
+      // returns index of a down card with same sym as up.s.sym, excluding up.i
+      for(let i=0;i<this.state.length;i++){ if(i===up.i) continue; const s=this.state[i]; if(s.matched) continue; if(s.sym===up.s.sym){
+        if(s.flipped) continue; // it's the same one we just flipped? actually up is flipped; we want the OTHER down card
+        if(!s.flipped) return i;
+      } }
+      return null;
+    }
+    bindInput(){
+      if(this._bound) return; this._bound=true;
+      document.getElementById('grid').addEventListener('pointerdown',(e)=>{
+        const c=e.target.closest('.card'); if(!c) return; e.preventDefault();
+        if(this.autoPlay||this.over||this.busy) return;
+        const i=this.cards.indexOf(c); const s=this.state[i];
+        if(s.flipped||s.matched) return;
+        const ups=this.state.filter(o=>o.flipped&&!o.matched);
+        if(ups.length>=2) return;
+        this.flip(i,false); this.moves++; this.updateUI();
+        if(this.state.filter(o=>o.flipped&&!o.matched).length===2){ setTimeout(()=>this.resolve(), 420); }
+      });
+    }
+  }
+  window.game=new Memory();
+})();
+</script>
+</body>
+</html>

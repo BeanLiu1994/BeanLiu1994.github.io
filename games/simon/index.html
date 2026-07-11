@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Simon · Neon</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dffd1; --accent-glow:#4dffd166; --danger:#ff4d6a; --gold:#ffd700; --success:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 10%, #103038 0%, transparent 55%), radial-gradient(ellipse at 50% 90%, #201040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:16px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; }
+  .title-block h1 { font-size:1.85rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#a8ffe8,#4dffd1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:6px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.54rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.15rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:14px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  .pads { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .pad { aspect-ratio:1.4; border-radius:16px; cursor:pointer; position:relative; transition:transform .1s, filter .12s, box-shadow .12s; filter:brightness(0.42); }
+  .pad.lit { filter:brightness(1.15); transform:scale(0.97); }
+  .pad[data-i="0"]{ background:linear-gradient(145deg,#ff4d6a,#a01030); }
+  .pad[data-i="1"]{ background:linear-gradient(145deg,#4dff91,#10a040); }
+  .pad[data-i="2"]{ background:linear-gradient(145deg,#4d9dff,#1040a0); }
+  .pad[data-i="3"]{ background:linear-gradient(145deg,#ffd700,#a08000); }
+  .pad.lit[data-i="0"]{ box-shadow:0 0 26px #ff4d6a; }
+  .pad.lit[data-i="1"]{ box-shadow:0 0 26px #4dff91; }
+  .pad.lit[data-i="2"]{ box-shadow:0 0 26px #4d9dff; }
+  .pad.lit[data-i="3"]{ box-shadow:0 0 26px #ffd700; }
+  .center-dot { position:absolute; inset:38% 38%; border-radius:50%; background:#0a0a1a55; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:84px; padding:11px 14px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.82rem; font-weight:600; cursor:pointer; transition:all .2s; letter-spacing:.5px; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0a0a1a; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a0a1a; animation:pulse-glow 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse-glow { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:8px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  @media (max-width:400px){ .title-block h1{font-size:1.4rem;} .btn{padding:10px 10px; font-size:.76rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Simon</h1><div class="sub">N E O N &nbsp; S E Q U E N C E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Round</div><div class="value" id="round">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="board-wrap">
+    <div class="pads" id="pads">
+      <div class="pad" data-i="0"><div class="center-dot"></div></div>
+      <div class="pad" data-i="1"><div class="center-dot"></div></div>
+      <div class="pad" data-i="2"><div class="center-dot"></div></div>
+      <div class="pad" data-i="3"><div class="center-dot"></div></div>
+    </div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Wrong!</h2><p id="lose-msg">Sequence broken</p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI watching...</span>
+  </div>
+
+  <div class="stats-bar">
+    <span id="seq-stat">Seq len: 0</span>
+    <span id="phase-stat">Phase: idle</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  class Simon{
+    constructor(){
+      this.best=parseInt(localStorage.getItem('bestSimon')||'0');
+      this.autoPlay=false; this.timers=[];
+      this.pads=[...document.querySelectorAll('.pad')];
+      this.bindInput();
+      this.restart();
+    }
+    clearTimers(){ this.timers.forEach(t=>clearTimeout(t)); this.timers=[]; }
+    restart(){
+      this.stopAuto(); this.clearTimers();
+      this.seq=[]; this.inputIndex=0; this.phase='idle'; this.busy=false; this.over=false;
+      this.round=0;
+      this.pads.forEach(p=>p.classList.remove('lit'));
+      document.getElementById('overlay-lose').classList.remove('active');
+      this.updateUI();
+      this.startRound();
+    }
+    startRound(){
+      if(this.over) return;
+      this.seq.push(Math.floor(Math.random()*4));
+      this.round=this.seq.length;
+      this.inputIndex=0; this.phase='show'; this.busy=true;
+      this.showSeq();
+    }
+    showSeq(){
+      const step=520;
+      this.seq.forEach((pad,i)=>{
+        this.timers.push(setTimeout(()=>this.flash(pad), i*step));
+      });
+      this.timers.push(setTimeout(()=>{
+        this.busy=false; this.phase='input';
+        if(this.autoPlay) this.autoInput();
+      }, this.seq.length*step+120));
+      this.updateUI();
+    }
+    flash(i){
+      const pad=this.pads[i]; pad.classList.add('lit');
+      if(navigator.vibrate) navigator.vibrate(18);
+      this.timers.push(setTimeout(()=>pad.classList.remove('lit'), 300));
+    }
+    padPress(i){
+      if(this.over||this.busy||this.phase!=='input') return;
+      this.flash(i);
+      if(this.seq[this.inputIndex]===i){
+        this.inputIndex++;
+        if(this.inputIndex>=this.seq.length){
+          if(this.round>this.best){ this.best=this.round; localStorage.setItem('bestSimon',this.best); }
+          this.phase='wait';
+          this.updateUI();
+          this.timers.push(setTimeout(()=>this.startRound(), 680));
+        } else this.updateUI();
+      } else {
+        this.gameOver();
+      }
+    }
+    autoInput(){
+      for(let k=this.inputIndex;k<this.seq.length;k++){
+        this.timers.push(setTimeout(()=>this.padPress(this.seq[k]), (k-this.inputIndex)*430));
+      }
+    }
+    gameOver(){
+      this.over=true; this.phase='over'; this.busy=false;
+      if(this.autoPlay) this.stopAuto();
+      document.getElementById('lose-msg').textContent='Reached round '+this.round;
+      document.getElementById('overlay-lose').classList.add('active');
+    }
+    updateUI(){
+      document.getElementById('round').textContent=this.round;
+      document.getElementById('best').textContent=this.best;
+      document.getElementById('seq-stat').textContent='Seq len: '+this.seq.length;
+      document.getElementById('phase-stat').textContent='Phase: '+this.phase;
+      if(this.autoPlay) document.getElementById('ai-status').textContent='AI: round '+this.round+' · seq '+this.seq.length;
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); else if(this.phase==='input') this.autoInput(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bindInput(){
+      this.pads.forEach(p=>{
+        p.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.autoPlay||this.over) return; const i=+p.dataset.i; this.padPress(i); });
+      });
+    }
+  }
+  window.game=new Simon();
+})();
+</script>
+</body>
+</html>

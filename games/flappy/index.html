@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Flappy · Pixel Bird</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#10202a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ffd700; --accent-glow:#ffd70066; --danger:#ff4d6a; --gold:#ffd700; --success:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #1a3060 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #102a40 0%, transparent 60%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:16px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; }
+  .title-block h1 { font-size:1.85rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--gold),#ffe97a,#ffd700); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:6px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.54rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.15rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:8px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:84px; padding:11px 14px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.82rem; font-weight:600; cursor:pointer; transition:all .2s; letter-spacing:.5px; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--gold); border-color:var(--gold); color:#1a1a2e; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--gold); border-color:var(--gold); color:#1a1a2e; animation:pulse-glow 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse-glow { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--gold); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:8px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  .hint { text-align:center; font-size:0.7rem; color:var(--muted); margin-top:6px; }
+  @media (max-width:400px){ .title-block h1{font-size:1.4rem;} .btn{padding:10px 10px; font-size:.76rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Flappy</h1><div class="sub">P I X E L &nbsp; B I R D</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game" width="400" height="560"></canvas>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Crash!</h2><p id="lose-msg">You hit a pipe</p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI flying...</span>
+  </div>
+
+  <div class="stats-bar">
+    <span id="pipes-stat">Pipes: 0</span>
+    <span class="hint" style="margin:0;">Tap / Click / Space to flap</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  function fitCanvas(){ const w=canvas.clientWidth||400; const dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=w*1.4*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); return w; }
+  class Flappy{
+    constructor(){
+      this.best=parseInt(localStorage.getItem('bestFlap')||'0');
+      this.autoPlay=false; this.raf=null; this.last=0;
+      this.bindInput(); this.restart();
+    }
+    restart(){
+      this.stopAuto();
+      this.W=fitCanvas(); this.H=this.W*1.4;
+      this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.011+6.2);
+      this.bird={y:this.H*0.42, vy:0, x:this.W*0.28, r:this.W*0.035+9};
+      this.pipes=[]; this.spawnTimer=0; this.spawnGap=this.W*0.62+96;
+      this.score=0; this.passed=0; this.over=false; this.started=false;
+      document.getElementById('overlay-lose').classList.remove('active');
+      this.updateUI(); this.loop();
+    }
+    spawnPipe(){
+      const gap=this.H*0.26; const margin=this.H*0.12;
+      const gy=margin+Math.random()*(this.H-2*margin-gap);
+      this.pipes.push({x:this.W+10, w:this.W*0.06+22, gapY:gy, gap:gap, passed:false});
+    }
+    flap(){ if(this.over) return; if(!this.started){ this.started=true; } this.bird.vy=this.flapV; if(navigator.vibrate) navigator.vibrate(6); }
+    loop(){ this.stopLoop(); this.last=performance.now(); const f=(t)=>{ const dt=Math.min(34,t-this.last); this.last=t; this.update(dt); this.draw(); if(!this.over) this.raf=requestAnimationFrame(f); }; this.raf=requestAnimationFrame(f); }
+    stopLoop(){ if(this.raf) cancelAnimationFrame(this.raf); this.raf=null; }
+    update(dt){
+      if(this.over) return;
+      const f=dt/16.67;
+      if(this.autoPlay && this.started) this.autoFlap();
+      if(this.started){
+        this.bird.vy+=this.g*f; this.bird.y+=this.bird.vy*f;
+        // pipes
+        this.spawnTimer+=dt; if(this.spawnTimer>=this.spawnGap){ this.spawnTimer=0; this.spawnPipe(); }
+        const bs=this.bird.x+this.bird.r;
+        for(const p of this.pipes){
+          p.x-=(this.W*0.0042+2.0)*f;
+          if(!p.passed && p.x+p.w<this.bird.x-this.bird.r){ p.passed=true; this.score++; this.passed++; if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestFlap',this.best); } }
+        }
+        this.pipes=this.pipes.filter(p=>p.x+p.w>-10);
+        // collision
+        if(this.bird.y-this.bird.r<0){ this.bird.y=this.bird.r; this.bird.vy=0; }
+        if(this.bird.y+this.bird.r>this.H){ this.gameOver('You hit the ground'); return; }
+        for(const p of this.pipes){
+          if(bs>p.x && this.bird.x-this.bird.r<p.x+p.w){
+            if(this.bird.y-this.bird.r<p.gapY || this.bird.y+this.bird.r>p.gapY+p.gap){ this.gameOver('You hit a pipe'); return; }
+          }
+        }
+        this.updateUI();
+      }
+    }
+    autoFlap(){
+      if(!this.pipes.length) return;
+      // next pipe ahead of bird
+      let np=null; for(const p of this.pipes){ if(p.x+p.w>this.bird.x-this.bird.r){ np=p; break; } }
+      if(!np) return;
+      const center=np.gapY+np.gap/2;
+      // flap if bird is below center by a margin OR falling fast below center
+      const below=this.bird.y - center;
+      if(below> this.H*0.02 && this.bird.vy>=-1){ this.flap(); }
+    }
+    gameOver(msg){
+      this.over=true; this.stopLoop(); if(this.autoPlay) this.stopAuto();
+      document.getElementById('lose-msg').textContent=msg+' · '+this.score;
+      document.getElementById('overlay-lose').classList.add('active');
+    }
+    updateUI(){
+      document.getElementById('score').textContent=this.score;
+      document.getElementById('best').textContent=this.best;
+      document.getElementById('pipes-stat').textContent='Pipes: '+this.passed;
+    }
+    draw(){
+      ctx.clearRect(0,0,this.W,this.H);
+      // ground glow
+      ctx.fillStyle='#0c1a22'; ctx.fillRect(0,this.H-6,this.W,6);
+      // pipes
+      for(const p of this.pipes){
+        ctx.fillStyle='#4dff91'; ctx.shadowColor='#4dff91'; ctx.shadowBlur=12;
+        this.roundRect(p.x,0,p.w,p.gapY,5); ctx.fill();
+        this.roundRect(p.x,p.gapY+p.gap,p.w,this.H-(p.gapY+p.gap),5); ctx.fill();
+        ctx.shadowBlur=0;
+        ctx.fillStyle='#ffffff22'; ctx.fillRect(p.x,p.gapY-4,p.w,4); ctx.fillRect(p.x,p.gapY+p.gap,p.w,4);
+      }
+      // bird
+      const b=this.bird; const ang=Math.max(-0.5,Math.min(1.1, b.vy*0.05));
+      ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(ang);
+      ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=14;
+      this.roundRect(-b.r,-b.r,b.r*2,b.r*2,6); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle='#1a1a2e'; ctx.beginPath(); ctx.arc(b.r*0.4,-b.r*0.2,b.r*0.22,0,7); ctx.fill();
+      ctx.fillStyle='#ff8c00'; ctx.beginPath(); ctx.moveTo(b.r,-b.r*0.1); ctx.lineTo(b.r+b.r*0.5,-b.r*0.3); ctx.lineTo(b.r,-b.r*0.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      if(!this.started){ ctx.fillStyle='#ffffffaa'; ctx.font='bold '+(this.W*0.05)+'px sans-serif'; ctx.textAlign='center'; ctx.fillText('TAP TO START',this.W/2,this.H*0.5); }
+    }
+    roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); else this.started=true; this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI: flying'; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bindInput(){
+      const wrap=document.getElementById('board-wrap');
+      wrap.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.over) return; this.flap(); });
+      document.addEventListener('keydown',(e)=>{ if(e.key===' '||e.key==='ArrowUp'||e.key==='w'){ e.preventDefault(); if(this.over) return; this.flap(); } });
+      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.H=this.W*1.4; this.bird.r=this.W*0.035+9; this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.011+6.2); this.draw(); });
+    }
+  }
+  window.game=new Flappy();
+})();
+</script>
+</body>
+</html>

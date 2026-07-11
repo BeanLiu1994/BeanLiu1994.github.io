@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Tic-Tac-Toe · Neon</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dffd1; --accent-glow:#4dffd166; --danger:#ff4d6a; --gold:#ffd700; --x:#4d9dff; --o:#ff4d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 20%, #103038 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, #201040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:16px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; }
+  .title-block h1 { font-size:1.7rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#a8ffe8,#4dffd1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.58rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:6px 12px; text-align:center; min-width:50px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:12px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .cell { aspect-ratio:1; border-radius:14px; background:var(--board); display:flex; align-items:center; justify-content:center; font-size:2.6rem; font-weight:800; cursor:pointer; transition:background .15s, transform .1s; box-shadow:inset 0 0 0 1px #ffffff10; position:relative; }
+  .cell:active { transform:scale(0.96); }
+  .cell.x { color:var(--x); text-shadow:0 0 16px var(--x); }
+  .cell.o { color:var(--o); text-shadow:0 0 16px var(--o); }
+  .cell.win { box-shadow:0 0 18px var(--gold); background:#2a2350; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:84px; padding:11px 14px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.82rem; font-weight:600; cursor:pointer; transition:all .2s; letter-spacing:.5px; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0a0a1a; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a0a1a; animation:pulse-glow 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse-glow { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:8px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  @media (max-width:400px){ .title-block h1{font-size:1.3rem;} .btn{padding:10px 10px; font-size:.76rem;} .cell{font-size:2.1rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Tic-Tac-Toe</h1><div class="sub">N E O N &nbsp; A I</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">You</div><div class="value" id="you" style="color:var(--x)">X</div></div>
+      <div class="score-card best"><div class="label">Draws</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="board-wrap">
+    <div class="grid" id="grid"></div>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Draw</h2><p id="win-msg">Perfect play</p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI thinking...</span>
+  </div>
+
+  <div class="stats-bar">
+    <span id="turn-stat">Turn: X</span>
+    <span id="move-stat">Move: 0</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  class TTT{
+    constructor(){
+      this.draws=parseInt(localStorage.getItem('bestTTT')||'0');
+      this.autoPlay=false; this.autoTimer=null;
+      this.build(); this.restart();
+    }
+    build(){
+      const g=document.getElementById('grid'); g.innerHTML='';
+      this.cells=[];
+      for(let i=0;i<9;i++){ const c=document.createElement('div'); c.className='cell'; g.appendChild(c); this.cells.push(c); }
+    }
+    restart(){
+      this.stopAuto();
+      this.board=Array(9).fill(null);
+      this.current='X'; this.over=false; this.winner=null; this.moves=0;
+      this.cells.forEach(c=>{ c.textContent=''; c.className='cell'; });
+      document.getElementById('overlay-win').classList.remove('active');
+      this.updateUI(); this.bindInput();
+    }
+    winnerOf(b){
+      const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+      for(const [a,b2,c] of L){ if(b[a]&&b[a]===b[b2]&&b[a]===b[c]) return {who:b[a],line:[a,b2,c]}; }
+      if(b.every(x=>x)) return {who:'draw'};
+      return null;
+    }
+    score(b,player,depth){
+      const w=this.winnerOf(b);
+      if(w){ if(w.who==='X') return 10-depth; if(w.who==='O') return depth-10; return 0; }
+      if(player==='X'){
+        let best=-1e9;
+        for(let i=0;i<9;i++){ if(!b[i]){ b[i]='X'; const v=this.score(b,'O',depth+1); if(v>best)best=v; b[i]=null; } }
+        return best;
+      } else {
+        let best=1e9;
+        for(let i=0;i<9;i++){ if(!b[i]){ b[i]='O'; const v=this.score(b,'X',depth+1); if(v<best)best=v; b[i]=null; } }
+        return best;
+      }
+    }
+    bestMove(b,player){
+      let best=player==='X'?-1e9:1e9, move=-1;
+      const opts=[];
+      for(let i=0;i<9;i++){ if(!b[i]){ b[i]=player; const v=this.score(b, player==='X'?'O':'X',1); b[i]=null; opts.push({i,v}); if(player==='X'&&v>best){best=v;move=i;} if(player==='O'&&v<best){best=v;move=i;} } }
+      // tie-break: random among equal-best for variety
+      const eq=opts.filter(o=>o.v===best);
+      return eq[Math.floor(Math.random()*eq.length)].i;
+    }
+    place(i){
+      if(this.over||this.board[i]) return;
+      this.board[i]=this.current; this.moves++;
+      const c=this.cells[i]; c.textContent=this.current; c.classList.add(this.current==='X'?'x':'o');
+      const w=this.winnerOf(this.board);
+      if(w){
+        this.over=true;
+        if(w.who==='draw'){ if(this.autoPlay){} const sc=this.draws+1; this.draws=sc; localStorage.setItem('bestTTT',this.draws);
+          document.getElementById('win-title').textContent='Draw'; document.getElementById('win-msg').textContent='Perfect play — nobody wins'; }
+        else { w.line.forEach(k=>this.cells[k].classList.add('win'));
+          document.getElementById('win-title').textContent=w.who+' wins'; document.getElementById('win-msg').textContent=w.who==='X'?'You win!':(this.autoPlay?'AI vs AI over':'AI wins'); }
+        if(this.autoPlay) this.stopAuto();
+        document.getElementById('overlay-win').classList.add('active'); this.updateUI(); return;
+      }
+      this.current=this.current==='X'?'O':'X';
+      this.updateUI();
+      if(this.autoPlay) this.autoTimer=setTimeout(()=>this.autoStep(), 600);
+      else if(this.current==='O') this.autoTimer=setTimeout(()=>this.aiMove(), 480);
+    }
+    aiMove(){ if(this.over||this.autoPlay) return; const m=this.bestMove(this.board,'O'); this.place(m); }
+    autoStep(){ if(!this.autoPlay||this.over) return; const m=this.bestMove(this.board,this.current); this.place(m); }
+    updateUI(){
+      document.getElementById('best').textContent=this.draws;
+      document.getElementById('turn-stat').textContent='Turn: '+this.current;
+      document.getElementById('move-stat').textContent='Move: '+this.moves;
+      if(this.autoPlay) document.getElementById('ai-status').textContent='AI: '+this.current+' to move';
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); this.autoStep(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bindInput(){
+      if(this._bound) return; this._bound=true;
+      document.getElementById('grid').addEventListener('pointerdown',(e)=>{ const c=e.target.closest('.cell'); if(!c) return; e.preventDefault(); if(this.autoPlay||this.over) return; if(this.current!=='X') return; const i=this.cells.indexOf(c); this.place(i); });
+    }
+  }
+  window.game=new TTT();
+})();
+</script>
+</body>
+</html>
