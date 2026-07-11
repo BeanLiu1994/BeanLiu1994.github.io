@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文本对比 · Text Diff</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --add:#1f3d2b; --addt:#5fd38a; --del:#3d1f25; --delt:#ff7a8a; --same:#0f1115; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between}
+  textarea{flex:1;min-height:240px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .result{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;flex:1;min-height:240px;
+    font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+  .line-add{background:var(--add);color:var(--addt);display:block;padding:0 8px}
+  .line-del{background:var(--del);color:var(--delt);display:block;padding:0 8px}
+  .line-same{display:block;padding:0 8px;color:var(--muted)}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔍 文本对比</h1>
+    <div class="sub">纯本地运行 · 行级差异 (LCS)</div>
+  </div>
+  <div class="toolbar">
+    <label class="indent">对比粒度
+      <select id="mode"><option value="line">按行</option><option value="word">按字符</option></select>
+    </label>
+    <button id="bSwap">⇄ 互换</button>
+    <button id="bCopy">复制差异</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>原文本 Original</span></div>
+    <textarea id="a" spellcheck="false">function add(a, b) {
+  return a + b;
+}
+const x = 1;</textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>新文本 Modified</span></div>
+    <textarea id="b" spellcheck="false">function add(a, b) {
+  // 求和
+  return a + b;
+}
+const x = 2;
+const y = 3;</textarea>
+  </section>
+  <section class="pane" style="flex:2;min-width:100%">
+    <div class="pane-head"><span>差异结果 Diff</span><span class="hint" id="meta"></span></div>
+    <div class="result" id="out"></div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--addt)"></i> 新增</span>
+      <span><i class="dot" style="background:var(--delt)"></i> 删除</span>
+      <span><i class="dot" style="background:var(--muted)"></i> 未变</span>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st'),out=$('out');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function split(s,mode){ return mode==='word'? s.split(''): s.split(/\r?\n/); }
+  function lcs(a,b){
+    const n=a.length,m=b.length;
+    const dp=Array.from({length:n+1},()=>new Int32Array(m+1));
+    for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)
+      dp[i][j]= a[i]===b[j]? dp[i+1][j+1]+1 : Math.max(dp[i+1][j],dp[i][j+1]);
+    const res=[]; let i=0,j=0;
+    while(i<n&&j<m){
+      if(a[i]===b[j]){res.push({t:'same',v:a[i]});i++;j++;}
+      else if(dp[i+1][j]>=dp[i][j+1]){res.push({t:'del',v:a[i]});i++;}
+      else{res.push({t:'add',v:b[j]});j++;}
+    }
+    while(i<n){res.push({t:'del',v:a[i]});i++;}
+    while(j<m){res.push({t:'add',v:b[j]});j++;}
+    return res;
+  }
+  function run(){
+    const mode=$('mode').value;
+    const A=split($('a').value,mode), B=split($('b').value,mode);
+    const diff=lcs(A,B);
+    let add=0,del=0,same=0;
+    out.innerHTML=diff.map(d=>{
+      if(d.t==='add'){add++;return '<span class="line-add">+ '+escape(d.v)+'</span>';}
+      if(d.t==='del'){del++;return '<span class="line-del">- '+escape(d.v)+'</span>';}
+      same++;return '<span class="line-same">  '+escape(d.v)+'</span>';
+    }).join('');
+    $('meta').textContent='+'+add+' −'+del+' ='+same;
+    setStatus('✓ 对比完成：新增 '+add+' · 删除 '+del+' · 相同 '+same,'ok');
+  }
+  function escape(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  ['a','b','mode'].forEach(id=>$(id).addEventListener('input',run));
+  $('bSwap').onclick=()=>{const t=$('a').value;$('a').value=$('b').value;$('b').value=t;run();};
+  $('bCopy').onclick=async()=>{
+    if(!out.textContent){setStatus('无内容可复制','err');return;}
+    try{ await navigator.clipboard.writeText(out.textContent); setStatus('✓ 已复制差异','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{$('a').value='';$('b').value='';run();};
+  run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base64 编解码 · Base64 Tool</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:280px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:260px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔤 Base64 编解码</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · UTF-8 安全</div>
+  </div>
+  <div class="toolbar">
+    <button id="bEncode" class="primary">文本 → Base64</button>
+    <button id="bDecode">Base64 → 文本</button>
+    <button id="bSwap">⇄ 互换</button>
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="in" placeholder="在此粘贴文本或 Base64 字符串…" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="out" readonly placeholder="结果将显示在这里…" spellcheck="false"></textarea>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  const enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:false});
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function toB64(str){
+    const bytes=enc.encode(str); let bin='';
+    for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+  function fromB64(b64){
+    const bin=atob(b64.replace(/\s+/g,''));
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return dec.decode(bytes);
+  }
+  $('bEncode').onclick=()=>{
+    if(!inp.value){setStatus('请输入内容','err');return;}
+    try{ out.value=toB64(inp.value); setStatus('✓ 已编码 · '+out.value.length+' 字符','ok'); }
+    catch(e){ setStatus('✗ 编码失败：'+e.message,'err'); }
+  };
+  $('bDecode').onclick=()=>{
+    if(!inp.value.trim()){setStatus('请输入 Base64','err');return;}
+    try{ out.value=fromB64(inp.value); setStatus('✓ 已解码','ok'); }
+    catch(e){ setStatus('✗ 无效的 Base64：'+e.message,'err'); }
+  };
+  $('bSwap').onclick=()=>{ const t=inp.value; inp.value=out.value; out.value=t; setStatus('已互换两侧内容'); };
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制到剪贴板','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ inp.value=''; out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

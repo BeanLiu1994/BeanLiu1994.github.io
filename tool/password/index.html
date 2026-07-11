@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>密码生成器 · Password Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; --warn:#e5c07b; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pw-box{display:flex;gap:10px;align-items:center}
+  .pw-box input{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:12px 14px;font-size:16px;font-family:"SF Mono",Consolas,monospace;outline:none}
+  .strength{height:8px;border-radius:4px;background:var(--bg);overflow:hidden;margin-top:12px}
+  .strength > div{height:100%;width:0;transition:.25s}
+  .strength-label{font-size:12px;color:var(--muted);margin-top:6px}
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px}
+  .opt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)}
+  .opt input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+  .opt input[type=number]{width:64px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 7px;font-size:13px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔑 密码生成器</h1>
+    <div class="sub">基于 crypto 安全随机数 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="bGen" class="primary">重新生成</button>
+    <button id="bCopy">复制</button>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <div class="pw-box">
+      <input type="text" id="pw" readonly placeholder="点击「重新生成」">
+    </div>
+    <div class="strength"><div id="bar"></div></div>
+    <div class="strength-label" id="strength">—</div>
+  </div>
+  <div class="card">
+    <div class="opts">
+      <label class="opt">长度 <input type="number" id="len" value="16" min="4" max="128"></label>
+      <label class="opt"><input type="checkbox" id="upper" checked> 大写 A-Z</label>
+      <label class="opt"><input type="checkbox" id="lower" checked> 小写 a-z</label>
+      <label class="opt"><input type="checkbox" id="num" checked> 数字 0-9</label>
+      <label class="opt"><input type="checkbox" id="sym" checked> 符号 !@#$</label>
+      <label class="opt"><input type="checkbox" id="noAmb"> 排除易混字符 (0 O l 1 I)</label>
+    </div>
+    <p class="hint" style="margin-top:12px">安全随机：使用浏览器 crypto.getRandomValues，结果仅在本机生成。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const SETS={
+    upper:'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    lower:'abcdefghijklmnopqrstuvwxyz',
+    num:'0123456789',
+    sym:'!@#$%^&*()-_=+[]{};:,.<>?'
+  };
+  const AMBIG='O0Il1|`\'"';
+  function randInt(max){ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]%max; }
+  function gen(){
+    const len=Math.max(4,Math.min(128,parseInt($('len').value)||16));
+    let pool=''; const chosen=[];
+    if($('upper').checked){pool+=SETS.upper;chosen.push(SETS.upper);}
+    if($('lower').checked){pool+=SETS.lower;chosen.push(SETS.lower);}
+    if($('num').checked){pool+=SETS.num;chosen.push(SETS.num);}
+    if($('sym').checked){pool+=SETS.sym;chosen.push(SETS.sym);}
+    if(!pool){setStatus('请至少选择一种字符类型','err');return;}
+    let chars=pool.split('');
+    if($('noAmb').checked) chars=chars.filter(c=>!AMBIG.includes(c));
+    const poolStr=chars.join('');
+    let pw='';
+    // 保证每种所选类型至少出现一次
+    for(const set of chosen){
+      const cset=set.split('').filter(c=>!($('noAmb').checked&&AMBIG.includes(c)));
+      if(cset.length) pw+=cset[randInt(cset.length)];
+    }
+    while(pw.length<len) pw+=poolStr[randInt(poolStr.length)];
+    pw=pw.split('').sort(()=> Math.random()<0.5?-1:1).join('');
+    if(pw.length>len) pw=pw.slice(0,len);
+    $('pw').value=pw;
+    rate(pw,poolStr.length);
+    setStatus('✓ 已生成 '+len+' 位密码','ok');
+  }
+  function rate(pw,poolSize){
+    const entropy=pw.length*Math.log2(poolSize||1);
+    const bar=$('bar'); let pct=Math.min(100,entropy/64*100), color;
+    let label;
+    if(entropy<28){color='#ff5d6c';label='弱 (弱密码)';}
+    else if(entropy<50){color='#e5c07b';label='中 (中等强度)';}
+    else if(entropy<70){color='#4f9cff';label='强 (强密码)';}
+    else{color='#3ecf8e';label='极强 (非常强)';}
+    bar.style.width=pct+'%'; bar.style.background=color;
+    $('strength').textContent=label+' · 估算熵 ≈ '+entropy.toFixed(1)+' bit';
+  }
+  $('bGen').onclick=gen;
+  $('bCopy').onclick=async()=>{
+    if(!$('pw').value){setStatus('请先生成密码','err');return;}
+    try{ await navigator.clipboard.writeText($('pw').value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  ['len','upper','lower','num','sym','noAmb'].forEach(id=>$(id).addEventListener('change',gen));
+  gen();
+})();
+</script>
+</body>
+</html>

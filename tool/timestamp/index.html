@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时间戳转换 · Timestamp Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=text],input[type=datetime-local]{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:"SF Mono",Consolas,Monaco,monospace}
+  input[type=text]{flex:1;min-width:200px}
+  input[type=datetime-local]{color-scheme:dark}
+  .now-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+  .now-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+  .now-item .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .now-item .v{font-size:14px;margin-top:4px;font-family:"SF Mono",Consolas,monospace;word-break:break-all}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  code{background:var(--bg);padding:1px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⏱️ 时间戳转换</h1>
+    <div class="sub">Unix 时间戳 ↔ 日期 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="bNow" class="primary">使用当前时间</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>当前时间 Current Time</h2>
+    <div class="now-grid">
+      <div class="now-item"><div class="k">Unix 秒</div><div class="v" id="nowSec">—</div></div>
+      <div class="now-item"><div class="k">Unix 毫秒</div><div class="v" id="nowMs">—</div></div>
+      <div class="now-item"><div class="k">本地时间</div><div class="v" id="nowLocal">—</div></div>
+      <div class="now-item"><div class="k">UTC</div><div class="v" id="nowUtc">—</div></div>
+      <div class="now-item"><div class="k">ISO 8601</div><div class="v" id="nowIso">—</div></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>时间戳 → 日期</h2>
+    <div class="row">
+      <input type="text" id="tsIn" placeholder="输入 Unix 时间戳（秒或毫秒，自动识别）">
+      <button id="bTsToDate" class="primary">转换</button>
+      <button id="bCopyDate">复制</button>
+    </div>
+    <div class="hint" style="margin-top:8px" id="tsOut">—</div>
+  </section>
+  <section class="card">
+    <h2>日期 → 时间戳</h2>
+    <div class="row">
+      <input type="datetime-local" id="dateIn" step="1">
+      <button id="bDateToTs" class="primary">转换</button>
+      <button id="bCopyTs">复制</button>
+    </div>
+    <div class="hint" style="margin-top:8px" id="dateOut">—</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function pad(n,l=2){return String(n).padStart(l,'0');}
+  function fmt(d){
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+
+           pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  }
+  function tick(){
+    const d=new Date(), ms=d.getTime();
+    $('nowSec').textContent=Math.floor(ms/1000);
+    $('nowMs').textContent=ms;
+    $('nowLocal').textContent=fmt(d);
+    $('nowUtc').textContent=fmt(new Date(d.getTime()+d.getTimezoneOffset()*60000))+' UTC';
+    $('nowIso').textContent=d.toISOString();
+  }
+  tick(); setInterval(tick,1000);
+
+  $('bNow').onclick=()=>{
+    const d=new Date();
+    const off=d.getTimezoneOffset()*60000;
+    const local=new Date(d.getTime()-off);
+    $('dateIn').value=local.toISOString().slice(0,19);
+    setStatus('已填入当前本地时间','ok');
+  };
+  $('bTsToDate').onclick=()=>{
+    const v=$('tsIn').value.trim();
+    if(!v){setStatus('请输入时间戳','err');return;}
+    const n=Number(v);
+    if(!Number.isFinite(n)){setStatus('时间戳必须是数字','err');return;}
+    const ms = v.length>11 ? n : n*1000;
+    const d=new Date(ms);
+    if(isNaN(d)){setStatus('无效的时间戳','err');return;}
+    $('tsOut').innerHTML='本地：<code>'+fmt(d)+'</code> &nbsp;|&nbsp; UTC：<code>'+
+      fmt(new Date(ms+d.getTimezoneOffset()*60000))+'</code> &nbsp;|&nbsp; ISO：<code>'+d.toISOString()+'</code>';
+    setStatus('✓ 已转换（'+(v.length>11?'毫秒':'秒')+'）','ok');
+  };
+  $('bDateToTs').onclick=()=>{
+    const v=$('dateIn').value;
+    if(!v){setStatus('请选择日期时间','err');return;}
+    const ms=new Date(v).getTime();
+    if(isNaN(ms)){setStatus('无效的日期','err');return;}
+    const sec=Math.floor(ms/1000);
+    $('dateOut').innerHTML='秒：<code>'+sec+'</code> &nbsp;|&nbsp; 毫秒：<code>'+ms+'</code>';
+    setStatus('✓ 已转换','ok');
+  };
+  async function copy(el,label){
+    const txt=el.textContent||el.innerText||'';
+    if(!txt||txt==='—'){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(txt); setStatus('✓ 已复制 '+label,'ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  }
+  $('bCopyDate').onclick=()=>copy($('tsOut'),'日期');
+  $('bCopyTs').onclick=()=>copy($('dateOut'),'时间戳');
+})();
+</script>
+</body>
+</html>

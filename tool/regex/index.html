@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正则测试器 · Regex Tester</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; --hl:#ffd166; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:220px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .regex-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .regex-bar input[type=text]{flex:1;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 12px;font-size:14px;font-family:"SF Mono",monospace;outline:none}
+  .flags{display:flex;gap:4px}
+  .flags label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:3px;cursor:pointer}
+  .flags input{accent-color:var(--accent)}
+  .match-list{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;overflow:auto;flex:1;min-height:120px}
+  .match-item{padding:6px 8px;border-radius:6px;font-family:"SF Mono",monospace;font-size:13px;margin-bottom:4px;background:var(--bg)}
+  .match-item .gi{color:var(--muted);font-size:11px}
+  .match-item .gc{color:var(--hl)}
+  .hl{background:rgba(255,209,102,.28);border-radius:3px;color:#fff}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧪 正则测试器</h1>
+    <div class="sub">纯本地运行 · 实时匹配 / 高亮 / 替换</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopyMatches">复制匹配</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">测试文本 Text</div>
+    <textarea id="text" placeholder="在此粘贴需要测试的文本…">https://example.com/path?q=hello&n=42
+订单号 ORD-2024-8831 金额 ¥199.00
+联系: user.name+test@sub.example.org</textarea>
+  </section>
+  <section class="pane">
+    <div class="regex-bar">
+      <input type="text" id="pat" value="[\w.+-]+@[\w.-]+\.\w+" placeholder="正则表达式…">
+      <div class="flags">
+        <label title="全局"><input type="checkbox" id="fg" checked>g</label>
+        <label title="忽略大小写"><input type="checkbox" id="fi">i</label>
+        <label title="多行"><input type="checkbox" id="fm">m</label>
+        <label title="点匹配换行"><input type="checkbox" id="fs">s</label>
+      </div>
+    </div>
+    <div class="pane-head">匹配结果 Matches</div>
+    <div class="match-list" id="matches"></div>
+    <div class="pane-head" style="margin-top:10px">替换 Replacement</div>
+    <textarea id="repl" style="min-height:60px" placeholder="替换字符串（支持 $1 $2 等捕获组）…"></textarea>
+    <div class="hint" id="replOut" style="margin-top:8px">—</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function flags(){ let f=''; if($('fg').checked)f+='g'; if($('fi').checked)f+='i'; if($('fm').checked)f+='m'; if($('fs').checked)f+='s'; return f; }
+  function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  function run(){
+    const pat=$('pat').value, text=$('text').value, f=flags();
+    const matches=$('matches'); matches.innerHTML='';
+    if(!pat){ setStatus('请输入正则表达式','err'); $('replOut').textContent='—'; return; }
+    let re;
+    try{ re=new RegExp(pat,f); }catch(e){ setStatus('✗ 无效的正则：'+e.message,'err'); return; }
+    if(!f.includes('g')){
+      const m=re.exec(text);
+      if(m){ renderMatch(matches,m,0); setStatus('✓ 1 处匹配','ok'); }
+      else setStatus('无匹配','err');
+    } else {
+      let m,count=0; re.lastIndex=0;
+      while((m=re.exec(text))!==null){
+        renderMatch(matches,m,count); count++;
+        if(m.index===re.lastIndex) re.lastIndex++;
+        if(count>1000){ setStatus('匹配过多，已截断显示前 1000 处','ok'); break; }
+      }
+      setStatus(count?('✓ '+count+' 处匹配'):'无匹配', count?'ok':'err');
+    }
+    // 替换预览
+    const repl=$('repl').value;
+    if(repl!==''||re.test(text)){ try{ $('replOut').textContent=text.replace(re,repl); }catch(e){ $('replOut').textContent='替换错误：'+e.message; } }
+    else $('replOut').textContent='—';
+  }
+  function renderMatch(container,m,idx){
+    const item=document.createElement('div'); item.className='match-item';
+    let groups='';
+    if(m.length>1) groups=m.slice(1).map((g,i)=>'<span class="gi">$'+(i+1)+'=</span><span class="gc">'+(g===undefined?'∅':esc(g))+'</span> ').join('');
+    item.innerHTML='<span class="gi">#'+(idx+1)+' @'+m.index+':</span> '+esc(m[0])+(groups?'<br>'+groups:'');
+    container.appendChild(item);
+  }
+  ['pat','text','repl','fg','fi','fm','fs'].forEach(id=>$(id).addEventListener('input',run));
+  $('bCopyMatches').onclick=async()=>{
+    const rows=[...$('matches').querySelectorAll('.match-item')];
+    if(!rows.length){setStatus('无匹配可复制','err');return;}
+    const txt=rows.map(r=>r.textContent.replace(/\s+/g,' ').trim()).join('\n');
+    try{ await navigator.clipboard.writeText(txt); setStatus('✓ 已复制匹配结果','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ $('pat').value=''; $('text').value=''; $('repl').value=''; run(); };
+  run();
+})();
+</script>
+</body>
+</html>

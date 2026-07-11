@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>哈希计算器 · Hash Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:280px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between}
+  textarea{flex:1;min-height:200px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .results{flex:1;display:flex;flex-direction:column;gap:8px;overflow:auto}
+  .hash-row{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;padding:8px 12px}
+  .hash-row .algo{width:110px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px}
+  .hash-row .val{flex:1;font-family:"SF Mono",Consolas,monospace;font-size:13px;word-break:break-all}
+  .hash-row button{padding:4px 9px;font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  input[type=file]{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 哈希计算器</h1>
+    <div class="sub">MD5 · SHA-1/256/384/512 · CRC32 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <input type="file" id="fileIn" title="选择文件计算哈希">
+    <button id="bCopyAll">复制全部</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>输入文本 Input</span></div>
+    <textarea id="in" placeholder="在此粘贴需要计算哈希的文本…（也可选择上方文件）" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Results</span><span class="hint" id="meta"></span></div>
+    <div class="results" id="results"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪 · 输入文本或选择文件后将自动计算</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),st=$('st'),results=$('results'),meta=$('meta');
+  const enc=new TextEncoder();
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+
+  // ---- CRC32 ----
+  const crcTable=(()=>{let t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+  function crc32(bytes){let crc=0xFFFFFFFF;for(let i=0;i<bytes.length;i++)crc=crcTable[(crc^bytes[i])&0xFF]^(crc>>>8);return((crc^0xFFFFFFFF)>>>0).toString(16).padStart(8,'0');}
+
+  // ---- MD5 (UTF-8 aware, implemented from spec) ----
+  function md5(bytes){
+    const len=bytes.length, bitLen=len*8;
+    const newLen=((len+8)>>6<<6)+64;
+    const buf=new Uint8Array(newLen); buf.set(bytes); buf[len]=0x80;
+    const dv=new DataView(buf.buffer);
+    dv.setUint32(newLen-8, bitLen>>>0, true);
+    dv.setUint32(newLen-4, Math.floor(bitLen/0x100000000), true);
+    const K=[]; for(let i=1;i<=64;i++) K.push(Math.floor(Math.abs(Math.sin(i))*4294967296));
+    const sh=[7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+    const add32=(...xs)=>{let r=0;for(const x of xs)r=(r+x)&0xFFFFFFFF;return r;};
+    const rotl=(x,n)=>(x<<n)|(x>>>(32-n));
+    let a0=0x67452301,b0=0xEFCDAB89,c0=0x98BADCFE,d0=0x10325476;
+    for(let off=0;off<newLen;off+=64){
+      const M=new Uint32Array(16); const dv2=new DataView(buf.buffer,off);
+      for(let i=0;i<16;i++) M[i]=dv2.getUint32(i*4,true);
+      let A=a0,B=b0,C=c0,D=d0;
+      for(let i=0;i<64;i++){
+        let F,g;
+        if(i<16){F=(B&C)|(~B&D);g=i;}
+        else if(i<32){F=(D&B)|(~D&C);g=(5*i+1)%16;}
+        else if(i<48){F=B^C^D;g=(3*i+5)%16;}
+        else{F=C^(B|~D);g=(7*i)%16;}
+        F=add32(A,F,K[i],M[g]); A=D; D=C; C=B; B=add32(B,rotl(F,sh[i]));
+      }
+      a0=add32(a0,A); b0=add32(b0,B); c0=add32(c0,C); d0=add32(d0,D);
+    }
+    const rhex=n=>{let s='',hc='0123456789abcdef';for(let j=0;j<4;j++)s+=hc[(n>>(j*8+4))&0xF]+hc[(n>>(j*8))&0xF];return s;};
+    return rhex(a0)+rhex(b0)+rhex(c0)+rhex(d0);
+  }
+
+  async function sha(alg,bytes){
+    if(!crypto||!crypto.subtle) throw new Error('当前环境不支持 Web Crypto');
+    const buf=await crypto.subtle.digest(alg,bytes);
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function compute(bytes){
+    results.innerHTML=''; meta.textContent='输入 '+bytes.length+' 字节';
+    const algos=[['MD5',()=>md5(bytes)],['SHA-1',()=>sha('SHA-1',bytes)],['SHA-256',()=>sha('SHA-256',bytes)],
+                 ['SHA-384',()=>sha('SHA-384',bytes)],['SHA-512',()=>sha('SHA-512',bytes)],['CRC32',()=>crc32(bytes)]];
+    for(const [name,fn] of algos){
+      const row=document.createElement('div'); row.className='hash-row';
+      row.innerHTML='<span class="algo">'+name+'</span><span class="val">计算中…</span><button>复制</button>';
+      results.appendChild(row);
+      try{
+        const v=await fn();
+        row.querySelector('.val').textContent=v;
+        row.querySelector('button').onclick=()=>copyText(v,name);
+      }catch(e){
+        row.querySelector('.val').textContent='错误：'+e.message;
+      }
+    }
+    setStatus('✓ 计算完成','ok');
+  }
+
+  async function copyText(txt,label){
+    try{ await navigator.clipboard.writeText(txt); setStatus('✓ 已复制 '+label,'ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  }
+
+  let timer;
+  inp.addEventListener('input',()=>{ clearTimeout(timer); timer=setTimeout(()=>compute(enc.encode(inp.value)),250); });
+  $('fileIn').addEventListener('change',async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const buf=new Uint8Array(await f.arrayBuffer());
+    setStatus('正在计算文件：'+f.name+' ('+f.size+' 字节)…');
+    await compute(buf);
+  });
+  $('bCopyAll').onclick=async()=>{
+    const rows=[...results.querySelectorAll('.hash-row')];
+    if(!rows.length){setStatus('暂无结果','err');return;}
+    const txt=rows.map(r=>r.querySelector('.algo').textContent+': '+r.querySelector('.val').textContent).join('\n');
+    await copyText(txt,'全部哈希');
+  };
+  $('bClear').onclick=()=>{ inp.value=''; results.innerHTML=''; meta.textContent=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>
