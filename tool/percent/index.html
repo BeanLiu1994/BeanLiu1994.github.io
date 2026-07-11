@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>百分比计算器 · Percentage Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:48px}
+  input[type=number]{flex:1;min-width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .result{margin-top:8px;font-size:20px;font-weight:700;color:var(--accent);min-height:28px}
+  .formula{color:var(--muted);font-size:13px;margin-top:4px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📊 百分比计算器</h1>
+    <div class="sub">四类常用百分比运算 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">① X 的百分之 Y 是多少</div>
+      <div class="row"><label>X</label><input type="number" data-m="1" data-f="a" value="200"><label>%</label><input type="number" data-m="1" data-f="b" value="15"></div>
+      <div class="result" id="r1"></div>
+      <div class="formula" id="f1"></div>
+    </div>
+    <div class="card">
+      <div class="pane-head">② X 是 Y 的百分之多少</div>
+      <div class="row"><label>X</label><input type="number" data-m="2" data-f="a" value="30"><label>Y</label><input type="number" data-m="2" data-f="b" value="120"></div>
+      <div class="result" id="r2"></div>
+      <div class="formula" id="f2"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">③ X 增加/减少 Y% 后</div>
+      <div class="row"><label>原值</label><input type="number" data-m="3" data-f="a" value="500"><label>%</label><input type="number" data-m="3" data-f="b" value="10"><label>±</label></div>
+      <div class="row"><label>方向</label>
+        <div class="seg" id="dir"><button data-d="inc" class="on">增加 +</button><button data-d="dec">减少 −</button></div>
+      </div>
+      <div class="result" id="r3"></div>
+      <div class="formula" id="f3"></div>
+    </div>
+    <div class="card">
+      <div class="pane-head">④ 涨跌幅度（A → B）</div>
+      <div class="row"><label>前</label><input type="number" data-m="4" data-f="a" value="80"><label>后</label><input type="number" data-m="4" data-f="b" value="100"></div>
+      <div class="result" id="r4"></div>
+      <div class="formula" id="f4"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const num=id=>parseFloat($(id).value);
+  let dir='inc';
+  function g(m,f){ return num('m'+m+f); }
+  function red(){ const inp=document.activeElement; return inp&&inp.dataset&&inp.dataset.m?inp.dataset.m:null; }
+  function calc(){
+    const a1=g(1,'a'),b1=g(1,'b');
+    if(isFinite(a1)&&isFinite(b1)){ const v=a1*b1/100; $('r1').textContent=fmt(v); $('f1').textContent=a1+' × '+b1+'% = '+fmt(v); }
+    const a2=g(2,'a'),b2=g(2,'b');
+    if(isFinite(a2)&&isFinite(b2)&&b2!==0){ const v=a2/b2*100; $('r2').textContent=fmt(v)+'%'; $('f2').textContent=a2+' ÷ '+b2+' × 100% = '+fmt(v)+'%'; }
+    const a3=g(3,'a'),b3=g(3,'b');
+    if(isFinite(a3)&&isFinite(b3)){ const v=dir==='inc'?a3*(1+b3/100):a3*(1-b3/100); const delta=a3*(b3/100); $('r3').textContent=fmt(v)+'（'+(dir==='inc'?'+':'−')+fmt(delta)+'）'; $('f3').textContent='原值 '+fmt(a3)+' '+(dir==='inc'?'增加':'减少')+' '+b3+'% → '+fmt(v); }
+    const a4=g(4,'a'),b4=g(4,'b');
+    if(isFinite(a4)&&isFinite(b4)&&a4!==0){ const v=(b4-a4)/a4*100; $('r4').textContent=(v>=0?'+':'')+fmt(v)+'%'; $('f4').textContent='('+fmt(b4)+' − '+fmt(a4)+') ÷ '+fmt(a4)+' × 100% = '+(v>=0?'+':'')+fmt(v)+'%'; }
+    $('st').textContent='✓ 已计算';
+  }
+  function fmt(n){ return Math.round(n*10000)/10000; }
+  document.querySelectorAll('input[type=number]').forEach(i=>i.addEventListener('input',calc));
+  $('dir').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; dir=b.dataset.d;
+    [...$('dir').children].forEach(x=>x.classList.toggle('on',x===b)); calc(); });
+  calc();
+})();
+</script>
+</body>
+</html>

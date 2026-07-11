@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>贷款月供计算器 · Loan Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:96px}
+  input[type=number]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .big{font-size:34px;font-weight:800;color:var(--accent);text-align:center;margin:4px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:18px;font-weight:600;margin-top:3px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .note{color:var(--muted);font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>💰 贷款月供计算器</h1>
+    <div class="sub">等额本息 · 纯本地 · 仅供估算</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">贷款参数</div>
+      <div class="row"><label>贷款总额</label><input type="number" id="amount" value="1000000"> <span>元</span></div>
+      <div class="row"><label>年利率</label><input type="number" id="rate" value="4.2" step="0.01"> <span>%</span></div>
+      <div class="row"><label>期限</label><input type="number" id="years" value="30"> <span>年</span></div>
+      <div class="note">计算方式为「等额本息」：每月还款额固定。</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">每月还款</div>
+      <div class="big" id="monthly">—</div>
+      <div class="grid">
+        <div class="stat"><div class="k">还款总额</div><div class="v" id="total">—</div></div>
+        <div class="stat"><div class="k">支付利息</div><div class="v" id="interest" style="color:var(--accent)">—</div></div>
+        <div class="stat"><div class="k">还款月数</div><div class="v" id="months">—</div></div>
+        <div class="stat"><div class="k">本金</div><div class="v" id="principal">—</div></div>
+      </div>
+      <div class="note" id="advice" style="margin-top:12px"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const fmt = n => n.toLocaleString('zh-CN',{maximumFractionDigits:2});
+  function render(){
+    const P=parseFloat($('amount').value);
+    const annual=parseFloat($('rate').value);
+    const y=parseFloat($('years').value);
+    if(!P||!annual||!y||P<=0||y<=0){ $('monthly').textContent='—'; $('st').textContent='请输入有效参数'; return; }
+    const r=annual/100/12, n=y*12;
+    const pow=Math.pow(1+r,n);
+    const m = r===0 ? P/n : P*r*pow/(pow-1);
+    const total=m*n, interest=total-P;
+    $('monthly').textContent='¥ '+fmt(m)+' / 月';
+    $('total').textContent='¥ '+fmt(total);
+    $('interest').textContent='¥ '+fmt(interest);
+    $('months').textContent=n+' 期';
+    $('principal').textContent='¥ '+fmt(P);
+    $('advice').textContent='总利息占还款总额的 '+((interest/total)*100).toFixed(1)+'%。实际放款以银行核算为准。';
+    $('st').textContent='✓ 每月还款 ¥'+fmt(m)+' · 总利息 ¥'+fmt(interest);
+  }
+  ['amount','rate','years'].forEach(id=>$(id).addEventListener('input',render));
+  render();
+})();
+</script>
+</body>
+</html>

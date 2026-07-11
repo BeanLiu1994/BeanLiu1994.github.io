@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL 格式化 · SQL Formatter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --kw:#c586c0; --fn:#7ec6ff; --str:#9ece6a; --num:#e5c07b; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+  main{flex:1;display:flex;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .pane.left{border-right:1px solid var(--border)}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;
+    padding:16px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6}
+  #output{flex:1;overflow:auto;padding:16px;font-family:"SF Mono",Consolas,Monaco,monospace;
+    font-size:13px;line-height:1.6;white-space:pre;margin:0}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .tok-kw{color:var(--kw);font-weight:600;text-transform:uppercase} .tok-fn{color:var(--fn)} .tok-str{color:var(--str)} .tok-num{color:var(--num)}
+  @media(max-width:720px){main{flex-direction:column}.pane.left{border-right:0;border-bottom:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🗄️ SQL 格式化</h1>
+    <div class="sub">纯本地 · 关键词高亮 · SQL Formatter</div>
+  </div>
+  <div class="toolbar">
+    <label class="indent">缩进
+      <select id="indent"><option value="2">2 空格</option><option value="4">4 空格</option><option value="\t">Tab</option></select>
+    </label>
+    <button id="bFormat" class="primary">格式化</button>
+    <button id="bUppercase">关键字大写</button>
+    <button id="bCopy">复制</button>
+    <button id="bSample">示例</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head"><span>输入 Input</span><span class="hint" id="inMeta">0 字符</span></div>
+    <textarea id="input" placeholder="在此粘贴 SQL…" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Output</span><span class="hint" id="outMeta"></span></div>
+    <pre id="output"></pre>
+  </section>
+</main>
+<div class="status" id="status">等待输入…</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const KW=new Set(('select from where and or not in on join left right inner outer full cross natural '+
+    'group by order having limit offset union all as insert into values update set delete create table '+
+    'alter drop truncate distinct case when then else end between like exists is null primary key foreign '+
+    'references default constraint index view begin commit rollback transaction with recursive asc desc '+
+    'using distinct on over partition window cast coalesce nullif count sum avg min max').split(/\s+/));
+  const FN=new Set('count sum avg min max coalesce cast nullif lower upper trim substring length round abs now date'.split(' '));
+
+  function tokenize(sql){
+    const toks=[]; const re=/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`[^`]*`|\b\d+(?:\.\d+)?\b|[a-zA-Z_][\w]*|--[^\n]*|\/\*[\s\S]*?\*\/|[(),;]|[<>=!+\-*/%]+|\s+|.)/g;
+    let m; while((m=re.exec(sql))!==null){ toks.push(m[0]); }
+    return toks;
+  }
+  function format(sql,indentStr){
+    const toks=tokenize(sql);
+    let out=''; let indent=0; let prev='';
+    const newlineBefore=new Set(['from','where','group by','order by','having','limit','offset','union','union all','on','left join','right join','inner join','outer join','full join','cross join','join','set','values','and','or']);
+    const newlineAfter=new Set([';']);
+    let i=0;
+    while(i<toks.length){
+      let t=toks[i];
+      if(/^\s+$/.test(t)){ i++; continue; }
+      const low=t.toLowerCase();
+      if(low==='('){ out+='('; indent++; i++; continue; }
+      if(low===')'){ indent=Math.max(0,indent-1); out+=')'; i++; continue; }
+      if(low===';'){ out+=';'; out+='\n'; i++; continue; }
+      if(KW.has(low)){
+        if(prev && newlineBefore.has(low) ){ out='\n'+out.trimEnd()+'\n'+indentStr.repeat(indent); }
+        out+=(out.length && !out.endsWith('\n') && !out.endsWith(' ') && prev!=='.'?' ':'')+low.toUpperCase();
+        if(low==='select'){ out+='\n'+indentStr.repeat(indent+1); }
+        prev=low; i++; continue;
+      }
+      if(FN.has(low) && toks[i+1]==='('){ out+=(out.length&&!out.endsWith(' ')&&!out.endsWith('\n')?' ':'')+low.toUpperCase(); prev=low; i++; continue; }
+      // 普通 token
+      if(low==="'"||low==='"'||low==='`'){ out+=(prev&&!isPunc(prev)?' ':'')+t; prev=low; i++; continue; }
+      out+=(prev&&!isPunc(prev)&&prev!=='.'&&!isPunc(t)?' ':'')+t;
+      prev=low; i++;
+    }
+    return out.replace(/\n{2,}/g,'\n').trim();
+  }
+  function isPunc(s){ return /^[(),;]$/.test(s); }
+  function highlight(sql){
+    return sql.replace(/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`[^`]*`)|(\b\d+(?:\.\d+)?\b)|([a-zA-Z_][\w]*)/g,function(m,str,num,w){
+      if(str) return '<span class="tok-str">'+str.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>';
+      if(num) return '<span class="tok-num">'+num+'</span>';
+      if(w){ const l=w.toLowerCase(); if(KW.has(l)) return '<span class="tok-kw">'+w+'</span>'; if(FN.has(l)) return '<span class="tok-fn">'+w+'</span>'; }
+      return w;
+    }).replace(/--[^\n]*/g,'<span class="tok-str">$&</span>');
+  }
+  function getIndent(){ const v=$('indent').value; return v==='\\t'?'\t':(v==='\t'?'\t':' '.repeat(parseInt(v)||2)); }
+  function run(){
+    const text=$('input').value;
+    if(!text.trim()){ $('output').textContent=''; $('outMeta').textContent=''; setStatus('等待输入…'); return; }
+    const fmt=format(text,getIndent());
+    $('output').innerHTML=highlight(fmt);
+    $('outMeta').textContent=fmt.length+' 字符 · '+fmt.split('\n').length+' 行';
+    setStatus('✓ 已格式化','ok');
+  }
+  function setStatus(msg,type){ const s=$('status'); s.textContent=msg; s.className='status'+(type?' '+type:''); }
+  $('bFormat').onclick=run;
+  $('bUppercase').onclick=()=>{ $('input').value=$('input').value.split(/(\b[a-zA-Z_]+\b)/g).map(p=>KW.has(p.toLowerCase())?p.toUpperCase():p).join(''); run(); };
+  $('bCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText($('output').textContent); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败','err'); } };
+  $('bSample').onclick=()=>{ $('input').value="select u.id,u.name,count(o.id) as orders from users u left join orders o on o.user_id=u.id where u.active=1 and u.created_at>'2024-01-01' group by u.id,u.name having count(o.id)>3 order by orders desc limit 10;"; run(); };
+  $('bClear').onclick=()=>{ $('input').value=''; run(); $('input').focus(); };
+  $('input').addEventListener('input',()=>{ $('inMeta').textContent=$('input').value.length+' 字符'; });
+  $('indent').addEventListener('change',run);
+  $('bSample').onclick();
+})();
+</script>
+</body>
+</html>

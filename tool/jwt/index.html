@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT 解析器 · JWT Debugger</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --key:#7ec6ff; --str:#9ece6a; --num:#e5c07b; --warn:#e5c07b; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  pre{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin:0;
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:520px}
+  .tok-key{color:var(--key)} .tok-str{color:var(--str)} .tok-num{color:var(--num)} .tok-bool{color:#c586c0} .tok-null{color:var(--err)}
+  input[type=text]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;flex:1;outline:none}
+  input[type=text]:focus{border-color:var(--accent)}
+  .row{display:flex;gap:8px;align-items:center}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--muted)}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)} .status.warn{color:var(--warn)}
+  .note{color:var(--muted);font-size:12px;line-height:1.5}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border)}
+  .badge.ok{color:var(--ok);border-color:var(--ok)} .badge.err{color:var(--err);border-color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 JWT 解析器</h1>
+    <div class="sub">解码 / 校验 JWT · 纯本地 · 数据不上传</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSample">示例</button>
+    <button id="bClear" class="primary">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">Token</div>
+      <textarea id="token" placeholder="粘贴 eyJ... 的 JWT（三部分以 . 分隔）"></textarea>
+      <div class="pane-head" style="margin-top:14px">签名密钥（仅 HS256/384/512 校验，可选）</div>
+      <div class="row">
+        <input type="text" id="secret" placeholder="HMAC 密钥…">
+        <button id="bVerify">校验签名</button>
+      </div>
+      <div class="note" style="margin-top:8px">校验在浏览器本地使用 Web Crypto 完成，密钥不会离开本机。</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">Header</div>
+      <pre id="header"></pre>
+    </div>
+    <div class="card">
+      <div class="pane-head">Payload</div>
+      <pre id="payload"></pre>
+      <div id="expInfo" class="note" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <div class="pane-head">签名 Signature</div>
+      <pre id="sig" style="max-height:120px"></pre>
+      <div id="verify" style="margin-top:8px"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function b64urlToB64(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return s; }
+  function decodePart(s){ try{ return JSON.parse(decodeURIComponent(atob(b64urlToB64(s)).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''))); }
+    catch(e){ return {_raw:atob(b64urlToB64(s))}; } }
+  function highlight(obj){
+    const json=JSON.stringify(obj,null,2);
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,function(m){
+      let c='tok-num'; if(/^"/.test(m)) c=/:$/.test(m)?'tok-key':'tok-str';
+      else if(/true|false/.test(m)) c='tok-bool'; else if(/null/.test(m)) c='tok-null';
+      return '<span class="'+c+'">'+m.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</span>';
+    });
+  }
+  async function verifyHS(token,secret,parts){
+    if(!secret){ return {skip:true}; }
+    const alg=(parts[0].alg||'').toUpperCase();
+    if(!alg.startsWith('HS')) return {unsupported:true,alg:alg};
+    const enc=new TextEncoder();
+    const key=await crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:{HS256:'SHA-256',HS384:'SHA-384',HS512:'SHA-512'}[alg]},false,['sign']);
+    const sig=await crypto.subtle.sign('HMAC',key,enc.encode(parts[3]));
+    const a=new Uint8Array(sig);
+    const b=b64urlToBytes(parts[2]);
+    if(a.length!==b.length) return {ok:false};
+    let r=0; for(let i=0;i<a.length;i++) r|=a[i]^b[i];
+    return {ok:r===0};
+  }
+  function b64urlToBytes(s){ const b=b64urlToB64(s); const bin=atob(b); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i); return arr; }
+  function fmtDate(t){ if(typeof t!=='number') return null; if(String(t).length===10) t*=1000; const d=new Date(t); return isNaN(d)?null:d.toLocaleString(); }
+  function render(){
+    const t=$('token').value.trim();
+    $('header').textContent=''; $('payload').textContent=''; $('sig').textContent=''; $('expInfo').textContent='';
+    $('verify').innerHTML='';
+    if(!t){ setStatus('就绪'); return; }
+    const parts=t.split('.');
+    if(parts.length!==3){ setStatus('✗ 不是有效的 JWT（应为 3 段，以 . 分隔）','err'); return; }
+    let h,p;
+    try{ h=decodePart(parts[0]); p=decodePart(parts[1]); }
+    catch(e){ setStatus('✗ Header / Payload 解码失败：'+e.message,'err'); return; }
+    $('header').innerHTML=highlight(h);
+    $('payload').innerHTML=highlight(p);
+    $('sig').textContent=parts[2];
+    let info=[];
+    if(p.exp!=null){ const d=fmtDate(p.exp); info.push('exp 过期：'+(d||p.exp)+(d&&Date.now()>new Date(d).getTime()?' ⚠️ 已过期':'')); }
+    if(p.iat!=null){ const d=fmtDate(p.iat); info.push('iat 签发：'+(d||p.iat)); }
+    if(p.nbf!=null){ const d=fmtDate(p.nbf); info.push('nbf 生效：'+(d||p.nbf)); }
+    $('expInfo').innerHTML=info.map(s=>'• '+s).join('<br>');
+    setStatus('✓ 已解码（Header / Payload）','ok');
+  }
+  async function doVerify(){
+    const t=$('token').value.trim(); const secret=$('secret').value;
+    if(!t){ setStatus('请先输入 Token','err'); return; }
+    const parts=t.split('.'); if(parts.length!==3){ setStatus('✗ 无效的 JWT','err'); return; }
+    const header=decodePart(parts[0]);
+    const r=await verifyHS(t,secret,[header,null,parts[1],parts[0]+'.'+parts[1]]);
+    const v=$('verify');
+    if(r.skip){ v.innerHTML='<span class="badge">输入密钥以校验 HMAC 签名</span>'; return; }
+    if(r.unsupported){ v.innerHTML='<span class="badge err">alg='+(r.alg||'?')+' 暂不支持本地校验（仅 HS256/384/512）</span>'; return; }
+    v.innerHTML=r.ok?'<span class="badge ok">✓ 签名有效</span>':'<span class="badge err">✗ 签名不匹配</span>';
+  }
+  function setStatus(msg,type){ const s=$('st'); s.textContent=msg; s.className='status'+(type?' '+type:''); }
+  $('token').addEventListener('input',render);
+  $('bVerify').onclick=doVerify;
+  $('bClear').onclick=()=>{ $('token').value=''; $('secret').value=''; render(); };
+  $('bSample').onclick=()=>{
+    const h={alg:'HS256',typ:'JWT'};
+    const p={sub:'1234567890',name:'Peng Liu',admin:true,iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600};
+    const enc=o=>btoa(JSON.stringify(o)).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+    $('token').value=enc(h)+'.'+enc(p)+'.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+    render();
+  };
+  render();
+})();
+</script>
+</body>
+</html>

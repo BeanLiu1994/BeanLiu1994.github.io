@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>键盘按键检测 · Keycode Viewer</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px}
+  .stage{flex:1;min-height:200px;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;transition:.1s;user-select:none}
+  .stage.hit{border-color:var(--accent);background:#1c2330;box-shadow:0 0 0 3px rgba(79,156,255,.25) inset}
+  .big{font-size:54px;font-weight:700;color:var(--accent)}
+  .big-cap{font-size:18px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:18px;font-weight:600;color:var(--accent);margin-top:4px;font-family:"SF Mono",Consolas,monospace;word-break:break-all}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .hint{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⌨️ 键盘按键检测</h1>
+    <div class="sub">实时显示 key / code / keyCode · 纯本地</div>
+  </div>
+</header>
+<main>
+  <div class="stage" id="stage" tabindex="0">
+    <div class="big" id="bigKey">—</div>
+    <div class="big-cap" id="bigCap">在此处按下任意键</div>
+  </div>
+  <div class="grid" id="grid">
+    <div class="stat"><div class="k">event.key</div><div class="v" id="vKey">—</div></div>
+    <div class="stat"><div class="k">event.code</div><div class="v" id="vCode">—</div></div>
+    <div class="stat"><div class="k">event.keyCode</div><div class="v" id="vKc">—</div></div>
+    <div class="stat"><div class="k">Shift</div><div class="v" id="vShift">—</div></div>
+    <div class="stat"><div class="k">Ctrl / Control</div><div class="v" id="vCtrl">—</div></div>
+    <div class="stat"><div class="k">Alt</div><div class="v" id="vAlt">—</div></div>
+    <div class="stat"><div class="k">Meta (Win/⌘)</div><div class="v" id="vMeta">—</div></div>
+    <div class="stat"><div class="k">isComposing</div><div class="v" id="vComp">—</div></div>
+  </div>
+  <div class="hint">提示：点击上方区域以获得焦点，然后敲击键盘。再次按下同一键会更新数值。</div>
+</main>
+<div class="status" id="st">就绪 · 等待按键</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const stage=$('stage');
+  function set(name,val){ const el=$('v'+name); if(el) el.textContent=(val===undefined?'—':val); }
+  function onKey(e){
+    e.preventDefault();
+    stage.classList.add('hit');
+    $('bigKey').textContent = e.key.length===1 ? e.key : (e.key===' '?'Space':e.key);
+    $('bigCap').textContent = e.code;
+    set('Key',JSON.stringify(e.key));
+    set('Code',e.code);
+    set('Kc',e.keyCode);
+    set('Shift',e.shiftKey);
+    set('Ctrl',e.ctrlKey);
+    set('Alt',e.altKey);
+    set('Meta',e.metaKey);
+    set('Comp',e.isComposing);
+    $('st').textContent='✓ 捕获按键：key='+JSON.stringify(e.key)+' · code='+e.code;
+  }
+  stage.addEventListener('keydown',onKey);
+  stage.addEventListener('keyup',()=>stage.classList.remove('hit'));
+  window.addEventListener('load',()=>stage.focus());
+})();
+</script>
+</body>
+</html>

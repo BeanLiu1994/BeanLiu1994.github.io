@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>假数据生成器 · Fake Data Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:72px}
+  input[type=number]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;width:90px}
+  textarea{flex:1;min-height:360px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .opt{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;user-select:none}
+  .chip.on{border-color:var(--accent);color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧪 假数据生成器</h1>
+    <div class="sub">测试用占位数据 · 纯本地 · 随机生成</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy">复制</button>
+    <button id="bGenerate" class="primary">生成</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">字段（点击切换）</div>
+      <div class="opt" id="fields">
+        <span class="chip on" data-f="name">姓名</span>
+        <span class="chip on" data-f="email">邮箱</span>
+        <span class="chip on" data-f="phone">手机</span>
+        <span class="chip on" data-f="id">身份证</span>
+        <span class="chip on" data-f="addr">地址</span>
+        <span class="chip" data-f="company">公司</span>
+        <span class="chip" data-f="uuid">UUID</span>
+        <span class="chip" data-f="date">日期</span>
+        <span class="chip" data-f="color">颜色</span>
+        <span class="chip" data-f="bool">布尔</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="pane-head">数量 / 格式</div>
+      <div class="row"><label>条数</label><input type="number" id="count" value="8" min="1" max="500"><label>分隔</label>
+        <div class="seg" id="fmt" style="display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px">
+          <button data-f="json" class="on" style="background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer">JSON</button>
+          <button data-f="csv" style="background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer">CSV</button>
+          <button data-f="line" style="background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer">多行</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">输出 Output</div>
+      <textarea id="out" readonly placeholder="点击「生成」…"></textarea>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const rnd=n=>Math.floor(Math.random()*n);
+  const pick=a=>a[rnd(a.length)];
+  const surnames='王李张刘陈杨黄赵周吴徐孙马朱胡郭何高林郑谢罗梁宋唐许韩冯邓曹彭'.split('');
+  const givens='伟芳娜秀英敏静丽强磊洋艳勇军杰娟涛明超霞平刚桂英子轩浩然欣怡梓涵宇辰梦琪'.split('');
+  const streets='人民路中山路解放路建设路文化路和平路花园街幸福里朝阳路滨江路'.split('');
+  const cities='北京上海广州深圳南京杭州成都武汉重庆西安苏州天津'.split('');
+  const corps=['科技','网络','信息','智能','数据','电子','软件','云','互联','众创'];
+  const suffixes=['有限公司','股份有限公司','集团','工作室'];
+  function name(){ return pick(surnames)+pick(givens)+(Math.random()<0.4?pick(givens):''); }
+  function email(){ return (pick(givens)+pick(surnames)+rnd(9999)).toLowerCase()+'@'+pick(['example.com','mail.com','test.org','demo.cn','sample.io']); }
+  function phone(){ return '1'+pick(['3','5','7','8','9'])+String(rnd(1e9)).padStart(9,'0'); }
+  function idCard(){ const y=1940+rnd(66), m=1+rnd(12), d=1+rnd(28); const seq=String(rnd(1000)).padStart(3,'0'); return y+String(m).padStart(2,'0')+String(d).padStart(2,'0')+seq+pick(['01','02','03','04','05']); }
+  function addr(){ return pick(cities)+pick(streets)+' '+ (1+rnd(200)) +' 号'; }
+  function company(){ return pick(cities)+pick(corps)+pick(suffixes); }
+  function uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=rnd(16);const v=c==='x'?r:(r&0x3|0x8);return v.toString(16);}); }
+  function date(){ const t=new Date(Date.now()-rnd(1e10)); return t.toISOString().slice(0,10); }
+  function color(){ return '#'+Array.from({length:6},()=>'0123456789abcdef'[rnd(16)]).join(''); }
+  function bool(){ return Math.random()<0.5; }
+  const gen={name,email,phone,id:idCard,addr,company,uuid,date,color,bool};
+  const label={name:'姓名',email:'邮箱',phone:'手机',id:'身份证',addr:'地址',company:'公司',uuid:'UUID',date:'日期',color:'颜色',bool:'布尔'};
+  let fmt='json'; const active=new Set(['name','email','phone','id','addr']);
+  function makeRow(){ const o={}; active.forEach(f=>o[label[f]]=gen[f]()); return o; }
+  function render(){
+    const n=Math.max(1,Math.min(500,parseInt($('count').value)||1));
+    const rows=Array.from({length:n},makeRow);
+    let out;
+    if(fmt==='json') out=JSON.stringify(rows,null,2);
+    else if(fmt==='csv'){ const ks=[...active].map(f=>label[f]); out=[ks.join(',')].concat(rows.map(r=>ks.map(k=>r[k]).join(','))).join('\n'); }
+    else out=rows.map(r=>active.map(f=>r[label[f]]).join(' | ')).join('\n');
+    $('out').value=out;
+    $('st').textContent='✓ 已生成 '+n+' 条 · '+active.size+' 个字段';
+  }
+  $('#fields').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c)return; const f=c.dataset.f;
+    if(active.has(f)){ active.delete(f); c.classList.remove('on'); } else { active.add(f); c.classList.add('on'); }
+    if(active.size===0){ active.add(f); c.classList.add('on'); } render(); });
+  $('#fmt').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; fmt=b.dataset.f;
+    [...$('#fmt').children].forEach(x=>x.classList.toggle('on',x===b)); render(); });
+  $('bGenerate').onclick=render;
+  $('bCopy').onclick=async()=>{ try{ await navigator.clipboard.writeText($('out').value); $('st').textContent='✓ 已复制'; }catch(e){ $('st').textContent='复制失败'; } };
+  $('count').addEventListener('input',render);
+  render();
+})();
+</script>
+</body>
+</html>

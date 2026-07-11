@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>年龄 / 日期差计算器 · Date Diff</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:72px}
+  input[type=date]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=date]:focus{border-color:var(--accent)}
+  .big{font-size:30px;font-weight:800;color:var(--accent);text-align:center;margin:6px 0}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:22px;font-weight:700;margin-top:4px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  @media(max-width:560px){.grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📅 年龄 / 日期差计算器</h1>
+    <div class="sub">精确到天 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">起始日期 Start</div>
+      <div class="row"><label>日期</label><input type="date" id="start" value="1994-01-01"></div>
+    </div>
+    <div class="card">
+      <div class="pane-head">结束日期 End（默认今天）</div>
+      <div class="row"><label>日期</label><input type="date" id="end"> <button id="today">设为今天</button></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">结果</div>
+      <div class="big" id="headline">—</div>
+      <div class="grid">
+        <div class="stat"><div class="k">年</div><div class="v" id="y">—</div></div>
+        <div class="stat"><div class="k">月</div><div class="v" id="mo">—</div></div>
+        <div class="stat"><div class="k">天</div><div class="v" id="d">—</div></div>
+        <div class="stat"><div class="k">总天数</div><div class="v" id="td">—</div></div>
+      </div>
+      <div id="extra" style="margin-top:12px;color:var(--muted);font-size:13px;line-height:1.6"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function ymd(s){ const [y,m,d]=s.split('-').map(Number); return {y,m,d}; }
+  function diff(a,b){
+    let y=a.y, m=a.m, d=a.d; let dy=0,dm=0,dd=0;
+    if(d>b.d){ b.d+=daysInMonth(b.y,b.m); b.m--; }
+    if(m>b.m){ b.m+=12; dy--; }
+    dd=b.d-d; dm=b.m-m; dy=b.y-y+dy;
+    return {y:dy,m:dm,d:dd};
+  }
+  function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+  function render(){
+    if(!$('start').value){ $('st').textContent='请选择起始日期'; return; }
+    let end=$('end').value; if(!end){ const t=new Date(); end=t.toISOString().slice(0,10); }
+    const a=ymd($('start').value), b=ymd(end);
+    const t0=new Date(a.y,a.m-1,a.d), t1=new Date(b.y,b.m-1,b.d);
+    const totalDays=Math.round((t1-t0)/86400000);
+    if(totalDays<0){ $('headline').textContent='结束日期早于起始日期'; $('extra').textContent=''; ['y','mo','d','td'].forEach(k=>$(k).textContent='—'); $('st').textContent='✗ 日期顺序有误'; return; }
+    const r=diff(a,b);
+    $('headline').textContent=r.y+' 岁 '+r.m+' 个月 '+r.d+' 天';
+    $('y').textContent=r.y; $('mo').textContent=r.m; $('d').textContent=r.d; $('td').textContent=totalDays;
+    const weeks=Math.floor(totalDays/7);
+    $('extra').textContent='即 '+totalDays+' 天（约 '+weeks+' 周）。';
+    $('st').textContent='✓ 相差 '+totalDays+' 天';
+  }
+  $('start').addEventListener('input',render);
+  $('end').addEventListener('input',render);
+  $('today').onclick=()=>{ const t=new Date(); $('end').value=t.toISOString().slice(0,10); render(); };
+  render();
+})();
+</script>
+</body>
+</html>

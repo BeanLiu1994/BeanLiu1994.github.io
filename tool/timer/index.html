@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>倒计时 / 秒表 · Timer & Stopwatch</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .tabs{display:flex;gap:6px;margin-left:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .tabs button{background:transparent;border:0;color:var(--muted);padding:7px 16px;border-radius:6px;cursor:pointer;font-size:13px}
+  .tabs button.on{background:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;align-items:center;justify-content:center}
+  .display{font-size:72px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:2px;color:var(--accent);text-align:center}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 18px;font-size:14px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.danger{border-color:var(--err);color:var(--err)}
+  .setter{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .setter div{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .setter label{color:var(--muted);font-size:12px}
+  input[type=number]{width:74px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:16px;text-align:center;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .logs{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;color:var(--muted);max-height:160px;overflow:auto}
+  .hint{color:var(--muted);font-size:13px;text-align:center}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⏱️ 倒计时 / 秒表</h1>
+    <div class="sub">纯本地计时 · 不依赖网络</div>
+  </div>
+  <div class="tabs">
+    <button id="tabCount" class="on">倒计时</button>
+    <button id="tabStop">秒表</button>
+  </div>
+</header>
+<main>
+  <section id="countPane" style="display:flex;flex-direction:column;gap:16px;align-items:center;width:100%">
+    <div class="setter" id="setC">
+      <div><label>时</label><input type="number" id="ch" value="0" min="0"></div>
+      <div><label>分</label><input type="number" id="cm" value="5" min="0"></div>
+      <div><label>秒</label><input type="number" id="cs" value="0" min="0"></div>
+    </div>
+    <div class="display" id="countDisp">05:00</div>
+    <div class="controls">
+      <button id="cStart" class="primary">开始</button>
+      <button id="cPause">暂停</button>
+      <button id="cReset" class="danger">重置</button>
+    </div>
+    <div class="hint">结束后会提示「时间到！」（浏览器通知需授权）</div>
+  </section>
+
+  <section id="stopPane" class="hidden" style="display:flex;flex-direction:column;gap:16px;align-items:center;width:100%">
+    <div class="display" id="stopDisp">00:00.00</div>
+    <div class="controls">
+      <button id="sStart" class="primary">开始</button>
+      <button id="sLap">计次</button>
+      <button id="sReset" class="danger">重置</button>
+    </div>
+    <div class="logs" id="laps"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let mode='count';
+  // ---- tabs ----
+  function switchTab(m){ mode=m;
+    $('tabCount').classList.toggle('on',m==='count'); $('tabStop').classList.toggle('on',m==='stop');
+    $('countPane').classList.toggle('hidden',m!=='count'); $('stopPane').classList.add('hidden'); $('stopPane').classList.toggle('hidden',m!=='stop');
+  }
+  $('tabCount').onclick=()=>switchTab('count');
+  $('tabStop').onclick=()=>switchTab('stop');
+
+  // ---- countdown ----
+  let cId=null, cEnd=0, cRemain=0, cRunning=false;
+  function fmtCount(ms){ ms=Math.max(0,ms); const s=Math.floor(ms/1000); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), sec=s%60;
+    return [h,m,sec].map(x=>String(x).padStart(2,'0')).join(':'); }
+  function cRefresh(){ $('countDisp').textContent=fmtCount(cEnd-Date.now()); }
+  function cSetFromInputs(){ cRemain=(parseInt($('ch').value)||0)*3600000+(parseInt($('cm').value)||0)*60000+(parseInt($('cs').value)||0)*1000;
+    $('countDisp').textContent=fmtCount(cRemain); }
+  function cStart(){ if(cRunning)return; if(cRemain<=0)cSetFromInputs(); if(cRemain<=0)return;
+    cEnd=Date.now()+cRemain; cRunning=true; $('setC').style.opacity=.4; $('setC').style.pointerEvents='none';
+    cId=setInterval(()=>{ cRefresh(); if(Date.now()>=cEnd){ clearInterval(cId); cRunning=false; cRemain=0; cRefresh(); notify(); $('st').textContent='⏰ 时间到！'; } },200);
+    $('st').textContent='▶ 倒计时进行中…'; }
+  function cPause(){ if(!cRunning)return; clearInterval(cId); cRemain=cEnd-Date.now(); cRunning=false; $('st').textContent='⏸ 已暂停'; }
+  function cReset(){ clearInterval(cId); cRunning=false; cRemain=0; $('setC').style.opacity=1; $('setC').style.pointerEvents='auto'; cSetFromInputs(); $('st').textContent='已重置'; }
+  function notify(){ try{ if('Notification' in window && Notification.permission==='granted'){ new Notification('⏰ 时间到！'); } }catch(e){} }
+  $('cStart').onclick=cStart; $('cPause').onclick=cPause; $('cReset').onclick=cReset;
+  ['ch','cm','cs'].forEach(id=>$(id).addEventListener('input',()=>{ if(!cRunning)cSetFromInputs(); }));
+  if('Notification' in window && Notification.permission==='default'){ Notification.requestPermission(); }
+
+  // ---- stopwatch ----
+  let sId=null, sStart=0, sBase=0, sRunning=false, lapN=0;
+  function fmtStop(ms){ const cs=Math.floor(ms/10)%100; const s=Math.floor(ms/1000); const m=Math.floor(s/60);
+    return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0')+'.'+String(cs).padStart(2,'0'); }
+  function sRefresh(){ $('stopDisp').textContent=fmtStop(Date.now()-sStart+sBase); }
+  function sStartFn(){ if(sRunning)return; sStart=Date.now(); sRunning=true; sId=setInterval(sRefresh,33); $('st').textContent='▶ 秒表计时中…'; }
+  function sLap(){ if(!sRunning)return; lapN++; const now=Date.now()-sStart+sBase;
+    const div=document.createElement('div'); div.textContent=(lapN<10?'#0':'#')+lapN+'  '+fmtStop(now); $('laps').prepend(div); }
+  function sReset(){ clearInterval(sId); sRunning=false; sBase=0; lapN=0; $('stopDisp').textContent='00:00.00'; $('laps').innerHTML=''; $('st').textContent='已重置'; }
+  $('sStart').onclick=()=>{ sRunning?sPause():sStartFn(); };
+  function sPause(){ if(!sRunning)return; clearInterval(sId); sBase+=Date.now()-sStart; sRunning=false; $('st').textContent='⏸ 已暂停'; $('sStart').textContent='继续'; }
+  $('sLap').onclick=sLap; $('sReset').onclick=()=>{ sReset(); $('sStart').textContent='开始'; };
+  cSetFromInputs();
+})();
+</script>
+</body>
+</html>
