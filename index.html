@@ -10,64 +10,102 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
+            padding: 24px;
             background-color: #f0f0f0;
         }
         .greeting {
             text-align: center;
             padding: 30px;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-            max-width: 500px;
+            border-radius: 18px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            max-width: 680px;
+            width: 100%;
         }
         .avatar {
-            width: 135px;
-            height: 135px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
-            margin: 0 auto 20px;
+            margin: 0 auto 18px;
             border: 4px solid #f0f0f0;
         }
         h1 {
             color: #333;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             font-size: 28px;
         }
         p {
             color: #666;
             font-size: 18px;
-            margin: 5px 0;
+            margin: 4px 0;
         }
-        .tools-list {
-            margin-top: 20px;
+        .section {
+            margin-top: 22px;
             padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
-        }
-        .tools-list a,
-        .games-list a,
-        .contact-info a {
-            color: #0366d6;
-            text-decoration: none;
-            margin: 0 10px;
-            font-size: 16px;
-        }
-        .tools-list a:hover,
-        .games-list a:hover,
-        .contact-info a:hover {
-            text-decoration: underline;
+            border-top: 1px solid #ececec;
         }
         .section-title {
             color: #999;
-            font-size: 13px;
-            letter-spacing: 1px;
+            font-size: 12px;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
+            text-align: left;
             margin: 0 0 12px;
         }
-        .contact-info {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+            gap: 10px;
+        }
+        .grid a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 13px;
+            background: #fff;
+            border: 1px solid #e6e8eb;
+            border-radius: 10px;
+            color: #24292e;
+            text-decoration: none;
+            font-size: 14px;
+            line-height: 1.25;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            transition: .15s ease;
+        }
+        .grid a:hover {
+            border-color: #0366d6;
+            color: #0366d6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(3,102,214,0.18);
+            text-decoration: none;
+        }
+        .contact {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .contact a {
+            color: #0366d6;
+            text-decoration: none;
+            font-size: 15px;
+            padding: 8px 16px;
+            border: 1px solid #e6e8eb;
+            border-radius: 999px;
+            background: #fff;
+            transition: .15s ease;
+        }
+        .contact a:hover {
+            border-color: #0366d6;
+            background: #0366d6;
+            color: #fff;
+            text-decoration: none;
+        }
+        @media (max-width: 480px) {
+            .greeting { padding: 22px 18px; }
+            .grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -77,31 +115,38 @@
         <h1>Hello! 👋</h1>
         <p>I'm Peng Liu</p>
         <p>Welcome to my GitHub Pages site</p>
-        
-        <div class="tools-list">
+
+        <div class="section">
             <p class="section-title">Tools</p>
-            <a href="tool/bluetag/">📟 Bluetag Sender</a>
-            <a href="tool/json/">🧩 JSON Formatter</a>
-            <a href="tool/base64/">🔤 Base64 编解码</a>
-            <a href="tool/url/">🔗 URL 编解码</a>
-            <a href="tool/timestamp/">⏱️ 时间戳转换</a>
-            <a href="tool/hash/">🔐 哈希计算器</a>
-            <a href="tool/password/">🔑 密码生成器</a>
-            <a href="tool/uuid/">🆔 UUID 生成器</a>
-            <a href="tool/regex/">🧪 正则测试器</a>
-            <a href="tool/diff/">🔍 文本对比</a>
-            <a href="tool/color/">🎨 颜色转换</a>
-            <a href="tool/unit/">📐 单位换算</a>
+            <div class="grid">
+                <a href="tool/bluetag/">📟 Bluetag Sender</a>
+                <a href="tool/json/">🧩 JSON Formatter</a>
+                <a href="tool/base64/">🔤 Base64 编解码</a>
+                <a href="tool/url/">🔗 URL 编解码</a>
+                <a href="tool/timestamp/">⏱️ 时间戳转换</a>
+                <a href="tool/hash/">🔐 哈希计算器</a>
+                <a href="tool/password/">🔑 密码生成器</a>
+                <a href="tool/uuid/">🆔 UUID 生成器</a>
+                <a href="tool/regex/">🧪 正则测试器</a>
+                <a href="tool/diff/">🔍 文本对比</a>
+                <a href="tool/color/">🎨 颜色转换</a>
+                <a href="tool/unit/">📐 单位换算</a>
+            </div>
         </div>
 
-        <div class="games-list">
+        <div class="section">
             <p class="section-title">Games</p>
-            <a href="games/lane-defender/">🎮 通道阻击 · Lane Defender</a>
-            <a href="games/2048/">🧩 2048 · Neon</a>
+            <div class="grid">
+                <a href="games/lane-defender/">🎮 通道阻击 · Lane Defender</a>
+                <a href="games/2048/">🧩 2048 · Neon</a>
+            </div>
         </div>
-        <div class="contact-info">
-            <a href="mailto:njueebeanliu@hotmail.com">📧 Email</a>
-            <a href="https://github.com/BeanLiu1994">🐙 GitHub</a>
+
+        <div class="section">
+            <div class="contact">
+                <a href="mailto:njueebeanliu@hotmail.com">📧 Email</a>
+                <a href="https://github.com/BeanLiu1994">🐙 GitHub</a>
+            </div>
         </div>
     </div>
 </body>
