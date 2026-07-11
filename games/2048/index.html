@@ -39,6 +39,7 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 
   .container {
@@ -106,6 +107,10 @@
     border-radius: 14px;
     padding: 10px;
     box-shadow: 0 0 40px #00000030, 0 0 80px var(--accent-glow);
+  }
+  /* touch-action is NOT inherited — must cover children (board/cell/tile)
+     so swiping on a tile doesn't fall back to browser pan/scroll. */
+  .board-wrap, .board-wrap * {
     touch-action: none;
     -webkit-touch-callout: none;
   }
