@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Checkers · Neon</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ff6a6a; --accent-glow:#ff6a6a66; --danger:#ff4d6a; --gold:#ffd700;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 20% 20%,#2a1010 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,#102030 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:460px;padding:16px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+  .title-block h1{font-size:1.9rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),#ffc2c2,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:6px 14px;text-align:center;min-width:58px;}
+  .score-card .label{font-size:0.58rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:10px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#0c0c1c;}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;z-index:10;pointer-events:none;opacity:0;transition:opacity .35s;}
+  .overlay.active{opacity:1;pointer-events:auto;}
+  .overlay-bg{position:absolute;inset:0;background:#0a0a1aee;backdrop-filter:blur(4px);border-radius:14px;}
+  .overlay-content{position:relative;text-align:center;z-index:1;}
+  .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;}
+  .overlay-content p{color:var(--muted);margin-bottom:16px;font-size:0.9rem;}
+  .overlay.win h2{color:#4dff91;} .overlay.lose h2{color:var(--danger);}
+  .controls{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .btn{flex:1;min-width:90px;padding:12px 16px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.5px;text-align:center;}
+  .btn:hover{background:#ffffff10;} .btn:active{transform:scale(0.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#0a0a1a;}
+  .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
+  .stats-bar span{background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid #ffffff08;}
+  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Checkers</h1><div class="sub">D R A U G H T S</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Wins</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-h">You Win!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI thinking...</span></div>
+  <div class="stats-bar"><span id="red-stat">Red: 12</span><span id="blk-stat">Black: 12</span><span id="turn-stat">Turn: Red</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=8,S=46,W=N*S,H=N*S,RED=1,BLACK=-1;
+  const canvas=document.getElementById('game');
+  function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
+  const ctx=fit();
+  const inb=(r,c)=>r>=0&&r<N&&c>=0&&c<N;
+  const clone=(b)=>b.map(r=>r.slice());
+  function dirs(p){ if(p===2||p===-2) return [[-1,-1],[-1,1],[1,-1],[1,1]]; if(p===RED) return [[-1,-1],[-1,1]]; return [[1,-1],[1,1]]; }
+  function isEnemy(v,side){ if(v===0) return false; return side===RED? v<0 : v>0; }
+
+  function capSeqs(board,r,c,side){ const piece=board[r][c]; const out=[]; const ds=dirs(piece);
+    for(const [dr,dc] of ds){ const mr=r+dr,mc=c+dc,lr=r+2*dr,lc=c+2*dc; if(inb(lr,lc)&&inb(mr,mc)&&isEnemy(board[mr][mc],side)&&board[lr][lc]===0){
+      const nb=clone(board); const pc=nb[r][c]; nb[r][c]=0; nb[mr][mc]=0; nb[lr][lc]=pc;
+      const promoted=(pc===RED&&lr===0)||(pc===BLACK&&lr===N-1);
+      const sub=promoted?[]:capSeqs(nb,lr,lc,side);
+      if(sub.length) for(const s of sub) out.push({lands:[[lr,lc]].concat(s.lands),caps:[[mr,mc]].concat(s.caps)});
+      else out.push({lands:[[lr,lc]],caps:[[mr,mc]]});
+    } }
+    return out;
+  }
+  function genMoves(board,side){ const caps=[]; const simple=[];
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const p=board[r][c]; if(p===0||isEnemy(p,side)) continue;
+      const cs=capSeqs(board,r,c,side); for(const s of cs) caps.push({from:[r,c],lands:s.lands,caps:s.caps});
+      if(caps.length===0){} }
+    if(caps.length) return caps;
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const p=board[r][c]; if(p===0||isEnemy(p,side)) continue; for(const [dr,dc] of dirs(p)){ const nr=r+dr,nc=c+dc; if(inb(nr,nc)&&board[nr][nc]===0) simple.push({from:[r,c],lands:[[nr,nc]],caps:[]}); } }
+    return simple;
+  }
+  function applyMove(board,mv){ const nb=clone(board); const [fr,fc]=mv.from; const pc=nb[fr][fc]; nb[fr][fc]=0; for(const [cr,cc] of mv.caps) nb[cr][cc]=0; const [lr,lc]=mv.lands[mv.lands.length-1]; nb[lr][lc]=pc; if(pc===RED&&lr===0) nb[lr][lc]=2; if(pc===BLACK&&lr===N-1) nb[lr][lc]=-2; return nb; }
+  function evalB(b){ let s=0; for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const p=b[r][c]; if(p===0) continue; const v=(p===2||p===-2)?180:100; s+= (p>0? v : -v); if(p===RED) s+= (N-1-r)*2; if(p===BLACK) s+= r*2; } return s; }
+  function countP(b,side){ let n=0; for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(side===RED&&b[r][c]>0)n++; if(side===BLACK&&b[r][c]<0)n++; } return n; }
+  function search(b,side,depth,alpha,beta){ const moves=genMoves(b,side); if(!moves.length) return side===RED? -100000-depth : 100000+depth; if(depth===0) return evalB(b);
+    if(side===RED){ let best=-1e9; for(const mv of moves){ const v=search(applyMove(b,mv),BLACK,depth-1,alpha,beta); if(v>best)best=v; if(best>alpha)alpha=best; if(alpha>=beta)break; } return best; }
+    else { let best=1e9; for(const mv of moves){ const v=search(applyMove(b,mv),RED,depth-1,alpha,beta); if(v<best)best=v; if(best<beta)beta=best; if(alpha>=beta)break; } return best; }
+  }
+  function chooseMove(b,side,depth){ const moves=genMoves(b,side); if(!moves.length) return null; let best=null,bv=side===RED?-1e9:1e9; for(const mv of moves){ const v=search(applyMove(b,mv),side===RED?BLACK:RED,depth-1,-1e9,1e9); if(side===RED? v>bv : v<bv){ bv=v; best=mv; } } return best; }
+
+  class Checkers{
+    constructor(){ this.best=parseInt(localStorage.getItem('bestChk')||'0'); this.autoPlay=false; this.autoTimer=null; this.bindInput(); this.restart(); }
+    initBoard(){ const b=Array.from({length:N},()=>new Array(N).fill(0)); for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if((r+c)%2===1){ if(r<3) b[r][c]=BLACK; else if(r>4) b[r][c]=RED; } } return b; }
+    restart(){ this.stopAuto(); this.board=this.initBoard(); this.turn=RED; this.over=false; this.winner=0; this.selected=null; this.legal=[]; this.lastMove=null;
+      document.getElementById('overlay-win').classList.remove('active'); this.draw(); }
+    checkWin(mover){ const opp=-mover; if(countP(this.board,opp)===0||genMoves(this.board,opp).length===0){ this.over=true; this.winner=mover; this.win(mover); return true; } return false; }
+    win(mover){ const you = mover===RED; if(you){ this.best++; localStorage.setItem('bestChk',this.best); } document.getElementById('win-h').textContent= you?'You Win!':'Black Wins'; document.getElementById('win-msg').textContent= you?'Checkmate — nice game.':'The AI took the board.'; document.getElementById('overlay-win').classList.add('active'); this.stopAuto(); }
+    applyTurn(mv){ if(!mv){ this.over=true; this.winner=-this.turn; this.win(this.winner); return; } this.board=applyMove(this.board,mv); this.lastMove=mv; const mover=this.turn; this.turn=-this.turn; if(!this.checkWin(mover) && !this.autoPlay && this.turn===BLACK){ const self=this; setTimeout(()=>{ if(self.over||self.autoPlay) return; const m=chooseMove(self.board,BLACK,5); self.applyTurn(m); self.draw(); },550); } this.draw(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } const m=chooseMove(this.board,this.turn,5); this.applyTurn(m); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),650); }
+    bindInput(){ const wrap=document.getElementById('board-wrap'); let id=null;
+      wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.turn!==RED) return; id=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const r2=canvas.getBoundingClientRect(); const x=(e.clientX-r2.left)/r2.width*W, y=(e.clientY-r2.top)/r2.height*H; const c=Math.floor(x/S), r=Math.floor(y/S); if(!inb(r,c)) return;
+        if(this.selected){ const mv=this.legal.find(m=>m.lands[m.lands.length-1][0]===r&&m.lands[m.lands.length-1][1]===c); if(mv){ this.selected=null; this.legal=[]; this.applyTurn(mv); return; } }
+        if(this.board[r][c]>0){ this.selected=[r,c]; this.legal=genMoves(this.board,RED).filter(m=>m.from[0]===r&&m.from[1]===c); } else { this.selected=null; this.legal=[]; } this.draw(); });
+      wrap.addEventListener('pointerup',(e)=>{ if(e.pointerId===id) id=null; }); wrap.addEventListener('pointercancel',(e)=>{ if(e.pointerId===id) id=null; });
+      window.addEventListener('resize',()=>this.draw()); }
+    draw(){ ctx.clearRect(0,0,W,H);
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ ctx.fillStyle=((r+c)%2===1)?'#1b2350':'#10142e'; ctx.fillRect(c*S,r*S,S,S); }
+      if(this.lastMove){ const f=this.lastMove.from, l=this.lastMove.lands[this.lastMove.lands.length-1]; ctx.fillStyle='#ffd70022'; ctx.fillRect(f[1]*S,f[0]*S,S,S); ctx.fillRect(l[1]*S,l[0]*S,S,S); }
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const p=this.board[r][c]; if(p===0) continue; const x=c*S+S/2, y=r*S+S/2; const red=p>0; ctx.save(); ctx.shadowColor=red?'#ff6a6a':'#6a9bff'; ctx.shadowBlur=10; ctx.fillStyle=red?'#ff6a6a':'#6a9bff'; ctx.beginPath(); ctx.arc(x,y,S*0.36,0,7); ctx.fill(); ctx.restore(); ctx.fillStyle='#1a0a0a'; ctx.beginPath(); ctx.arc(x,y,S*0.22,0,7); ctx.fill(); if(p===2||p===-2){ ctx.strokeStyle='#ffd700'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,S*0.36,0,7); ctx.stroke(); }
+        if(this.selected&&this.selected[0]===r&&this.selected[1]===c){ ctx.strokeStyle='#4dff91'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,S*0.4,0,7); ctx.stroke(); } }
+      if(this.selected) for(const m of this.legal){ const l=m.lands[m.lands.length-1]; ctx.fillStyle='#4dff9155'; ctx.beginPath(); ctx.arc(l[1]*S+S/2,l[0]*S+S/2,S*0.14,0,7); ctx.fill(); }
+      document.getElementById('score').textContent=this.best; document.getElementById('best').textContent=this.best; document.getElementById('red-stat').textContent='Red: '+countP(this.board,RED); document.getElementById('blk-stat').textContent='Black: '+countP(this.board,BLACK); document.getElementById('turn-stat').textContent='Turn: '+(this.turn===RED?'Red':'Black');
+      if(this.autoPlay&&!this.over) document.getElementById('ai-status').textContent='AI: '+(this.turn===RED?'Red':'Black')+' moving · thinking';
+    }
+  }
+  window.game=new Checkers();
+})();
+</script>
+</body>
+</html>

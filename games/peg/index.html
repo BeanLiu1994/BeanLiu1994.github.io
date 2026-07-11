@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Peg Solitaire · Neon</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#b06bff; --accent-glow:#b06bff66; --danger:#ff4d6a; --gold:#ffd700;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 20% 20%,#1f1030 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,#102038 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:460px;padding:16px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+  .title-block h1{font-size:1.9rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),#e0c2ff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:6px 14px;text-align:center;min-width:58px;}
+  .score-card .label{font-size:0.58rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:10px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#0a0e1c;}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;z-index:10;pointer-events:none;opacity:0;transition:opacity .35s;}
+  .overlay.active{opacity:1;pointer-events:auto;}
+  .overlay-bg{position:absolute;inset:0;background:#0a0a1aee;backdrop-filter:blur(4px);border-radius:14px;}
+  .overlay-content{position:relative;text-align:center;z-index:1;}
+  .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;}
+  .overlay-content p{color:var(--muted);margin-bottom:16px;font-size:0.9rem;}
+  .overlay.win h2{color:#4dff91;} .overlay.lose h2{color:var(--danger);}
+  .controls{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .btn{flex:1;min-width:90px;padding:12px 16px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.5px;text-align:center;}
+  .btn:hover{background:#ffffff10;} .btn:active{transform:scale(0.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#0a0a1a;}
+  .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
+  .stats-bar span{background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid #ffffff08;}
+  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Peg Solitaire</h1><div class="sub">S O L I T A I R E &nbsp; P E G</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Pegs</div><div class="value" id="score">32</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">32</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Brilliant!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Stuck</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Board</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI planning...</span></div>
+  <div class="stats-bar"><span id="peg-stat">Pegs: 32</span><span id="move-stat">Moves: 0</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=7,CELL=48,W=N*CELL,H=N*CELL;
+  const canvas=document.getElementById('game');
+  function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
+  const ctx=fit();
+  const valid=new Set(); for(let r=0;r<N;r++) for(let c=0;c<N;c++) if((r>=2&&r<=4)||(c>=2&&c<=4)) valid.add(r+','+c);
+  const center=[3,3];
+
+  function movesOf(board){ const res=[]; for(const k of board){ const [r,c]=k.split(',').map(Number); for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){ const mr=r+dr,mc=c+dc,tr=r+2*dr,tc=c+2*dc; const mk=mr+','+mc,tk=tr+','+tc; if(board.has(mk)&&valid.has(tk)&&!board.has(tk)) res.push({from:k,over:mk,to:tk}); } } return res; }
+  function applyMove(board,m){ const nb=new Set(board); nb.delete(m.from); nb.delete(m.over); nb.add(m.to); return nb; }
+  function dist(r,c){ return Math.abs(r-center[0])+Math.abs(c-center[1]); }
+  function greedyBest(board){ const ms=movesOf(board); if(!ms.length) return null; let best=null,bs=-1; for(const m of ms){ const nb=applyMove(board,m); const after=movesOf(nb).length; const [tr,tc]=m.to.split(',').map(Number); const sc=after*10 - dist(tr,tc); if(sc>bs){ bs=sc; best=m; } } return best; }
+
+  class Peg{
+    constructor(){ this.best=parseInt(localStorage.getItem('bestPeg')||'32'); this.autoPlay=false; this.autoTimer=null; this.bindInput(); this.restart(); }
+    restart(){ this.stopAuto(); this.board=new Set(valid); this.board.delete('3,3'); this.moves=0; this.over=false; this.selected=null; this.lastMove=null;
+      document.getElementById('overlay-win').classList.remove('active'); document.getElementById('overlay-lose').classList.remove('active'); this.draw(); }
+    doMove(m){ if(!m) return; this.board.delete(m.from); this.board.delete(m.over); this.board.add(m.to); this.moves++; this.lastMove=m; this.selected=null;
+      if(this.board.size===1){ this.over=true; this.win(); } else if(movesOf(this.board).length===0){ this.over=true; this.lose(); } this.draw(); }
+    win(){ const left=this.board.size; const score=33-left; if(score>this.best){ this.best=score; localStorage.setItem('bestPeg',this.best); } document.getElementById('win-msg').textContent='Only 1 peg left · score '+(33-1); document.getElementById('overlay-win').classList.add('active'); this.stopAuto(); }
+    lose(){ document.getElementById('lose-msg').textContent='No moves left · '+this.board.size+' pegs remain'; document.getElementById('overlay-lose').classList.add('active'); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){ if(!this.autoPlay||this.over){ if(this.over){ this.stopAuto(); if(this.board.size>1 && this.autoPlay===false){} } return; }
+      const m=greedyBest(this.board); if(!m){ if(this.board.size===1){ this.win(); } else { this.lose(); } this.stopAuto(); return; }
+      this.doMove(m); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),480); }
+    bindInput(){ const wrap=document.getElementById('board-wrap'); let id=null;
+      wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; id=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const r2=canvas.getBoundingClientRect(); const x=(e.clientX-r2.left)/r2.width*W, y=(e.clientY-r2.top)/r2.height*H; const c=Math.floor(x/CELL), r=Math.floor(y/CELL); const k=r+','+c; if(!valid.has(k)) return;
+        if(this.selected){ const m=movesOf(this.board).find(mm=>mm.from===this.selected&&mm.to===k); if(m){ this.doMove(m); return; } }
+        if(this.board.has(k)){ this.selected=k; } else { this.selected=null; } this.draw(); });
+      wrap.addEventListener('pointerup',(e)=>{ if(e.pointerId===id) id=null; }); wrap.addEventListener('pointercancel',(e)=>{ if(e.pointerId===id) id=null; });
+      window.addEventListener('resize',()=>this.draw()); }
+    draw(){ ctx.clearRect(0,0,W,H);
+      for(const k of valid){ const [r,c]=k.split(',').map(Number); const x=c*CELL,y=r*CELL; ctx.fillStyle='#0c1124'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.fill(); ctx.strokeStyle='#ffffff0a'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.stroke();
+        if(this.board.has(k)){ const cx=x+CELL/2,cy=y+CELL/2; ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=10; ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.arc(cx,cy,CELL*0.3,0,7); ctx.fill(); ctx.restore();
+          if(this.selected===k){ ctx.strokeStyle='#4dff91'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,CELL*0.34,0,7); ctx.stroke(); } }
+        if(this.lastMove && (k===this.lastMove.from||k===this.lastMove.over)){ ctx.fillStyle='#ffd70022'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.fill(); }
+      }
+      if(this.selected) for(const m of movesOf(this.board)) if(m.from===this.selected){ const [tr,tc]=m.to.split(',').map(Number); ctx.fillStyle='#4dff9155'; ctx.beginPath(); ctx.arc(tc*CELL+CELL/2,tr*CELL+CELL/2,CELL*0.12,0,7); ctx.fill(); }
+      document.getElementById('score').textContent=this.board.size; document.getElementById('best').textContent=this.best; document.getElementById('peg-stat').textContent='Pegs: '+this.board.size; document.getElementById('move-stat').textContent='Moves: '+this.moves;
+      if(this.autoPlay&&!this.over) document.getElementById('ai-status').textContent='AI: '+this.board.size+' pegs · planning best jump';
+    }
+    rrect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new Peg();
+})();
+</script>
+</body>
+</html>

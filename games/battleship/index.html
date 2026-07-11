@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Sea Battle · Neon</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#5dffd0; --accent-glow:#5dffd066; --danger:#ff4d6a; --gold:#ffd700;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 20% 20%,#103028 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,#102a38 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:440px;padding:16px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+  .title-block h1{font-size:1.9rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),#b3ffe9,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:6px 14px;text-align:center;min-width:58px;}
+  .score-card .label{font-size:0.58rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:10px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board);}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;z-index:10;pointer-events:none;opacity:0;transition:opacity .35s;}
+  .overlay.active{opacity:1;pointer-events:auto;}
+  .overlay-bg{position:absolute;inset:0;background:#0a0a1aee;backdrop-filter:blur(4px);border-radius:14px;}
+  .overlay-content{position:relative;text-align:center;z-index:1;}
+  .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;}
+  .overlay-content p{color:var(--muted);margin-bottom:16px;font-size:0.9rem;}
+  .overlay.win h2{color:#4dff91;} .overlay.lose h2{color:var(--danger);}
+  .controls{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .btn{flex:1;min-width:90px;padding:12px 16px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.5px;text-align:center;}
+  .btn:hover{background:#ffffff10;} .btn:active{transform:scale(0.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#0a0a1a;}
+  .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
+  .stats-bar span{background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid #ffffff08;}
+  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Sea Battle</h1><div class="sub">F L E E T &nbsp; C O M M A N D</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Hits</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Victory!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Fleet Lost</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Battle</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI targeting...</span></div>
+  <div class="stats-bar"><span id="eh-stat">Enemy left: 17</span><span id="ph-stat">Your fleet: 17</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=10, CELL=17, BX=15, EY=44, OY=246, W=400, H=OY+N*CELL+22;
+  const SHIPS=[5,4,3,3,2];
+  const canvas=document.getElementById('game');
+  function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
+  const ctx=fit();
+
+  function placeFleet(){ const b=Array.from({length:N},()=>new Array(N).fill(0));
+    for(const sz of SHIPS){ let placed=false,guard=0; while(!placed&&guard++<500){ const hor=Math.random()<0.5; const r=Math.floor(Math.random()*N), c=Math.floor(Math.random()*N); const cells=[]; let ok=true; for(let i=0;i<sz;i++){ const rr=hor?r:r+i, cc=hor?c+i:c; if(rr<0||rr>=N||cc<0||cc>=N||b[rr][cc]){ok=false;break;} cells.push([rr,cc]); } if(!ok) continue; for(const [rr,cc] of cells) b[rr][cc]=1; placed=true; } }
+    return b; }
+  function fleetLeft(b,shots){ let total=0,hit=0; for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(b[r][c]){ total++; if(shots.has(r+','+c)) hit++; } return total-hit; }
+
+  class AI{
+    constructor(board){ this.board=board; this.shots=new Set(); this.targets=[]; this.hits=[]; this.parity=0; }
+    fire(){ if(this.targets.length){ const t=this.targets.pop(); if(!this.shots.has(t.r+','+t.c)) return t; }
+      let fallback=null; for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(this.shots.has(r+','+c)) continue; if(((r+c)&1)===this.parity) return {r,c}; if(!fallback) fallback={r,c}; }
+      return fallback; }
+    update(r,c,hit){ this.shots.add(r+','+c);
+      if(hit){ this.hits.push({r,c});
+        if(this.hits.length>=2){ const h0=this.hits[0],h1=this.hits[this.hits.length-1]; const line=[];
+          if(h0.r===h1.r){ const row=h0.r,mn=Math.min(...this.hits.map(x=>x.c)),mx=Math.max(...this.hits.map(x=>x.c)); line.push([row,mn-1],[row,mx+1]); }
+          else if(h0.c===h1.c){ const col=h0.c,mn=Math.min(...this.hits.map(x=>x.r)),mx=Math.max(...this.hits.map(x=>x.r)); line.push([mn-1,col],[mx+1,col]); }
+          this.targets=[]; for(const [rr,cc] of line) if(rr>=0&&rr<N&&cc>=0&&cc<N&&!this.shots.has(rr+','+cc)) this.targets.push({r:rr,c:cc});
+        } else { const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; this.targets=[]; for(const [dr,dc] of dirs){ const nr=r+dr,nc=c+dc; if(nr>=0&&nr<N&&nc>=0&&nc<N&&!this.shots.has(nr+','+nc)) this.targets.push({r:nr,c:nc}); } }
+      }
+    }
+  }
+
+  class SeaBattle{
+    constructor(){ this.best=parseInt(localStorage.getItem('bestSB')||'0'); this.autoPlay=false; this.autoTimer=null; this.bindInput(); this.restart(); }
+    restart(){
+      this.stopAuto();
+      this.enemy=placeFleet(); this.player=placeFleet();
+      this.pAI=new AI(this.enemy); this.eAI=new AI(this.player);
+      this.over=false; this.won=false; this.hits=0; this.shotsCount=0; this.lastP=null; this.lastE=null;
+      document.getElementById('overlay-win').classList.remove('active');
+      document.getElementById('overlay-lose').classList.remove('active');
+      this.draw();
+    }
+    playerFire(r,c){ if(this.over||this.pAI.shots.has(r+','+c)) return; const hit=this.enemy[r][c]===1; this.pAI.update(r,c,hit); this.shotsCount++; if(hit){ this.hits++; this.lastP={r,c,hit}; } const left=fleetLeft(this.enemy,this.pAI.shots); if(left===0){ this.won=true; this.over=true; this.win(); } this.draw(); }
+    enemyFire(){ if(this.over) return; const t=this.eAI.fire(); if(!t) return; const hit=this.player[t.r][t.c]===1; this.eAI.update(t.r,t.c,hit); this.lastE={r:t.r,c:t.c,hit}; const left=fleetLeft(this.player,this.eAI.shots); if(left===0){ this.over=true; this.lose(); } this.draw(); }
+    win(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} if(this.shotsCount<this.best||this.best===0){ this.best=this.shotsCount; localStorage.setItem('bestSB',this.best);} document.getElementById('win-msg').textContent='Sank enemy fleet in '+this.shotsCount+' shots'; document.getElementById('overlay-win').classList.add('active'); this.autoCont(); }
+    lose(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} document.getElementById('lose-msg').textContent='Your fleet was destroyed'; document.getElementById('overlay-lose').classList.add('active'); this.autoCont(); }
+    autoCont(){ if(!this.autoActive) return; const self=this; this.contTimer=setTimeout(()=>{ if(!self.autoActive) return; self.restart(); self.startAuto(); },1500); }
+    toggleAuto(){ if(this.autoPlay){ this.autoActive=false; this.stopAuto(); } else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoActive=true; this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} if(this.contTimer){clearTimeout(this.contTimer);this.contTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){
+      if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; }
+      const t=this.pAI.fire(); if(t) this.playerFire(t.r,t.c);
+      if(!this.over) this.enemyFire();
+      document.getElementById('ai-status').textContent='AI: '+this.shotsCount+' shots · enemy '+fleetLeft(this.enemy,this.pAI.shots)+' left';
+      if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),480);
+    }
+    toScreen(e){ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}; }
+    bindInput(){
+      const wrap=document.getElementById('board-wrap'); let activeId=null;
+      wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; activeId=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const p=this.toScreen(e); this.handleTap(p.x,p.y); });
+      wrap.addEventListener('pointerup',(e)=>{ if(e.pointerId===activeId) activeId=null; });
+      wrap.addEventListener('pointercancel',(e)=>{ if(e.pointerId===activeId) activeId=null; });
+      window.addEventListener('resize',()=>this.draw());
+    }
+    handleTap(x,y){ if(y<EY||y>OY+N*CELL) return; const c=Math.floor((x-BX)/CELL), r=Math.floor((y-EY)/CELL); if(r<0||r>=N||c<0||c>=N) return; this.playerFire(r,c); }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='#9fe9d8'; ctx.font='600 12px Segoe UI'; ctx.textBaseline='middle'; ctx.textAlign='left';
+      ctx.fillText('ENEMY WATERS  (tap to fire)',BX,24);
+      ctx.fillText('YOUR FLEET',BX,OY-16);
+      this.drawBoard(BX,EY,this.enemy,this.pAI,true);
+      this.drawBoard(BX,OY,this.player,this.eAI,false);
+      document.getElementById('score').textContent=this.hits;
+      document.getElementById('best').textContent=this.best;
+      document.getElementById('eh-stat').textContent='Enemy left: '+fleetLeft(this.enemy,this.pAI.shots);
+      document.getElementById('ph-stat').textContent='Your fleet: '+fleetLeft(this.player,this.eAI.shots);
+    }
+    drawBoard(x0,y0,board,ai,isTarget){
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const x=x0+c*CELL,y=y0+r*CELL;
+        const shot=ai.shots.has(r+','+c);
+        ctx.fillStyle='#0e1430'; this.rrect(x+1,y+1,CELL-2,CELL-2,3); ctx.fill();
+        ctx.strokeStyle='#ffffff14'; this.rrect(x+1,y+1,CELL-2,CELL-2,3); ctx.stroke();
+        if(shot){ const hit=board[r][c]===1; ctx.save(); ctx.shadowColor=hit?'#ff4d6a':'#5dffd0'; ctx.shadowBlur=8; ctx.fillStyle=hit?'#ff4d6a':'#5dffd0'; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,CELL*0.28,0,7); ctx.fill(); ctx.restore(); }
+        else if(!isTarget && board[r][c]===1){ ctx.fillStyle='#3a5a55'; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,CELL*0.3,0,7); ctx.fill(); }
+      }
+    }
+    rrect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new SeaBattle();
+})();
+</script>
+</body>
+</html>

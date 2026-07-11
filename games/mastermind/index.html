@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Mastermind · Neon</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ff5d8f; --accent-glow:#ff5d8f66; --danger:#ff4d6a; --gold:#ffd700;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 20% 20%,#2a1030 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,#102038 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:440px;padding:16px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+  .title-block h1{font-size:1.9rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),#ffb3cd,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:6px 14px;text-align:center;min-width:58px;}
+  .score-card .label{font-size:0.58rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:10px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board);}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;z-index:10;pointer-events:none;opacity:0;transition:opacity .35s;}
+  .overlay.active{opacity:1;pointer-events:auto;}
+  .overlay-bg{position:absolute;inset:0;background:#0a0a1aee;backdrop-filter:blur(4px);border-radius:14px;}
+  .overlay-content{position:relative;text-align:center;z-index:1;}
+  .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;}
+  .overlay-content p{color:var(--muted);margin-bottom:16px;font-size:0.9rem;}
+  .overlay.win h2{color:#4dff91;} .overlay.lose h2{color:var(--danger);}
+  .controls{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .btn{flex:1;min-width:90px;padding:12px 16px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.5px;text-align:center;}
+  .btn:hover{background:#ffffff10;} .btn:active{transform:scale(0.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#0a0a1a;}
+  .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
+  .stats-bar span{background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid #ffffff08;}
+  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Mastermind</h1><div class="sub">C O D E &nbsp; B R E A K E R</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Guesses</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Cracked!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Out of tries</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Code</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+    <button class="btn" onclick="game.submitGuess()">Guess</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI thinking...</span></div>
+  <div class="stats-bar"><span id="cand-stat">Candidates: 0</span><span id="rows-stat">Rows: 0/10</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const SLOTS=4, COLORS=6, ROWS=10;
+  const PAL=['#ff5d8f','#4dff91','#4d9bff','#ffd166','#b06bff','#ff8a3d'];
+  const W=400, H=540;
+  const canvas=document.getElementById('game');
+  function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; canvas.style.height='auto'; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
+  const ctx=fit();
+
+  class Mastermind{
+    constructor(){
+      this.best=parseInt(localStorage.getItem('bestMaster')||'0');
+      this.autoPlay=false; this.autoTimer=null;
+      this.hit=[]; this.bindInput(); this.restart();
+    }
+    allCombos(){ const a=[]; const rec=(p)=>{ if(p.length===SLOTS){a.push(p.slice());return;} for(let i=0;i<COLORS;i++){p.push(i);rec(p);p.pop();} }; rec([]); return a; }
+    restart(){
+      this.stopAuto();
+      this.secret=Array.from({length:SLOTS},()=>Math.floor(Math.random()*COLORS));
+      this.candidates=this.allCombos();
+      this.guess=[0,0,0,0]; this.sel=0; this.history=[];
+      this.over=false; this.won=false; this.score=0;
+      document.getElementById('overlay-win').classList.remove('active');
+      document.getElementById('overlay-lose').classList.remove('active');
+      this.draw();
+    }
+    feedback(g,s){ let black=0,white=0; const sg=s.slice(),gg=g.slice();
+      for(let i=0;i<SLOTS;i++) if(gg[i]===sg[i]){black++;gg[i]=sg[i]=-1;}
+      for(let i=0;i<SLOTS;i++) if(gg[i]!==-1){ for(let j=0;j<SLOTS;j++) if(sg[j]!==-1&&gg[i]===sg[j]){white++;sg[j]=-1;gg[i]=-1;break;} }
+      return {black,white};
+    }
+    submitGuess(){
+      if(this.over) return;
+      const fb=this.feedback(this.guess,this.secret);
+      this.history.push({guess:this.guess.slice(),fb});
+      this.score=this.history.length;
+      if(fb.black===SLOTS){ this.won=true; this.over=true; this.win(); }
+      else {
+        this.candidates=this.candidates.filter(c=>{ const f=this.feedback(c,this.guess); return f.black===fb.black&&f.white===fb.white; });
+        if(this.history.length>=ROWS||this.candidates.length===0){ this.over=true; this.lose(); }
+      }
+      this.draw();
+    }
+    win(){ if(this.score<this.best||this.best===0){ this.best=this.score; localStorage.setItem('bestMaster',this.best); } document.getElementById('win-msg').textContent='Solved in '+this.score+' guesses'; document.getElementById('overlay-win').classList.add('active'); }
+    lose(){ document.getElementById('lose-msg').textContent='Secret was '+this.secret.map(c=>PAL[c]).join(' '); document.getElementById('overlay-lose').classList.add('active'); }
+    aiGuess(){ if(this.candidates.length===0) return; this.guess=this.candidates[Math.floor(Math.random()*this.candidates.length)].slice(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } this.aiGuess(); this.submitGuess(); if(!this.over){ document.getElementById('ai-status').textContent='AI: '+this.history.length+' guesses · '+this.candidates.length+' candidates'; this.autoTimer=setTimeout(()=>this.autoStep(),550); } }
+    toScreen(e){ const r=canvas.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H }; }
+    bindInput(){
+      document.addEventListener('keydown',(e)=>{ if(this.autoPlay||this.over) return; if(e.key>='1'&&e.key<='6'){ this.guess[this.sel]=parseInt(e.key)-1; this.draw(); } else if(e.key==='Enter'){ this.submitGuess(); } });
+      const wrap=document.getElementById('board-wrap');
+      let activeId=null;
+      wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; activeId=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const p=this.toScreen(e); this.handleTap(p.x,p.y); });
+      wrap.addEventListener('pointerup',(e)=>{ if(e.pointerId===activeId) activeId=null; });
+      wrap.addEventListener('pointercancel',(e)=>{ if(e.pointerId===activeId) activeId=null; });
+      window.addEventListener('resize',()=>this.draw());
+    }
+    handleTap(x,y){ for(const h of this.hit){ if(x>=h.x&&x<=h.x+h.w&&y>=h.y&&y<=h.y+h.h){ if(h.type==='slot'){ this.sel=h.i; } else if(h.type==='pal'){ this.guess[this.sel]=h.c; } this.draw(); return; } } }
+    draw(){
+      ctx.clearRect(0,0,W,H); this.hit=[];
+      const top=14, rowH=34, slotR=11, slotGap=26, boardX=58;
+      // secret preview bottom
+      ctx.fillStyle='#ffffffaa'; ctx.font='600 11px Segoe UI'; ctx.textBaseline='middle';
+      ctx.fillText('SECRET',14,H-30);
+      for(let i=0;i<SLOTS;i++){ const cx=58+i*slotGap+slotR; this.drawPeg(cx,H-30,PAL[this.secret[i]],slotR,true); }
+      // palette
+      ctx.fillStyle='#ffffffaa'; ctx.fillText('PALETTE',14,top+ (ROWS+1)*rowH - 6);
+      for(let c=0;c<COLORS;c++){ const cx=58+c*slotGap+slotR; this.drawPeg(cx,(ROWS+1)*rowH+top, PAL[c],slotR,false); this.hit.push({type:'pal',c,x:cx-slotR-3,y:(ROWS+1)*rowH+top-slotR-3,w:slotR*2+6,h:slotR*2+6}); }
+      // rows
+      for(let r=0;r<ROWS;r++){
+        const y=top+r*rowH+rowH/2;
+        if(r<this.history.length){ const h=this.history[r]; for(let i=0;i<SLOTS;i++) this.drawPeg(boardX+i*slotGap+slotR,y,PAL[h.guess[i]],slotR,true);
+          for(let i=0;i<SLOTS;i++){ const fx=boardX+SLOTS*slotGap+16+(i%2)*16, fy=y-8+(i>1?16:0); ctx.fillStyle=i<h.fb.black?'#0a0a1a':(i<(h.fb.black+h.fb.white)?'#ffffff':'#ffffff22'); ctx.beginPath(); ctx.arc(fx,fy,5,0,7); ctx.fill(); }
+        } else if(r===this.history.length){ for(let i=0;i<SLOTS;i++){ const cx=boardX+i*slotGap+slotR; this.drawPeg(cx,y,PAL[this.guess[i]],slotR, i===this.sel); this.hit.push({type:'slot',i,x:cx-slotR-3,y:y-slotR-3,w:slotR*2+6,h:slotR*2+6}); } }
+        else { ctx.fillStyle='#ffffff10'; for(let i=0;i<SLOTS;i++){ ctx.beginPath(); ctx.arc(boardX+i*slotGap+slotR,y,slotR,0,7); ctx.fill(); } }
+        // row number
+        ctx.fillStyle='#ffffff44'; ctx.font='600 10px Segoe UI'; ctx.fillText(String(r+1),18,y);
+      }
+      document.getElementById('score').textContent=this.score;
+      document.getElementById('best').textContent=this.best;
+      document.getElementById('cand-stat').textContent='Candidates: '+this.candidates.length;
+      document.getElementById('rows-stat').textContent='Rows: '+this.history.length+'/'+ROWS;
+    }
+    drawPeg(x,y,col,r,sel){ ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=sel?16:8; ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); ctx.restore(); if(sel){ ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,r+3,0,7); ctx.stroke(); } }
+  }
+  window.game=new Mastermind();
+})();
+</script>
+</body>
+</html>

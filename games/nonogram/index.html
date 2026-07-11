@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Nonogram · Neon</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#16163a; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dd0ff; --accent-glow:#4dd0ff66; --danger:#ff4d6a; --gold:#ffd700;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 20% 20%,#103040 0%,transparent 55%),radial-gradient(ellipse at 80% 80%,#2a1040 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:440px;padding:16px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+  .title-block h1{font-size:1.9rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),#b3ecff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:6px 14px;text-align:center;min-width:58px;}
+  .score-card .label{font-size:0.58rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.2rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:10px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board);}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;z-index:10;pointer-events:none;opacity:0;transition:opacity .35s;}
+  .overlay.active{opacity:1;pointer-events:auto;}
+  .overlay-bg{position:absolute;inset:0;background:#0a0a1aee;backdrop-filter:blur(4px);border-radius:14px;}
+  .overlay-content{position:relative;text-align:center;z-index:1;}
+  .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;}
+  .overlay-content p{color:var(--muted);margin-bottom:16px;font-size:0.9rem;}
+  .overlay.win h2{color:#4dff91;}
+  .controls{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .btn{flex:1;min-width:90px;padding:12px 16px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.5px;text-align:center;}
+  .btn:hover{background:#ffffff10;} .btn:active{transform:scale(0.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#0a0a1a;}
+  .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
+  .stats-bar span{background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid #ffffff08;}
+  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Nonogram</h1><div class="sub">P I C T U R E &nbsp; L O G I C</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Solved!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Next Puzzle</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Puzzle</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI deducing...</span></div>
+  <div class="stats-bar"><span id="fill-stat">Filled: 0/0</span><span id="pass-stat">Pass: 0</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=10, CELL=32, GX=74, GY=74, W=GX+N*CELL+12, H=GY+N*CELL+12;
+  const canvas=document.getElementById('game');
+  function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
+  const ctx=fit();
+
+  function lineClue(arr){ const c=[]; let run=0; for(const v of arr){ if(v===1) run++; else if(run){c.push(run);run=0;} } if(run) c.push(run); return c.length?c:[0]; }
+  function solveLine(clue, known){
+    const n=known.length; const placements=[];
+    (function rec(idx,start,filled){
+      if(idx===clue.length){ for(let k=0;k<n;k++) if(filled[k]===0&&known[k]===1) return; placements.push(filled.slice()); return; }
+      const len=clue[idx];
+      for(let p=start;p+len<=n;p++){
+        let ok=true; for(let k=p;k<p+len;k++){ if(known[k]===0){ok=false;break;} filled[k]=1; }
+        if(!ok){ for(let k=p;k<p+len;k++) filled[k]=0; continue; }
+        rec(idx+1,p+len+1,filled);
+        for(let k=p;k<p+len;k++) filled[k]=0;
+      }
+    })(0,0,new Array(n).fill(0));
+    if(!placements.length) return null;
+    const res=new Array(n).fill(-1);
+    for(let k=0;k<n;k++){ let a1=true,a0=true; for(const pl of placements){ if(pl[k]===0)a1=false; else a0=false; } res[k]=a1?1:(a0?0:-1); }
+    return res;
+  }
+  function deduce(grid,rc,cc){
+    let ch=false;
+    for(let r=0;r<N;r++){ const sol=solveLine(rc[r],grid[r]); if(sol) for(let c=0;c<N;c++) if(sol[c]!==-1&&grid[r][c]===-1){ grid[r][c]=sol[c]; ch=true; } }
+    for(let c=0;c<N;c++){ const known=grid.map(row=>row[c]); const sol=solveLine(cc[c],known); if(sol) for(let r=0;r<N;r++) if(sol[r]!==-1&&grid[r][c]===-1){ grid[r][c]=sol[r]; ch=true; } }
+    return ch;
+  }
+  function genPuzzle(){
+    for(let a=0;a<120;a++){
+      const sol=[]; for(let r=0;r<N;r++){ const row=[]; for(let c=0;c<N;c++) row.push(Math.random()<0.52?1:0); sol.push(row); }
+      const rc=sol.map(lineClue), cc=[]; for(let c=0;c<N;c++) cc.push(lineClue(sol.map(r=>r[c])));
+      const grid=sol.map(r=>r.map(()=>-1));
+      let ch=true; while(ch) ch=deduce(grid,rc,cc);
+      let full=true; for(let r=0;r<N&&full;r++) for(let c=0;c<N;c++) if(grid[r][c]===-1){full=false;break;}
+      if(full) return {sol,rc,cc};
+    }
+    const sol=[[1,1,1,1,1,0,0,0,0,0],[1,0,0,0,1,0,0,0,0,0],[1,0,0,0,1,0,0,0,0,0],[1,1,1,1,1,0,0,0,0,0],[0,0,0,0,0,1,1,1,1,1],[0,0,0,0,0,1,0,0,0,1],[0,0,0,0,0,1,0,0,0,1],[0,0,0,0,0,1,1,1,1,1],[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]];
+    const rc=sol.map(lineClue), cc=[]; for(let c=0;c<N;c++) cc.push(lineClue(sol.map(r=>r[c])));
+    return {sol,rc,cc};
+  }
+
+  class Nonogram{
+    constructor(){ this.best=parseInt(localStorage.getItem('bestNono')||'0'); this.autoPlay=false; this.autoTimer=null; this.bindInput(); this.restart(); }
+    restart(){
+      this.stopAuto();
+      const p=genPuzzle(); this.sol=p.sol; this.rc=p.rc; this.cc=p.cc;
+      this.grid=p.sol.map(r=>r.map(()=>-1));
+      this.over=false; this.score=0; this.passes=0;
+      document.getElementById('overlay-win').classList.remove('active');
+      this.draw();
+    }
+    filledCount(){ let n=0; for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(this.grid[r][c]!==-1) n++; return n; }
+    checkWin(){ for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(this.grid[r][c]!==this.sol[r][c]) return false; return true; }
+    win(){ if(this.score<this.best||this.best===0){ this.best=this.score; localStorage.setItem('bestNono',this.best);} document.getElementById('win-msg').textContent='Puzzle solved in '+this.passes+' passes'; document.getElementById('overlay-win').classList.add('active'); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){
+      if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; }
+      const ch=deduce(this.grid,this.rc,this.cc); this.passes++;
+      if(!ch || this.filledCount()===N*N){ if(this.checkWin()){ this.over=true; this.win(); } else if(!ch){ /* stalled */ } }
+      this.draw();
+      if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),420);
+    }
+    toScreen(e){ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}; }
+    bindInput(){
+      const wrap=document.getElementById('board-wrap'); let activeId=null;
+      wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; activeId=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const p=this.toScreen(e); this.handleTap(p.x,p.y); });
+      wrap.addEventListener('pointerup',(e)=>{ if(e.pointerId===activeId) activeId=null; });
+      wrap.addEventListener('pointercancel',(e)=>{ if(e.pointerId===activeId) activeId=null; });
+      window.addEventListener('resize',()=>this.draw());
+    }
+    handleTap(x,y){ const c=Math.floor((x-GX)/CELL), r=Math.floor((y-GY)/CELL); if(r<0||r>=N||c<0||c>=N) return; const cur=this.grid[r][c]; this.grid[r][c]= cur===-1?1:(cur===1?0:-1); if(this.checkWin()){ this.over=true; this.win(); } this.draw(); }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      // grid cells
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        const x=GX+c*CELL, y=GY+r*CELL, v=this.grid[r][c];
+        ctx.fillStyle = v===1 ? '#4dd0ff' : (v===0 ? '#0e1430' : '#1a1f3a');
+        if(v===1){ ctx.save(); ctx.shadowColor='#4dd0ff'; ctx.shadowBlur=10; }
+        this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); if(v===1) ctx.restore();
+        ctx.strokeStyle='#ffffff10'; ctx.lineWidth=1; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.stroke();
+      }
+      // clues
+      ctx.fillStyle='#cfe9ff'; ctx.font='600 11px Segoe UI'; ctx.textBaseline='middle'; ctx.textAlign='right';
+      for(let r=0;r<N;r++){ const cl=this.rc[r]; let s=''; for(let i=0;i<cl.length;i++) s+= (i?' ':'')+cl[i]; ctx.fillText(s, GX-8, GY+r*CELL+CELL/2); }
+      ctx.textAlign='center';
+      for(let c=0;c<N;c++){ const cl=this.cc[c]; for(let i=0;i<cl.length;i++) ctx.fillText(String(cl[i]), GX+c*CELL+CELL/2, GY-10 - (cl.length-1-i)*13); }
+      ctx.textAlign='left';
+      document.getElementById('score').textContent=this.filledCount();
+      document.getElementById('best').textContent=this.best;
+      document.getElementById('fill-stat').textContent='Filled: '+this.filledCount()+'/'+N*N;
+      document.getElementById('pass-stat').textContent='Pass: '+this.passes;
+    }
+    rrect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new Nonogram();
+})();
+</script>
+</body>
+</html>
