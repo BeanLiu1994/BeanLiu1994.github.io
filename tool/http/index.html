@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP 状态码速查 · HTTP Status Codes</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus{border-color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .filters{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:5px 13px;font-size:13px;cursor:pointer}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .grid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;align-content:start;padding-right:4px}
+  .item{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:.15s}
+  .item:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .code{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;min-width:48px;text-align:center;border-radius:8px;padding:4px 0}
+  .c1xx{color:#9aa4b2} .c2xx{color:#3ecf8e} .c3xx{color:#4f9cff} .c4xx{color:#ffb454} .c5xx{color:#ff5d6c}
+  .txt{display:flex;flex-direction:column;gap:2px}
+  .txt b{font-size:14px} .txt span{color:var(--muted);font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌐 HTTP 状态码速查</h1>
+    <div class="sub">纯本地数据 · 点击复制状态码</div>
+  </div>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="搜索状态码或含义…" style="width:240px">
+  </div>
+</header>
+<main>
+  <div class="filters" id="cats"></div>
+  <div class="grid" id="grid"></div>
+</main>
+<div class="status" id="st">点击任意条目复制状态码</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const DATA=[
+    [100,'Continue','继续','1xx'],[101,'Switching Protocols','切换协议','1xx'],[102,'Processing','处理中','1xx'],[103,'Early Hints','早期提示','1xx'],
+    [200,'OK','成功','2xx'],[201,'Created','已创建','2xx'],[202,'Accepted','已接受','2xx'],[203,'Non-Authoritative Information','非权威信息','2xx'],
+    [204,'No Content','无内容','2xx'],[205,'Reset Content','重置内容','2xx'],[206,'Partial Content','部分内容','2xx'],[207,'Multi-Status','多状态','2xx'],
+    [208,'Already Reported','已报告','2xx'],[226,'IM Used','IM 使用','2xx'],
+    [300,'Multiple Choices','多种选择','3xx'],[301,'Moved Permanently','永久移动','3xx'],[302,'Found','临时移动','3xx'],[303,'See Other','查看其它','3xx'],
+    [304,'Not Modified','未修改','3xx'],[305,'Use Proxy','使用代理','3xx'],[307,'Temporary Redirect','临时重定向','3xx'],[308,'Permanent Redirect','永久重定向','3xx'],
+    [400,'Bad Request','错误请求','4xx'],[401,'Unauthorized','未授权','4xx'],[402,'Payment Required','需要付款','4xx'],[403,'Forbidden','禁止访问','4xx'],
+    [404,'Not Found','未找到','4xx'],[405,'Method Not Allowed','方法不允许','4xx'],[406,'Not Acceptable','不可接受','4xx'],[407,'Proxy Authentication Required','需要代理认证','4xx'],
+    [408,'Request Timeout','请求超时','4xx'],[409,'Conflict','冲突','4xx'],[410,'Gone','已删除','4xx'],[411,'Length Required','需要长度','4xx'],
+    [412,'Precondition Failed','前提条件失败','4xx'],[413,'Payload Too Large','负载过大','4xx'],[414,'URI Too Long','URI 过长','4xx'],[415,'Unsupported Media Type','不支持的媒体类型','4xx'],
+    [416,'Range Not Satisfiable','范围不满足','4xx'],[417,'Expectation Failed','期望失败','4xx'],[418,"I'm a teapot",'我是一个茶壶','4xx'],[421,'Misdirected Request','错误定向请求','4xx'],
+    [422,'Unprocessable Entity','无法处理的实体','4xx'],[423,'Locked','已锁定','4xx'],[424,'Failed Dependency','依赖失败','4xx'],[425,'Too Early','过早','4xx'],
+    [426,'Upgrade Required','需要升级','4xx'],[428,'Precondition Required','需要前提条件','4xx'],[429,'Too Many Requests','请求过多','4xx'],[431,'Request Header Fields Too Large','请求头过大','4xx'],
+    [451,'Unavailable For Legal Reasons','因法律原因不可用','4xx'],
+    [500,'Internal Server Error','服务器内部错误','5xx'],[501,'Not Implemented','未实现','5xx'],[502,'Bad Gateway','网关错误','5xx'],[503,'Service Unavailable','服务不可用','5xx'],
+    [504,'Gateway Timeout','网关超时','5xx'],[505,'HTTP Version Not Supported','HTTP 版本不支持','5xx'],[506,'Variant Also Negotiates','变体协商','5xx'],[507,'Insufficient Storage','存储不足','5xx'],
+    [508,'Loop Detected','检测到循环','5xx'],[510,'Not Extended','未扩展','5xx'],[511,'Network Authentication Required','需要网络认证','5xx']
+  ];
+  const cats=[['全部',''],['1xx 信息','1xx'],['2xx 成功','2xx'],['3xx 重定向','3xx'],['4xx 客户端','4xx'],['5xx 服务端','5xx']];
+  let cur='';
+  const catBox=$('cats');
+  cats.forEach(([label,val])=>{ const b=document.createElement('button'); b.className='chip'+(val===''?' on':''); b.textContent=label;
+    b.onclick=()=>{ cur=val; [...catBox.children].forEach(x=>x.classList.toggle('on',x.textContent===label)); render(); }; catBox.appendChild(b); });
+
+  function copy(s){ try{ navigator.clipboard.writeText(s); setStatus('✓ 已复制状态码 '+s,'ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); } }
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+
+  function render(){
+    const q=$('search').value.trim().toLowerCase();
+    const grid=$('grid'); grid.innerHTML='';
+    DATA.filter(d=>{ if(cur&&d[3]!==cur) return false; if(!q) return true;
+      return (''+d[0]).includes(q)||d[1].toLowerCase().includes(q)||d[2].includes(q); })
+    .forEach(d=>{
+      const el=document.createElement('div'); el.className='item';
+      el.innerHTML='<div class="code c'+d[3]+'">'+d[0]+'</div><div class="txt"><b>'+d[1]+'</b><span>'+d[2]+'</span></div>';
+      el.onclick=()=>copy(''+d[0]);
+      grid.appendChild(el);
+    });
+  }
+  $('search').addEventListener('input',render);
+  render();
+})();
+</script>
+</body>
+</html>

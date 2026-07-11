@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emoji 表情面板 · Emoji Picker</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .chip{background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:999px;
+    padding:5px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .grid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));
+    gap:6px;align-content:start;padding-right:4px}
+  .grid button{width:100%;aspect-ratio:1;font-size:24px;display:flex;align-items:center;justify-content:center;
+    background:var(--panel);border:1px solid var(--border);border-radius:10px;cursor:pointer;padding:0;line-height:1}
+  .grid button:hover{border-color:var(--accent);background:rgba(79,156,255,.12);transform:translateY(-2px)}
+  .meta{color:var(--muted);font-size:13px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:560px){.grid{grid-template-columns:repeat(auto-fill,minmax(40px,1fr))}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>😀 Emoji 表情面板</h1>
+    <div class="sub">纯本地 · 搜索即可复制 · Emoji Picker</div>
+  </div>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="搜索表情（如 笑 / cat / 心）" style="width:260px">
+    <button id="btnCopyLast">复制上一个</button>
+  </div>
+</header>
+<main>
+  <div class="filters" id="cats"></div>
+  <div class="meta" id="meta"></div>
+  <div class="grid" id="grid"></div>
+</main>
+<div class="status" id="st">点击任意表情即可复制到剪贴板</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  // 自采数据集：表情 + 中英文关键词 + 分类
+  const DATA=[
+    {c:'😀',k:'笑 微笑 grin 开心',cat:'表情'},
+    {c:'😁',k:'笑脸 露齿 laugh 哈哈',cat:'表情'},
+    {c:'😂',k:'笑哭 喷泪 大笑 lol',cat:'表情'},
+    {c:'🤣',k:'笑翻 roll 滚地 搞笑',cat:'表情'},
+    {c:'😊',k:'微笑 害羞 smile 腼腆',cat:'表情'},
+    {c:'😇',k:'天使 光环 angel 无辜',cat:'表情'},
+    {c:'🙂',k:'微笑 微微 smile',cat:'表情'},
+    {c:'🙃',k:'倒脸 调皮 upside 反',cat:'表情'},
+    {c:'😉',k:'眨眼 wink 使眼色',cat:'表情'},
+    {c:'😍',k:'爱 心眼 heart eyes 喜欢',cat:'表情'},
+    {c:'😘',k:'飞吻 kiss 亲',cat:'表情'},
+    {c:'😜',k:'吐舌 tongue 调皮 鬼脸',cat:'表情'},
+    {c:'🤪',k:'疯 滑稽 crazy 逗',cat:'表情'},
+    {c:'🤔',k:'思考 think 想 疑惑',cat:'表情'},
+    {c:'🤨',k:'怀疑 raise brow 挑眉',cat:'表情'},
+    {c:'😐',k:'无语 neutral 面无表情',cat:'表情'},
+    {c:'😴',k:'睡 sleep 困 ZZZ',cat:'表情'},
+    {c:'😎',k:'墨镜 cool 酷 帅',cat:'表情'},
+    {c:'🥳',k:'派对 庆祝 party 生日',cat:'表情'},
+    {c:'😭',k:'哭 sob 大哭 伤心',cat:'表情'},
+    {c:'😡',k:'生气 angry 怒 愤怒',cat:'表情'},
+    {c:'😱',k:'惊恐 scream 尖叫 害怕',cat:'表情'},
+    {c:'🥺',k:'委屈 可怜 pleading 求',cat:'表情'},
+    {c:'😏',k:'得意 smirk 坏笑',cat:'表情'},
+    {c:'🤯',k:'爆炸 mind blown 震惊',cat:'表情'},
+    {c:'🤩',k:'星星眼 star struck 崇拜',cat:'表情'},
+    {c:'👍',k:'赞 good 好 顶 大拇指',cat:'手势'},
+    {c:'👎',k:'踩 bad 差 反对',cat:'手势'},
+    {c:'👏',k:'鼓掌 clap 加油',cat:'手势'},
+    {c:'🙌',k:'举手 庆祝 raised hands',cat:'手势'},
+    {c:'🙏',k:'拜托 祈祷 pray 谢谢 合十',cat:'手势'},
+    {c:'🤝',k:'握手 handshake 合作',cat:'手势'},
+    {c:'✌️',k:'胜利 victory 耶 二',cat:'手势'},
+    {c:'🤞',k:'好运 fingers crossed 祈愿',cat:'手势'},
+    {c:'👌',k:'ok 好的 圈',cat:'手势'},
+    {c:'👋',k:'挥手 wave 你好 再见',cat:'手势'},
+    {c:'🤙',k:'打电话 call me 蟹钳',cat:'手势'},
+    {c:'💪',k:'肌肉 muscle 加油 力量',cat:'手势'},
+    {c:'🤏',k:'一点 pinch 少',cat:'手势'},
+    {c:'✋',k:'手掌 hand 停',cat:'手势'},
+    {c:'🐶',k:'狗 dog 犬 宠物',cat:'动物'},
+    {c:'🐱',k:'猫 cat 喵 宠物',cat:'动物'},
+    {c:'🐭',k:'鼠 mouse 老鼠',cat:'动物'},
+    {c:'🐰',k:'兔 rabbit 兔子',cat:'动物'},
+    {c:'🐻',k:'熊 bear',cat:'动物'},
+    {c:'🐼',k:'熊猫 panda',cat:'动物'},
+    {c:'🐨',k:'考拉 koala',cat:'动物'},
+    {c:'🦁',k:'狮 lion 狮子',cat:'动物'},
+    {c:'🐯',k:'虎 tiger 老虎',cat:'动物'},
+    {c:'🦊',k:'狐 fox 狐狸',cat:'动物'},
+    {c:'🐸',k:'蛙 frog 青蛙',cat:'动物'},
+    {c:'🐵',k:'猴 monkey 猴子',cat:'动物'},
+    {c:'🐧',k:'企鹅 penguin',cat:'动物'},
+    {c:'🦄',k:'独角兽 unicorn',cat:'动物'},
+    {c:'🐢',k:'龟 turtle 乌龟',cat:'动物'},
+    {c:'🐍',k:'蛇 snake',cat:'动物'},
+    {c:'🐝',k:'蜂 bee 蜜蜂',cat:'动物'},
+    {c:'🦋',k:'蝶 butterfly 蝴蝶',cat:'动物'},
+    {c:'🐟',k:'鱼 fish',cat:'动物'},
+    {c:'🐳',k:'鲸 whale 蓝鲸',cat:'动物'},
+    {c:'🍎',k:'苹果 apple 水果',cat:'食物'},
+    {c:'🍌',k:'香蕉 banana',cat:'食物'},
+    {c:'🍓',k:'草莓 strawberry',cat:'食物'},
+    {c:'🍉',k:'西瓜 watermelon',cat:'食物'},
+    {c:'🍕',k:'披萨 pizza',cat:'食物'},
+    {c:'🍔',k:'汉堡 burger',cat:'食物'},
+    {c:'🍟',k:'薯条 fries',cat:'食物'},
+    {c:'🍜',k:'面 noodle 拉面',cat:'食物'},
+    {c:'🍣',k:'寿司 sushi',cat:'食物'},
+    {c:'🍩',k:'甜甜圈 donut',cat:'食物'},
+    {c:'🍪',k:'饼干 cookie',cat:'食物'},
+    {c:'☕',k:'咖啡 coffee 茶',cat:'食物'},
+    {c:'🍺',k:'啤酒 beer',cat:'食物'},
+    {c:'🍷',k:'红酒 wine 葡萄',cat:'食物'},
+    {c:'🌞',k:'太阳 sun 晴',cat:'自然'},
+    {c:'🌝',k:'满月 moon 月亮',cat:'自然'},
+    {c:'⭐',k:'星 star 星星',cat:'自然'},
+    {c:'🌈',k:'彩虹 rainbow',cat:'自然'},
+    {c:'🔥',k:'火 fire 火苗 热',cat:'自然'},
+    {c:'⚡',k:'闪电 lightning 电',cat:'自然'},
+    {c:'❄️',k:'雪 snow 雪花 冷',cat:'自然'},
+    {c:'🌊',k:'浪 wave 海 水',cat:'自然'},
+    {c:'🌸',k:'花 flower 樱花 春天',cat:'自然'},
+    {c:'🌳',k:'树 tree 森林',cat:'自然'},
+    {c:'💡',k:'灯泡 idea 点子 灵感',cat:'物品'},
+    {c:'📱',k:'手机 phone 电话',cat:'物品'},
+    {c:'💻',k:'电脑 laptop 笔记本',cat:'物品'},
+    {c:'⌨️',k:'键盘 keyboard',cat:'物品'},
+    {c:'🖱️',k:'鼠标 mouse',cat:'物品'},
+    {c:'📷',k:'相机 camera 拍照',cat:'物品'},
+    {c:'🔋',k:'电池 battery 电量',cat:'物品'},
+    {c:'🔧',k:'扳手 wrench 工具 修',cat:'物品'},
+    {c:'🔑',k:'钥匙 key 锁',cat:'物品'},
+    {c:'📌',k:'图钉 pin 定位',cat:'物品'},
+    {c:'📚',k:'书 books 书 学习',cat:'物品'},
+    {c:'✉️',k:'信 mail 邮件 信封',cat:'物品'},
+    {c:'🎁',k:'礼物 gift 礼盒',cat:'物品'},
+    {c:'💰',k:'钱 money 金币 财富',cat:'物品'},
+    {c:'🏆',k:'奖杯 trophy 冠军 赢',cat:'物品'},
+    {c:'⚽',k:'足球 soccer 球',cat:'活动'},
+    {c:'🏀',k:'篮球 basketball',cat:'活动'},
+    {c:'🎮',k:'游戏 game 手柄',cat:'活动'},
+    {c:'🎯',k:'靶 target 目标 准',cat:'活动'},
+    {c:'🎨',k:'调色板 art 画 艺术',cat:'活动'},
+    {c:'🎵',k:'音符 music 音乐',cat:'活动'},
+    {c:'🎉',k:'彩带 party 庆祝 恭喜',cat:'活动'},
+    {c:'✅',k:'勾 check 对 完成 正确',cat:'符号'},
+    {c:'❌',k:'叉 wrong 错 关闭',cat:'符号'},
+    {c:'⚠️',k:'警告 warning 注意 危险',cat:'符号'},
+    {c:'❓',k:'问号 question 疑问',cat:'符号'},
+    {c:'❗',k:'叹号 exclamation 重要',cat:'符号'},
+    {c:'💯',k:'百分百 满分 100 完美',cat:'符号'},
+    {c:'♻️',k:'回收 recycle 环保',cat:'符号'},
+    {c:'🔔',k:'铃 bell 通知 提醒',cat:'符号'},
+    {c:'❤️',k:'红心 love 爱 喜欢',cat:'符号'},
+    {c:'💔',k:'心碎 broken heart 失恋',cat:'符号'},
+    {c:'💡',k:'灯泡 灵感 想法',cat:'符号'}
+  ];
+
+  const cats=['全部'].concat([...new Set(DATA.map(d=>d.cat))]);
+  let curCat='全部', lastCopied='';
+
+  const catBox=$('cats');
+  cats.forEach(c=>{
+    const b=document.createElement('button');
+    b.className='chip'+(c==='全部'?' on':'');
+    b.textContent=c;
+    b.onclick=()=>{ curCat=c; [...catBox.children].forEach(x=>x.classList.toggle('on',x.textContent===c)); render(); };
+    catBox.appendChild(b);
+  });
+
+  function copy(s){
+    try{
+      if(navigator.clipboard&&window.isSecureContext){ navigator.clipboard.writeText(s); }
+      else{ const t=document.createElement('textarea'); t.value=s; document.body.appendChild(t); t.select();
+        document.execCommand('copy'); t.remove(); }
+      lastCopied=s;
+      setStatus('✓ 已复制：'+s,'ok');
+    }catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  }
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+
+  function render(){
+    const q=$('search').value.trim().toLowerCase();
+    const list=DATA.filter(d=>{
+      if(curCat!=='全部'&&d.cat!==curCat) return false;
+      if(!q) return true;
+      return d.k.toLowerCase().includes(q)||d.c===q;
+    });
+    const grid=$('grid'); grid.innerHTML='';
+    list.forEach(d=>{
+      const b=document.createElement('button');
+      b.textContent=d.c; b.title=d.k.split(' ')[0];
+      b.onclick=()=>copy(d.c);
+      grid.appendChild(b);
+    });
+    $('meta').textContent='共 '+list.length+' 个表情'+(q?'（搜索：'+q+'）':'');
+  }
+
+  $('search').addEventListener('input',render);
+  $('btnCopyLast').onclick=()=>{ if(lastCopied) copy(lastCopied); else setStatus('还没有复制过表情','err'); };
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文字 / Emoji 图标生成器 · Favicon Maker</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{color:var(--muted);font-size:12px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  canvas{background:
+    linear-gradient(45deg,#222 25%,transparent 25%),linear-gradient(-45deg,#222 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#222 75%),linear-gradient(-45deg,transparent 75%,#222 75%);
+    background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;
+    border:1px solid var(--border);border-radius:12px}
+  pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;
+    font-size:12px;line-height:1.6;margin:0;color:var(--muted);word-break:break-all}
+  code{color:var(--text)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🟦 文字 / Emoji 图标生成器</h1>
+    <div class="sub">纯本地 Canvas · 生成 Favicon Data URI</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnCopy">复制 &lt;link&gt;</button>
+    <button id="btnPng" class="primary">下载 PNG</button>
+  </div>
+</header>
+<main>
+  <div class="controls">
+    <div class="field"><label>文字 / Emoji（建议 1-2 字符）</label><input id="text" value="PB" maxlength="4"></div>
+    <div class="field"><label>背景色</label><input id="bg" type="color" value="#4f9cff"></div>
+    <div class="field"><label>前景色</label><input id="fg" type="color" value="#ffffff"></div>
+    <div class="field"><label>形状</label>
+      <select id="shape"><option value="square">方形</option><option value="rounded">圆角</option><option value="circle">圆形</option></select>
+    </div>
+    <div class="field"><label>尺寸</label>
+      <select id="size"><option>16</option><option>32</option><option selected>64</option><option>128</option><option>256</option></select>
+    </div>
+    <div class="field"><label>字体大小</label><input id="fsz" type="number" min="8" max="240" value="34" style="width:80px"></div>
+  </div>
+  <div class="row">
+    <canvas id="cv" width="128" height="128" style="width:128px;height:128px"></canvas>
+    <div style="flex:1;min-width:240px">
+      <div class="field"><label>HTML 引用代码</label>
+        <pre id="code"></pre>
+      </div>
+    </div>
+  </div>
+</main>
+<div class="status" id="st">调整参数即时预览</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const cv=$('cv'), ctx=cv.getContext('2d');
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+
+  function draw(){
+    const size=parseInt($('size').value)||64;
+    cv.width=size; cv.height=size;
+    const bg=$('bg').value, fg=$('fg').value, shape=$('shape').value;
+    const text=$('text').value||' ';
+    ctx.clearRect(0,0,size,size);
+    ctx.fillStyle=bg;
+    if(shape==='circle'){ ctx.beginPath(); ctx.arc(size/2,size/2,size/2,0,Math.PI*2); ctx.fill(); }
+    else if(shape==='rounded'){ const r=size*0.18; roundRect(ctx,0,0,size,size,r); ctx.fill(); }
+    else ctx.fillRect(0,0,size,size);
+    // 文字
+    ctx.fillStyle=fg;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const fs=parseInt($('fsz').value)||Math.round(size*0.5);
+    ctx.font='600 '+fs+'px -apple-system,"Segoe UI",Arial,sans-serif';
+    ctx.fillText(text,size/2,size/2+fs*0.04);
+    updateCode();
+  }
+  function roundRect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y);
+    c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+  function updateCode(){
+    const uri=cv.toDataURL('image/png');
+    $('code').innerHTML='<code>&lt;link rel="icon" href="'+escapeHtml(uri.slice(0,48))+'…"&gt;</code>';
+    $('code').dataset.uri=uri;
+  }
+  function escapeHtml(s){ return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+  ['text','bg','fg','shape','size','fsz'].forEach(id=>$(id).addEventListener('input',draw));
+  $('btnCopy').onclick=()=>{ const uri=$('code').dataset.uri||''; if(!uri) return;
+    const code='<link rel="icon" href="'+uri+'">';
+    navigator.clipboard.writeText(code).then(()=>setStatus('✓ 已复制 &lt;link&gt; 代码','ok'),()=>setStatus('复制失败','err')); };
+  $('btnPng').onclick=()=>{ const uri=cv.toDataURL('image/png'); const a=document.createElement('a');
+    a.href=uri; a.download='favicon.png'; a.click(); setStatus('✓ 已下载 favicon.png','ok'); };
+  draw();
+})();
+</script>
+</body>
+</html>

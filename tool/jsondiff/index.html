@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON 差异对比 · JSON Diff</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --add:#3ecf8e; --del:#ff5d6c; --chg:#ffb454; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .panes{display:flex;gap:14px;min-height:0;flex:1}
+  .pane{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .pane-head{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between}
+  textarea{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:14px;font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none;min-height:120px}
+  textarea:focus{border-color:var(--accent)}
+  .result{flex:1;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;line-height:1.7;min-height:120px}
+  .row{padding:4px 8px;border-radius:6px;margin-bottom:2px;font-family:"SF Mono",Consolas,monospace;word-break:break-all}
+  .row.add{background:rgba(62,207,142,.10);color:var(--add)}
+  .row.del{background:rgba(255,93,108,.10);color:var(--del)}
+  .row.chg{background:rgba(255,180,84,.10);color:var(--chg)}
+  .row .p{color:var(--muted)}
+  .empty{color:var(--muted);text-align:center;padding:24px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:720px){.panes{flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔀 JSON 差异对比</h1>
+    <div class="sub">纯本地 · 结构化比较 · JSON Diff</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnDiff" class="primary">对比</button>
+    <button id="btnSample">示例</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <div class="panes">
+    <section class="pane">
+      <div class="pane-head"><span>原 JSON (A)</span></div>
+      <textarea id="a" spellcheck="false" placeholder='{ "name":"Peng", "age":28, "tags":["a","b"] }'></textarea>
+    </section>
+    <section class="pane">
+      <div class="pane-head"><span>新 JSON (B)</span></div>
+      <textarea id="b" spellcheck="false" placeholder='{ "name":"Peng", "age":29, "tags":["a","c"], "vip":true }'></textarea>
+    </section>
+  </div>
+  <div class="pane">
+    <div class="pane-head"><span>差异 Diff</span><span id="summary" class="pane-head"></span></div>
+    <div class="result" id="out"><div class="empty">点击「对比」查看结构化差异</div></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+  const isObj=x=>x&&typeof x==='object';
+  function typeOf(x){ return Array.isArray(x)?'array':(x===null?'null':typeof x); }
+
+  function diff(a,b,path,out){
+    const ta=typeOf(a), tb=typeOf(b);
+    if(ta!==tb || !isObj(a) || !isObj(b)){
+      if(a!==b && !(a===a&&b===b&&a==b&&JSON.stringify(a)===JSON.stringify(b))){
+        // primitive change or type change
+        out.push({p:path,k:'changed',a,b});
+      }
+      return;
+    }
+    if(Array.isArray(a)&&Array.isArray(b)){
+      const n=Math.max(a.length,b.length);
+      for(let i=0;i<n;i++){
+        const pa=path+'['+i+']';
+        if(i>=a.length) out.push({p:pa,k:'added',b:b[i]});
+        else if(i>=b.length) out.push({p:pa,k:'removed',a:a[i]});
+        else diff(a[i],b[i],pa,out);
+      }
+      return;
+    }
+    const ka=Object.keys(a), kb=Object.keys(b);
+    ka.forEach(k=>{ const p=path?path+'.'+k:k;
+      if(!(k in b)) out.push({p,k:'removed',a:a[k]});
+      else diff(a[k],b[k],p,out);
+    });
+    kb.forEach(k=>{ const p=path?path+'.'+k:k;
+      if(!(k in a)) out.push({p,k:'added',b:b[k]});
+    });
+  }
+  function str(v){ try{ return typeof v==='string'?JSON.stringify(v):JSON.stringify(v); }catch(e){ return String(v); } }
+
+  function run(){
+    const ta=$('a').value.trim(), tb=$('b').value.trim();
+    if(!ta&&!tb){ $('out').innerHTML='<div class="empty">两边都为空</div>'; $('summary').textContent=''; setStatus('等待输入…'); return; }
+    let A,B;
+    try{ A=ta?JSON.parse(ta):undefined; }catch(e){ setStatus('✗ A 不是合法 JSON：'+e.message,'err'); return; }
+    try{ B=tb?JSON.parse(tb):undefined; }catch(e){ setStatus('✗ B 不是合法 JSON：'+e.message,'err'); return; }
+    const out=[]; diff(A,B,'root',out);
+    const box=$('out');
+    if(out.length===0){ box.innerHTML='<div class="empty">✓ 两份 JSON 完全一致，无差异</div>'; $('summary').textContent='0 处差异'; setStatus('✓ 无差异','ok'); return; }
+    let adds=0,dels=0,chgs=0;
+    box.innerHTML=out.map(d=>{
+      if(d.k==='added'){adds++; return '<div class="row add">+ <span class="p">'+esc(d.p)+'</span> = '+esc(str(d.b))+'</div>';}
+      if(d.k==='removed'){dels++; return '<div class="row del">- <span class="p">'+esc(d.p)+'</span> = '+esc(str(d.a))+'</div>';}
+      chgs++; return '<div class="row chg">~ <span class="p">'+esc(d.p)+'</span> '+esc(str(d.a))+' → '+esc(str(d.b))+'</div>';
+    }).join('');
+    $('summary').textContent='+'+adds+' -'+dels+' ~'+chgs;
+    setStatus('共 '+(adds+dels+chgs)+' 处差异（+'+adds+' 新增 / -'+dels+' 删除 / ~'+chgs+' 修改）','ok');
+  }
+  function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+  $('btnDiff').onclick=run;
+  $('btnClear').onclick=()=>{ $('a').value=''; $('b').value=''; run(); };
+  $('btnSample').onclick=()=>{ $('a').value=JSON.stringify({name:"Peng",age:28,tags:["a","b"],profile:{city:"Nanjing"}},null,2);
+    $('b').value=JSON.stringify({name:"Peng",age:29,tags:["a","c"],vip:true,profile:{city:"Nanjing",country:"CN"}},null,2); run(); };
+  $('a').addEventListener('input',()=>{ if($('a').dataset.auto) run(); });
+  $('b').addEventListener('input',()=>{ if($('b').dataset.auto) run(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIME 类型速查 · MIME Types</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus{border-color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .grid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;align-content:start;padding-right:4px}
+  .item{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:.15s}
+  .item:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .ext{font-weight:700;color:var(--accent);font-size:15px}
+  .type{color:var(--text);font-size:13px;font-family:"SF Mono",Consolas,monospace;word-break:break-all}
+  .hint{color:var(--muted);font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🗂️ MIME 类型速查</h1>
+    <div class="sub">纯本地数据 · 扩展名 ⇄ 类型 · 点击复制</div>
+  </div>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="搜索扩展名或类型（如 json / image）" style="width:280px">
+  </div>
+</header>
+<main>
+  <div class="hint" id="meta"></div>
+  <div class="grid" id="grid"></div>
+</main>
+<div class="status" id="st">点击任意条目复制对应值</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const MAP={
+    html:'text/html', htm:'text/html', css:'text/css', js:'text/javascript', mjs:'text/javascript',
+    json:'application/json', xml:'application/xml', txt:'text/plain', csv:'text/csv', md:'text/markdown',
+    pdf:'application/pdf', doc:'application/msword', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls:'application/vnd.ms-excel', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt:'application/vnd.ms-powerpoint', pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp', svg:'image/svg+xml',
+    bmp:'image/bmp', ico:'image/x-icon', avif:'image/avif',
+    mp3:'audio/mpeg', wav:'audio/wav', ogg:'audio/ogg', flac:'audio/flac', aac:'audio/aac', m4a:'audio/mp4',
+    mp4:'video/mp4', webm:'video/webm', avi:'video/x-msvideo', mov:'video/quicktime', mkv:'video/x-matroska',
+    zip:'application/zip', rar:'application/vnd.rar', '7z':'application/x-7z-compressed', tar:'application/x-tar', gz:'application/gzip',
+    woff:'font/woff', woff2:'font/woff2', ttf:'font/ttf', otf:'font/otf', eot:'application/vnd.ms-fontobject',
+    wasm:'application/wasm', jsonld:'application/ld+json', rss:'application/rss+xml', atom:'application/atom+xml',
+    yaml:'application/yaml', yml:'application/yaml', toml:'application/toml', ini:'text/plain', env:'text/plain',
+    sh:'text/x-sh', py:'text/x-python', rb:'text/x-ruby', go:'text/x-go', java:'text/x-java', php:'application/x-httpd-php',
+    ts:'text/typescript', tsx:'text/typescript', jsx:'text/jsx', sql:'application/sql', graphql:'application/graphql',
+    bin:'application/octet-stream', exe:'application/octet-stream', dat:'application/octet-stream',
+    eps:'application/postscript', ai:'application/postscript', psd:'image/vnd.adobe.photoshop',
+    epub:'application/epub+zip', mobi:'application/x-mobipocket-ebook', torrent:'application/x-bittorrent'
+  };
+  function copy(s){ try{ navigator.clipboard.writeText(s); setStatus('✓ 已复制：'+s,'ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); } }
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+
+  function render(){
+    const q=$('search').value.trim().toLowerCase();
+    const grid=$('grid'); grid.innerHTML='';
+    const keys=Object.keys(MAP).filter(k=>{ if(!q) return true;
+      return k.includes(q)||MAP[k].toLowerCase().includes(q); });
+    keys.sort().forEach(k=>{
+      const el=document.createElement('div'); el.className='item';
+      el.innerHTML='<div class="ext">.'+k+'</div><div class="type">'+MAP[k]+'</div>';
+      el.onclick=()=>copy(MAP[k]);
+      grid.appendChild(el);
+    });
+    $('meta').textContent='共 '+keys.length+' 条'+(q?'（搜索：'+q+'）':'');
+  }
+  $('search').addEventListener('input',render);
+  render();
+})();
+</script>
+</body>
+</html>

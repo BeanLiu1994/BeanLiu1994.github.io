@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片转 ASCII 字符画 · Image to ASCII</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .controls{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .drop{border:1px dashed var(--border);border-radius:10px;padding:16px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s}
+  .drop:hover{border-color:var(--accent);color:var(--text)}
+  pre{flex:1;overflow:auto;background:#000;border:1px solid var(--border);border-radius:10px;padding:14px;margin:0;
+    font-family:"SF Mono",Consolas,monospace;font-size:7px;line-height:7px;letter-spacing:0;white-space:pre;color:#d6d6d6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ 图片转 ASCII 字符画</h1>
+    <div class="sub">纯本地 Canvas · 不上传 · Image to ASCII Art</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnCopy">复制</button>
+    <button id="btnDownload">下载 .txt</button>
+  </div>
+</header>
+<main>
+  <div class="controls">
+    <label class="drop" id="drop">点击或拖拽图片到此处
+      <input id="file" type="file" accept="image/*" hidden>
+    </label>
+    <label class="indent">宽度(字符)
+      <input id="width" type="number" min="20" max="300" value="100" style="width:74px">
+    </label>
+    <label class="indent">字符集
+      <select id="charset">
+        <option value=" .:-=+*#%@">标准</option>
+        <option value=" .'`^,:;Il!i&gt;&lt;~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&amp;8%B@$">详细</option>
+        <option value=" .:oO0@">极简</option>
+      </select>
+    </label>
+    <label class="indent"><input id="invert" type="checkbox"> 反相</label>
+    <button id="btnRender" class="primary">生成</button>
+  </div>
+  <pre id="out">选择一张图片后点击「生成」。</pre>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let img=null;
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+
+  $('file').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) load(f); });
+  const drop=$('drop');
+  ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--accent)';}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--border)';}));
+  drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) load(f); });
+
+  function load(f){
+    const r=new FileReader();
+    r.onload=ev=>{ const im=new Image(); im.onload=()=>{ img=im; setStatus('✓ 已载入图片 '+im.width+'×'+im.height,'ok'); }; im.src=ev.target.result; };
+    r.readAsDataURL(f);
+  }
+
+  function render(){
+    if(!img){ setStatus('请先选择图片','err'); return; }
+    const W=Math.max(20,Math.min(300,parseInt($('width').value)||100));
+    const chars=$('charset').value;
+    const invert=$('invert').checked;
+    const H=Math.max(1,Math.round(W*img.height/img.width/2)); // 字符高约为宽 2 倍，补偿纵横比
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d'); ctx.drawImage(img,0,0,W,H);
+    let data;
+    try{ data=ctx.getImageData(0,0,W,H).data; }catch(e){ setStatus('无法读取图片像素（可能跨域）：'+e.message,'err'); return; }
+    let out='';
+    for(let y=0;y<H;y++){
+      let line='';
+      for(let x=0;x<W;x++){
+        const i=(y*W+x)*4;
+        const lum=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2]; // 0..255
+        let t=invert?(lum/255):(1-lum/255);
+        const idx=Math.min(chars.length-1,Math.floor(t*(chars.length-1)));
+        line+=chars[idx];
+      }
+      out+=line+'\n';
+    }
+    $('out').textContent=out;
+    setStatus('✓ 已生成 '+W+'×'+H+' 字符画','ok');
+  }
+
+  function copy(){ const t=$('out').textContent; if(!t||t.startsWith('选择')){setStatus('没有可复制的内容','err');return;}
+    navigator.clipboard.writeText(t).then(()=>setStatus('✓ 已复制','ok'),()=>setStatus('复制失败','err')); }
+  function download(){ const t=$('out').textContent; if(!t||t.startsWith('选择')){setStatus('没有可下载的内容','err');return;}
+    const b=new Blob([t],{type:'text/plain'}); const a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download='ascii-art.txt'; a.click(); URL.revokeObjectURL(a.href);
+    setStatus('✓ 已下载 ascii-art.txt','ok'); }
+
+  $('btnRender').onclick=render;
+  $('btnCopy').onclick=copy;
+  $('btnDownload').onclick=download;
+})();
+</script>
+</body>
+</html>

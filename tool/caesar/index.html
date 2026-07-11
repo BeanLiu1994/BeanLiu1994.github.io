@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>凯撒密码 / ROT13 · Caesar & ROT13</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input,textarea,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .setter{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .pane{display:flex;flex-direction:column;gap:8px}
+  .pane-head{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:140px;resize:vertical;font-family:"SF Mono",Consolas,monospace;line-height:1.6;padding:14px}
+  pre{margin:0;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;max-height:320px;font-size:13px;line-height:1.6}
+  .brute{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+  .brute div{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer}
+  .brute div b{color:var(--accent)}
+  .brute div:hover{border-color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 凯撒密码 / ROT13</h1>
+    <div class="sub">纯本地 · 字母移位加解密 · Caesar Cipher & ROT13</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnRot">ROT13</button>
+    <button id="btnCopy">复制结果</button>
+    <button id="btnClear">清空</button>
+    <button id="btnBrute">暴力破解(26)</button>
+  </div>
+</header>
+<main>
+  <div class="setter">
+    <label class="indent">位移
+      <input id="shift" type="number" min="0" max="25" value="3" style="width:70px">
+    </label>
+    <input id="rng" type="range" min="0" max="25" value="3" style="flex:1;min-width:160px">
+    <span id="shiftVal" style="color:var(--accent);font-weight:600;min-width:22px;text-align:center">3</span>
+  </div>
+  <div class="pane">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="input" placeholder="在此输入要加密 / 解密的文本…（仅英文字母移位，其它字符原样保留）" spellcheck="false"></textarea>
+  </div>
+  <div class="pane">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="output" readonly placeholder="结果将显示在这里"></textarea>
+  </div>
+  <div class="pane hidden" id="brutePane">
+    <div class="pane-head">所有位移（点击复制）</div>
+    <div class="brute" id="brute"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function shiftChar(ch, n){
+    const code=ch.charCodeAt(0);
+    if(code>=65&&code<=90) return String.fromCharCode((code-65+n)%26+65);
+    if(code>=97&&code<=122) return String.fromCharCode((code-97+n)%26+97);
+    return ch;
+  }
+  function transform(text,n){ return [...text].map(c=>shiftChar(c,n)).join(''); }
+
+  function run(){
+    const n=((parseInt($('shift').value)||0)%26+26)%26;
+    $('shift').value=n; $('rng').value=n; $('shiftVal').textContent=n;
+    const text=$('input').value;
+    if(!text){ $('output').value=''; $('st').textContent='等待输入…'; return; }
+    $('output').value=transform(text,n);
+    $('st').textContent='✓ 已按位移 '+n+' 转换';
+  }
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+  function copy(s){ try{ navigator.clipboard.writeText(s); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); } }
+
+  $('shift').addEventListener('input',()=>{ $('rng').value=$('shift').value; run(); });
+  $('rng').addEventListener('input',()=>{ $('shift').value=$('rng').value; run(); });
+  $('input').addEventListener('input',run);
+  $('btnRot').onclick=()=>{ $('shift').value=13; run(); };
+  $('btnCopy').onclick=()=>{ if($('output').value) copy($('output').value); else setStatus('没有可复制的内容','err'); };
+  $('btnClear').onclick=()=>{ $('input').value=''; $('output').value=''; $('brutePane').classList.add('hidden'); run(); };
+  $('btnBrute').onclick=()=>{
+    const text=$('input').value; if(!text){ setStatus('请先输入文本再暴力破解','err'); return; }
+    const box=$('brute'); box.innerHTML='';
+    for(let n=0;n<26;n++){
+      const d=document.createElement('div');
+      const r=transform(text,n);
+      d.innerHTML='<b>位移 '+n+'</b><br>'+r.slice(0,60)+(r.length>60?'…':'');
+      d.title='点击复制该位移结果';
+      d.onclick=()=>copy(r);
+      box.appendChild(d);
+    }
+    $('brutePane').classList.remove('hidden');
+    setStatus('已列出全部 26 种位移，点击任意一项复制','ok');
+  };
+  run();
+})();
+</script>
+</body>
+</html>

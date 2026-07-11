@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS 渐变生成器 · Gradient Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;min-height:0}
+  .controls{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .preview{flex:1;min-height:160px;border:1px solid var(--border);border-radius:12px}
+  .stops{display:flex;flex-direction:column;gap:8px}
+  .stop{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px}
+  .stop input[type=color]{width:40px;height:34px;padding:2px;border-radius:6px}
+  .stop input[type=number]{width:70px}
+  .stop .del{cursor:pointer;color:var(--err);border:0;background:transparent;font-size:16px}
+  pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;
+    font-size:13px;line-height:1.6;margin:0;white-space:pre-wrap;word-break:break-all}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌈 CSS 渐变生成器</h1>
+    <div class="sub">纯本地 · 线性 / 径向渐变 · 复制 CSS</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnCopy">复制 CSS</button>
+    <button id="btnRandom">随机</button>
+  </div>
+</header>
+<main>
+  <div class="controls">
+    <label class="indent">类型
+      <select id="type"><option value="linear">线性 linear</option><option value="radial">径向 radial</option></select>
+    </label>
+    <label class="indent" id="angleWrap">角度
+      <input id="angle" type="number" min="0" max="360" value="90" style="width:74px">°
+    </label>
+    <button id="btnAdd">+ 添加色标</button>
+  </div>
+  <div class="stops" id="stops"></div>
+  <div class="preview" id="preview"></div>
+  <div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:6px">生成的 CSS</div>
+    <pre id="css"></pre>
+  </div>
+</main>
+<div class="status" id="st">调整色标即时预览</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let stops=[{c:'#4f9cff',p:0},{c:'#9b5cff',p:100}];
+  function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
+
+  function build(){
+    const css = $('type').value==='radial'
+      ? 'radial-gradient(circle, '+stops.map(s=>s.c+' '+s.p+'%').join(', ')+')'
+      : 'linear-gradient('+$('angle').value+'deg, '+stops.map(s=>s.c+' '+s.p+'%').join(', ')+')';
+    $('preview').style.background=css;
+    $('css').textContent='background: '+css+';';
+    $('angleWrap').style.display=$('type').value==='radial'?'none':'flex';
+  }
+  function renderStops(){
+    const box=$('stops'); box.innerHTML='';
+    stops.forEach((s,i)=>{
+      const row=document.createElement('div'); row.className='stop';
+      row.innerHTML='<input type="color" value="'+s.c+'"><input type="number" min="0" max="100" value="'+s.p+'" style="width:70px">%'+
+        (stops.length>2?'<button class="del" title="删除">✕</button>':'<span style="width:18px"></span>');
+      row.querySelector('input[type=color]').oninput=e=>{ s.c=e.target.value; build(); };
+      row.querySelector('input[type=number]').oninput=e=>{ s.p=Math.max(0,Math.min(100,parseInt(e.target.value)||0)); build(); };
+      const del=row.querySelector('.del'); if(del) del.onclick=()=>{ stops.splice(i,1); renderStops(); build(); };
+      box.appendChild(row);
+    });
+  }
+  function copy(){ navigator.clipboard.writeText($('css').textContent).then(()=>setStatus('✓ 已复制','ok'),()=>setStatus('复制失败','err')); }
+  function rand(){ const h=()=>'#'+[...Array(6)].map(()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join(''); return h(); }
+
+  $('type').onchange=build;
+  $('angle').oninput=build;
+  $('btnAdd').onclick=()=>{ stops.push({c:rand(),p:50}); renderStops(); build(); };
+  $('btnCopy').onclick=copy;
+  $('btnRandom').onclick=()=>{ stops=stops.map(s=>({c:rand(),p:s.p})); renderStops(); build(); setStatus('✓ 已随机配色','ok'); };
+
+  renderStops(); build();
+})();
+</script>
+</body>
+</html>
