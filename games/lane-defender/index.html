@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b0f1a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>通道阻击 · Lane Defender</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="game-shell">
+    <div id="stage">
+      <canvas id="game-canvas"></canvas>
+      <button id="auto-toggle" class="auto-toggle" type="button">自动：关</button>
+
+      <!-- 开始菜单 -->
+      <div id="screen-start" class="overlay">
+        <div class="panel">
+          <h1 class="title">通道阻击</h1>
+          <p class="subtitle">LANE DEFENDER</p>
+          <p class="desc">
+            控制底部角色左右移动，自动向上开火。<br />
+            击落通道里的怪物与奖励，把它们身上的数字打到 0。<br />
+            漏过的怪物会从上端循环回来——<b>只有被撞到才扣倍率</b>，专心走位躲避！<br />
+            打爆奖励可升级武器（射速/伤害/穿透/多重/斜射）或补充倍率，倍率归零即失败！
+          </p>
+          <button id="btn-start" class="btn btn-primary">开始游戏</button>
+          <div class="hint">
+            <span>⌨ 键盘：← → 或 A / D 移动，空格 暂停</span><br />
+            <span>📱 触屏：左右拖动角色 / 点击屏幕左右半区移动</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 暂停菜单 -->
+      <div id="screen-pause" class="overlay hidden">
+        <div class="panel">
+          <h2 class="title">已暂停</h2>
+          <button id="btn-resume" class="btn btn-primary">继续</button>
+          <button id="btn-restart-pause" class="btn">重新开始</button>
+        </div>
+      </div>
+
+      <!-- 结束菜单 -->
+      <div id="screen-over" class="overlay hidden">
+        <div class="panel">
+          <h2 class="title">防线失守</h2>
+          <div id="over-stats" class="stats"></div>
+          <button id="btn-restart" class="btn btn-primary">再来一局</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/js/config.js"></script>
+  <script src="src/js/utils.js"></script>
+  <script src="src/js/entities.js"></script>
+  <script src="src/js/director.js"></script>
+  <script src="src/js/input.js"></script>
+  <script src="src/js/ui.js"></script>
+  <script src="src/js/game.js"></script>
+  <script src="src/js/main.js"></script>
+</body>
+</html>

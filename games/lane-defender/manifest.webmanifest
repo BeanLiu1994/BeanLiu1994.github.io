@@ -1,0 +1,12 @@
+{
+  "name": "通道阻击 · Lane Defender",
+  "short_name": "通道阻击",
+  "description": "控制底部角色左右移动、自动开火，击落竖直通道里的怪物与奖励，把数字打到 0。",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f1a",
+  "theme_color": "#0b0f1a",
+  "icons": []
+}
