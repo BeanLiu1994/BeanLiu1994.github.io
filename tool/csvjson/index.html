@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV ⇄ JSON 转换 · CSV ⇄ JSON</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+  main{flex:1;display:flex;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .pane.left{border-right:1px solid var(--border)}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;
+    padding:16px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;tab-size:2}
+  .status{padding:8px 20px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:720px){main{flex-direction:column}.pane.left{border-right:0;border-bottom:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📊 CSV ⇄ JSON 转换</h1>
+    <div class="sub">CSV 转 JSON（按首行表头）· JSON 转 CSV · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCsv2Json" class="primary">CSV → JSON</button>
+    <button id="bJson2Csv">JSON → CSV</button>
+    <button id="bCopy">复制</button>
+    <button id="bExample">示例</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head"><span>输入 Input</span></div>
+    <textarea id="input" placeholder="在此粘贴 CSV 或 JSON…">name,age,city
+Alice,30,Beijing
+Bob,25,Shanghai
+Carol,28,Shenzhen</textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Output</span><span class="hint" id="meta"></span></div>
+    <textarea id="output" readonly placeholder="结果将显示在此…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function setStatus(m,t){const el=$('st');el.textContent=m;el.className='status'+(t?' '+t:'');}
+  // CSV 解析（处理引号与转义）
+  function parseCSV(text){
+    const rows=[]; let row=[],field='',i=0,inQ=false;
+    while(i<text.length){
+      const c=text[i];
+      if(inQ){
+        if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inQ=false;i++;continue; }
+        field+=c;i++;continue;
+      } else {
+        if(c==='"'){ inQ=true;i++;continue; }
+        if(c===','){ row.push(field);field='';i++;continue; }
+        if(c==='\n'){ row.push(field);rows.push(row);row=[];field='';i++;continue; }
+        if(c==='\r'){ i++;continue; }
+        field+=c;i++;
+      }
+    }
+    if(field!==''||row.length) { row.push(field); rows.push(row); }
+    return rows.filter(r=>r.some(x=>x!==''));
+  }
+  function csv2json(){
+    const rows=parseCSV($('input').value);
+    if(rows.length<2){ setStatus('✗ 至少需要表头 + 一行数据','err'); return; }
+    const head=rows[0];
+    const arr=rows.slice(1).map(r=>{ const o={}; head.forEach((h,j)=>o[h]=r[j]!==undefined?r[j]:''); return o; });
+    $('output').value=JSON.stringify(arr,null,2);
+    $('meta').textContent=arr.length+' 条记录';
+    setStatus('✓ CSV → JSON 完成','ok');
+  }
+  function json2csv(){
+    let data;
+    try{ data=JSON.parse($('input').value); }catch(e){ setStatus('✗ 无效 JSON：'+e.message,'err'); return; }
+    if(Array.isArray(data)){
+      if(data.length===0){ setStatus('空数组','err'); return; }
+      const keys=Array.from(data.reduce((s,o)=>{Object.keys(o).forEach(k=>s.add(k));return s;},new Set()));
+      const esc=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+      const lines=[keys.map(esc).join(',')];
+      data.forEach(o=>lines.push(keys.map(k=>esc(o[k])).join(',')));
+      $('output').value=lines.join('\n');
+      $('meta').textContent=data.length+' 条记录';
+      setStatus('✓ JSON → CSV 完成','ok');
+    } else if(typeof data==='object'){ // 对象数组逐个
+      csv2jsonFromObj(data);
+    } else { setStatus('✗ 仅支持 JSON 数组','err'); }
+  }
+  function csv2jsonFromObj(o){
+    const keys=Object.keys(o);
+    const lines=[keys.join(','),keys.map(k=>o[k]).join(',')];
+    $('output').value=lines.join('\n');
+    setStatus('✓ 对象 → CSV 完成','ok');
+  }
+  $('bCsv2Json').onclick=csv2json;
+  $('bJson2Csv').onclick=json2csv;
+  $('bExample').onclick=()=>{
+    $('input').value='[\n  {"name":"Alice","age":30,"city":"Beijing"},\n  {"name":"Bob","age":25,"city":"Shanghai"}\n]';
+    json2csv();
+  };
+  $('bCopy').onclick=async()=>{ if(!$('output').value){return;} try{ await navigator.clipboard.writeText($('output').value); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('bClear').onclick=()=>{ $('input').value=''; $('output').value=''; $('meta').textContent=''; };
+})();
+</script>
+</body>
+</html>

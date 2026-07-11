@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>占位文本生成 · Lorem Ipsum</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:340px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:Georgia,"Times New Roman",serif;font-size:14px;line-height:1.8;resize:vertical;outline:none}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .field label{color:var(--muted);font-size:13px}
+  input[type=number]{width:80px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px;font-size:13px}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📝 占位文本生成器</h1>
+    <div class="sub">Lorem Ipsum · 排版 / 设计稿填充 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bGenerate" class="primary">生成</button>
+    <button id="bCopy">复制</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">选项 Options</div>
+      <div class="field">
+        <label>类型</label>
+        <select id="type">
+          <option value="para">段落</option>
+          <option value="sentence">句子</option>
+          <option value="word">单词</option>
+        </select>
+      </div>
+      <div class="field">
+        <label id="cntLabel">段落数</label>
+        <input type="number" id="count" value="3" min="1" max="100">
+      </div>
+      <div class="field">
+        <label>起始</label>
+        <select id="start">
+          <option value="lorem" selected>以 "Lorem ipsum…" 开头</option>
+          <option value="random">随机开头</option>
+        </select>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">结果 Output</div>
+      <textarea id="out" readonly placeholder="点击「生成」…"></textarea>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const WORDS=("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum").split(' ');
+  function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+  function sentence(rng){
+    const n=4+Math.floor(rng()*8);
+    let s='';
+    for(let i=0;i<n;i++){ s+=WORDS[Math.floor(rng()*WORDS.length)]+' '; }
+    s=s.trim();
+    return cap(s)+'.';
+  }
+  function para(rng,first){
+    const n=4+Math.floor(rng()*3);
+    let parts=[];
+    for(let i=0;i<n;i++) parts.push(sentence(rng));
+    let p=parts.join(' ');
+    if(first){ p='Lorem ipsum dolor sit amet, consectetur adipiscing elit. '+p; }
+    return p;
+  }
+  function rngFactory(){ let seed=Date.now()%(1<<30); return ()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }; }
+  function generate(){
+    const type=$('type').value;
+    const count=Math.max(1,Math.min(100,parseInt($('count').value,10)||1));
+    const startLorem=$('start').value==='lorem';
+    const rng=rngFactory();
+    let out='';
+    if(type==='para'){
+      let arr=[];
+      for(let i=0;i<count;i++) arr.push(para(rng, startLorem&&i===0));
+      out=arr.join('\n\n');
+    } else if(type==='sentence'){
+      let arr=[];
+      for(let i=0;i<count;i++) arr.push(sentence(rng));
+      out=arr.join(' ');
+    } else {
+      let arr=[];
+      const f=startLorem?'lorem ipsum dolor sit amet consectetur adipiscing elit'.split(' '):[];
+      for(let i=0;i<count;i++){
+        if(i<f.length) arr.push(f[i]);
+        else arr.push(WORDS[Math.floor(rng()*WORDS.length)]);
+      }
+      out=arr.join(' ');
+    }
+    $('out').value=out;
+    $('st').textContent='✓ 已生成 '+count+' '+(type==='para'?'段落':type==='sentence'?'句子':'单词');
+  }
+  $('type').addEventListener('change',()=>{ $('cntLabel').textContent=$('type').value==='para'?'段落数':$('type').value==='sentence'?'句子数':'单词数'; });
+  $('count').addEventListener('input',generate);
+  $('bGenerate').onclick=generate;
+  $('bCopy').onclick=async()=>{ if(!$('out').value){return;} try{ await navigator.clipboard.writeText($('out').value); $('st').textContent='✓ 已复制'; }catch(e){ $('st').textContent='复制失败：'+e.message; } };
+  $('bClear').onclick=()=>{ $('out').value=''; };
+  generate();
+})();
+</script>
+</body>
+</html>

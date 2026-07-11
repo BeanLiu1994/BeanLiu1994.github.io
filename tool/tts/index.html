@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文本转语音 · Text to Speech</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:300px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .field label{color:var(--muted);font-size:13px;width:48px}
+  select,input[type=range]{flex:1;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+  .val{width:40px;color:var(--accent);font-size:13px;text-align:right}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)} .status.warn{color:#e5c07b}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔊 文本转语音</h1>
+    <div class="sub">基于浏览器 Web Speech API · 纯本地合成</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSpeak" class="primary">▶ 朗读</button>
+    <button id="bPause" disabled>⏸ 暂停</button>
+    <button id="bStop" disabled>⏹ 停止</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">文本 Text</div>
+      <textarea id="text" placeholder="输入要朗读的文本…">你好，欢迎使用文本转语音工具。This is a text to speech demo powered by your browser.</textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">语音设置 Voice</div>
+      <div class="field">
+        <label>语音</label>
+        <select id="voice"></select>
+      </div>
+      <div class="field">
+        <label>语速</label>
+        <input type="range" id="rate" min="0.5" max="2" step="0.1" value="1"><span class="val" id="rateV">1.0</span>
+      </div>
+      <div class="field">
+        <label>音高</label>
+        <input type="range" id="pitch" min="0" max="2" step="0.1" value="1"><span class="val" id="pitchV">1.0</span>
+      </div>
+      <div class="field">
+        <label>音量</label>
+        <input type="range" id="volume" min="0" max="1" step="0.1" value="1"><span class="val" id="volumeV">1.0</span>
+      </div>
+      <div class="hint" id="voiceInfo">正在加载可用语音…</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const synth=window.speechSynthesis;
+  function setStatus(m,t){const el=$('st');el.textContent=m;el.className='status'+(t?' '+t:'');}
+  if(!('speechSynthesis' in window)){
+    setStatus('✗ 当前浏览器不支持 Web Speech API','err');
+    return;
+  }
+  let voices=[];
+  function loadVoices(){
+    voices=synth.getVoices();
+    if(!voices.length) return;
+    const zh=voices.filter(v=>/zh|cmn|Chinese/i.test(v.lang+v.name));
+    const list=zh.concat(voices.filter(v=>!/zh|cmn|Chinese/i.test(v.lang+v.name)));
+    $('voice').innerHTML=list.map((v,i)=>'<option value="'+i+'">'+v.name+' ('+v.lang+')'+(zh.includes(v)?' ★':'')+'</option>').join('');
+    $('voiceInfo').textContent='共 '+voices.length+' 种语音（★ 为中文）';
+  }
+  loadVoices();
+  synth.onvoiceschanged=loadVoices;
+  ['rate','pitch','volume'].forEach(id=>$(id).addEventListener('input',()=>{ $(id+'V').textContent=(+$(id).value).toFixed(1); }));
+  function speak(){
+    if(!$('text').value.trim()){ setStatus('请输入文本','err'); return; }
+    synth.cancel();
+    const u=new SpeechSynthesisUtterance($('text').value);
+    const vi=parseInt($('voice').value,10);
+    if(voices[vi]) u.voice=voices[vi];
+    u.rate=+$('rate').value; u.pitch=+$('pitch').value; u.volume=+$('volume').value;
+    u.onstart=()=>{ setStatus('🔊 正在朗读…','ok'); $('bPause').disabled=false; $('bStop').disabled=false; };
+    u.onend=()=>{ setStatus('✓ 朗读结束'); $('bPause').disabled=true; $('bStop').disabled=true; };
+    u.onerror=e=>{ setStatus('✗ 朗读出错：'+(e.error||e.message),'err'); $('bPause').disabled=true; $('bStop').disabled=true; };
+    synth.speak(u);
+  }
+  $('bSpeak').onclick=speak;
+  $('bPause').onclick=()=>{ if(synth.paused) { synth.resume(); $('bPause').textContent='⏸ 暂停'; } else { synth.pause(); $('bPause').textContent='▶ 继续'; } };
+  $('bStop').onclick=()=>{ synth.cancel(); $('bPause').disabled=true; $('bStop').disabled=true; $('bPause').textContent='⏸ 暂停'; setStatus('⏹ 已停止'); };
+  setStatus('就绪 · 选择语音后点击朗读','warn');
+})();
+</script>
+</body>
+</html>

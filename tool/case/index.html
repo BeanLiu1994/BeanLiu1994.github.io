@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大小写转换 · Case Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:10px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:300px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔠 大小写 / 命名风格转换</h1>
+    <div class="sub">UPPER / lower / Title / camel / snake / kebab …</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="input" placeholder="输入文本…">hello world example string</textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="output" readonly placeholder="结果将显示在此…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function words(s){ return s.match(/[A-Za-z0-9\u4e00-\u9fff]+|[^A-Za-z0-9\u4e00-\u9fff\s]+|\s+/g)||[]; }
+  function toTokens(s){
+    // 拆分为「词」：连续的字母数字（含中文）视为一个词，其余标点/空白作为边界
+    const raw=s.match(/[A-Za-z0-9\u4e00-\u9fff]+|[^A-Za-z0-9\u4e00-\u9fff]+/g)||[];
+    return raw.filter(t=>t.trim()!=='');
+  }
+  const ops={
+    upper:s=>s.toUpperCase(),
+    lower:s=>s.toLowerCase(),
+    title:s=>toTokens(s).map(t=>/^[A-Za-z0-9]/.test(t)?t[0].toUpperCase()+t.slice(1).toLowerCase():t).join(''),
+    sentence:s=>s.toLowerCase().replace(/(^|[.!?。！？]\s+)([a-z\u4e00-\u9fff])/g,(_,p,c)=>p+c.toUpperCase()),
+    camel:s=>toTokens(s).map((t,i)=>{const w=t.replace(/[^A-Za-z0-9]/g,'');if(!w)return '';return i===0?w.toLowerCase():w[0].toUpperCase()+w.slice(1).toLowerCase();}).join(''),
+    pascal:s=>toTokens(s).map(t=>{const w=t.replace(/[^A-Za-z0-9]/g,'');if(!w)return '';return w[0].toUpperCase()+w.slice(1).toLowerCase();}).join(''),
+    snake:s=>toTokens(s).map(t=>t.replace(/[^A-Za-z0-9]/g,'').toLowerCase()).filter(Boolean).join('_'),
+    kebab:s=>toTokens(s).map(t=>t.replace(/[^A-Za-z0-9]/g,'').toLowerCase()).filter(Boolean).join('-'),
+    constant:s=>toTokens(s).map(t=>t.replace(/[^A-Za-z0-9]/g,'').toUpperCase()).filter(Boolean).join('_'),
+    reverse:s=>[...s].reverse().join('')
+  };
+  const labels={upper:'UPPERCASE',lower:'lowercase',title:'Title Case',sentence:'Sentence case',camel:'camelCase',pascal:'PascalCase',snake:'snake_case',kebab:'kebab-case',constant:'CONSTANT_CASE',reverse:'反向 Reverse'};
+  function run(op){
+    const out=ops[op]($('input').value);
+    $('output').value=out;
+    $('st').textContent='✓ '+labels[op]+' 完成';
+  }
+  $('input').addEventListener('input',()=>run('camel'));
+  // 动态生成按钮
+  const bar=document.querySelector('.toolbar');
+  Object.keys(ops).forEach(op=>{
+    const b=document.createElement('button');
+    b.textContent=labels[op];
+    b.onclick=()=>run(op);
+    bar.insertBefore(b, $('bCopy'));
+  });
+  $('bCopy').onclick=async()=>{ if(!$('output').value){return;} try{ await navigator.clipboard.writeText($('output').value); $('st').textContent='✓ 已复制'; }catch(e){ $('st').textContent='复制失败：'+e.message; } };
+  $('bClear').onclick=()=>{ $('input').value=''; $('output').value=''; $('input').focus(); };
+  run('camel');
+})();
+</script>
+</body>
+</html>

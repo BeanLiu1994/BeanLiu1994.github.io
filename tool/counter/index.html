@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>字数统计 · Word Counter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:340px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:22px;font-weight:600;color:var(--accent);margin-top:4px}
+  .stat .u{color:var(--muted);font-size:12px;margin-left:4px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔢 字数统计</h1>
+    <div class="sub">字符 / 单词 / 行 / 中文 / 阅读时长 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bExample">示例</button>
+    <button id="bClear" class="primary">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">输入 Input</div>
+      <textarea id="text" placeholder="在此粘贴或输入文本…">WorkBuddy 是一个强大的 AI 助手。The quick brown fox jumps over the lazy dog. 你好，世界！</textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">统计 Statistics</div>
+      <div class="stat-grid" id="stats"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function render(){
+    const t=$('text').value;
+    const charsAll=t.length;
+    const charsNoSpace=t.replace(/\s/g,'').length;
+    const words=(t.trim().match(/[A-Za-z0-9'’\-]+/g)||[]).length;
+    const cjk=(t.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g)||[]).length;
+    const lines=t===''?0:t.split(/\r\n|\r|\n/).length;
+    const paras=t.split(/\n\s*\n/).filter(s=>s.trim()!=='').length;
+    const sentences=(t.match(/[。！？!?\.]+/g)||[]).length;
+    const digits=(t.match(/[0-9]/g)||[]).length;
+    const nonASCII=(t.match(/[^\x00-\xff]/g)||[]).length;
+    const readMin=Math.max(1,Math.ceil((cjk/300)+(words/200)));
+    const data=[
+      ['总字符','charsAll','（含空格）'],
+      ['字符(去空格)','charsNoSpace',''],
+      ['英文单词','words',''],
+      ['中文字','cjk',''],
+      ['句子','sentences',''],
+      ['行数','lines',''],
+      ['段落','paras',''],
+      ['数字','digits',''],
+      ['非ASCII','nonASCII',''],
+      ['阅读时长','readMin','分钟']
+    ];
+    $('stats').innerHTML=data.map(([k,key,u])=>
+      '<div class="stat"><div class="k">'+k+'</div><div class="v">'+eval(key)+(u?'<span class="u">'+u+'</span>':'')+'</div></div>'
+    ).join('');
+    $('st').textContent='✓ 统计完成：'+charsAll+' 字符 / '+words+' 单词 / '+cjk+' 中文';
+  }
+  $('text').addEventListener('input',render);
+  $('bClear').onclick=()=>{ $('text').value=''; render(); $('text').focus(); };
+  $('bExample').onclick=()=>{
+    $('text').value='人工智能正在改变软件开发的方式。Developers build tools that help people every day.\n\n这是第二段：统计工具可以快速得到文本的各项指标，例如字符数、单词数、行数和阅读时长。Hello, World! 12345。';
+    render();
+  };
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML 实体编解码 · HTML Entity</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:10px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:300px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .field{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🏷️ HTML 实体编解码</h1>
+    <div class="sub">HTML Entity Encode / Decode · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制结果</button>
+    <button id="bSwap">⇄ 互换</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="input" placeholder="输入文本…"><p>Hello & "World" — 你好，世界！</p></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="output" readonly placeholder="结果将显示在此…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function encodeAll(s){ // 编码全部非 ASCII 及 5 个特殊字符
+    let out='';
+    for(const ch of s){
+      const cp=ch.codePointAt(0);
+      if('&<>"\''.includes(ch)) out={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+      else if(cp>127) out='&#'+cp+';';
+      else out+=ch;
+    }
+    return out;
+  }
+  function encodeBasic(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function decode(s){
+    const d=document.createElement('textarea');
+    d.innerHTML=s;
+    return d.value;
+  }
+  let mode='encodeBasic';
+  function render(){
+    const v=$('input').value;
+    let out;
+    if(mode==='encodeBasic'||mode==='encodeAll'){ out=(mode==='encodeAll'?encodeAll:encodeBasic)(v); }
+    else { try{ out=decode(v); }catch(e){ out=''; } }
+    $('output').value=out;
+    $('st').textContent='✓ '+(mode.startsWith('encode')?'编码':'解码')+'完成';
+  }
+  // 按钮栏
+  const bar=document.querySelector('.toolbar');
+  function mk(label,fn){ const b=document.createElement('button'); b.textContent=label; b.onclick=fn; bar.insertBefore(b,$('bCopy')); return b; }
+  mk('编码 &<>',()=>{mode='encodeBasic';render();});
+  mk('编码全部',()=>{mode='encodeAll';render();});
+  mk('解码',()=>{mode='decode';render();});
+  $('bSwap').onclick=()=>{ const i=$('input').value; $('input').value=$('output').value; $('output').value=i; $('st').textContent='⇄ 已互换'; };
+  $('bCopy').onclick=async()=>{ if(!$('output').value){return;} try{ await navigator.clipboard.writeText($('output').value); $('st').textContent='✓ 已复制'; }catch(e){ $('st').textContent='复制失败：'+e.message; } };
+  $('bClear').onclick=()=>{ $('input').value=''; $('output').value=''; mode='encodeBasic'; $('input').focus(); };
+  $('input').addEventListener('input',render);
+  render();
+})();
+</script>
+</body>
+</html>

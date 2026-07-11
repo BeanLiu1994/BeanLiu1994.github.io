@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>进制转换 · Number Base Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:15px;font-family:"SF Mono",monospace;outline:none}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .field label{color:var(--muted);font-size:13px;width:64px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .row .name{width:60px;color:var(--muted);font-size:13px}
+  .row .val{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:"SF Mono",monospace;font-size:14px;word-break:break-all}
+  .row button{margin-left:auto}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔣 进制转换</h1>
+    <div class="sub">2 ~ 36 进制整数互转 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入 Input</div>
+      <div class="field">
+        <label>数值</label>
+        <input type="text" id="value" value="255" placeholder="输入数字">
+      </div>
+      <div class="field">
+        <label>原进制</label>
+        <select id="from">
+          <option>2</option><option>8</option><option selected>10</option><option>16</option><option>36</option>
+        </select>
+        <span class="hint">支持 2~36 进制，字母 A-Z 表示 10~35</span>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">多进制对照 Conversions</div>
+      <div id="rows"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const bases=[2,8,10,16,32,36];
+  function setStatus(m,t){st($('st'),m,t);}
+  function st(el,m,t){el.textContent=m;el.className='status'+(t?' '+t:'');}
+  function convert(){
+    const raw=$('value').value.trim();
+    const from=parseInt($('from').value,10);
+    if(raw===''){ $('rows').innerHTML=''; setStatus('请输入数值'); return; }
+    let dec;
+    try{ dec=parseInt(raw, from); }catch(e){ dec=NaN; }
+    if(isNaN(dec)){ $('rows').innerHTML=''; setStatus('✗ 无法按进制 '+from+' 解析「'+raw+'」','err'); return; }
+    $('rows').innerHTML=bases.map(b=>{
+      const v=dec.toString(b).toUpperCase();
+      return '<div class="row"><span class="name">'+b+' 进制</span><span class="val" id="v'+b+'">'+v+'</span><button onclick="copyVal('+b+')">复制</button></div>';
+    }).join('');
+    $('st').textContent='✓ 十进制：'+dec;
+    $('st').className='status ok';
+  }
+  window.copyVal=async function(b){
+    const v=$('v'+b).textContent;
+    try{ await navigator.clipboard.writeText(v); setStatus('✓ 已复制 '+b+' 进制：'+v,'ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('value').addEventListener('input',convert);
+  $('from').addEventListener('change',convert);
+  $('bClear').onclick=()=>{ $('value').value=''; convert(); $('value').focus(); };
+  $('bCopy').onclick=async()=>{
+    const dec=parseInt($('value').value.trim(), parseInt($('from').value,10));
+    if(isNaN(dec)){setStatus('没有可复制的结果','err');return;}
+    const all=bases.map(b=>b+' 进制: '+dec.toString(b).toUpperCase()).join('\n');
+    try{ await navigator.clipboard.writeText(all); setStatus('✓ 已复制全部进制结果','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  convert();
+})();
+</script>
+</body>
+</html>

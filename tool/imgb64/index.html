@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片 ⇄ Base64 · Image to Base64</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:200px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:12px;line-height:1.5;resize:vertical;outline:none;word-break:break-all}
+  .preview{margin-top:10px;max-height:260px;overflow:auto;background:#fff;border-radius:8px;padding:8px;text-align:center}
+  .preview img{max-width:100%}
+  .drop{border:1.5px dashed var(--border);border-radius:10px;padding:24px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s}
+  .drop:hover{border-color:var(--accent);color:var(--text)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ 图片 ⇄ Base64</h1>
+    <div class="sub">图片转 DataURL / Base64，及反向预览 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制</button>
+    <button id="bDownload">下载</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">图片 → Base64</div>
+      <div class="drop" id="drop">点击或拖拽图片到此处</div>
+      <input type="file" id="file" accept="image/*">
+      <div class="preview" id="imgPreview"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">Base64 / DataURL 输出（粘贴可反向预览）</div>
+      <textarea id="out" placeholder="选择图片后自动生成；也可在此粘贴 data:image/... 反向预览下方图片"></textarea>
+      <div class="hint" id="meta">—</div>
+      <div class="preview" id="urlPreview"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function setStatus(m,t){const el=$('st');el.textContent=m;el.className='status'+(t?' '+t:'');}
+  let mode='img'; // img | url
+  // 图片 -> base64
+  function handleFile(f){
+    if(!f){return;}
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const dataUrl=reader.result;
+      $('out').value=dataUrl;
+      mode='img';
+      $('imgPreview').innerHTML='<img src="'+dataUrl+'">';
+      const kb=(dataUrl.length/1.33/1024).toFixed(1);
+      $('meta').textContent=f.name+' · 约 '+kb+' KB · '+f.type;
+      setStatus('✓ 已转换：'+f.name,'ok');
+    };
+    reader.readAsDataURL(f);
+  }
+  $('drop').onclick=()=>$('file').click();
+  $('file').addEventListener('change',e=>handleFile(e.target.files[0]));
+  ['dragover','dragenter'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--accent)';}));
+  ['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='';}));
+  $('drop').addEventListener('drop',e=>handleFile(e.dataTransfer.files[0]));
+  // base64/url -> preview
+  $('out').addEventListener('input',()=>{
+    const v=$('out').value.trim();
+    if(v.startsWith('data:')){ mode='url'; $('urlPreview').innerHTML='<img src="'+v+'">'; setStatus('✓ 已识别 DataURL'); }
+    else if(/^[A-Za-z0-9+/=]+$/.test(v) && v.length>20){ mode='raw'; $('urlPreview').innerHTML='<img src="data:image/png;base64,'+v+'">'; setStatus('✓ 已按 PNG 预览（若不正确请使用完整 DataURL）'); }
+    else { mode=''; $('urlPreview').innerHTML=''; }
+  });
+  $('bCopy').onclick=async()=>{ if(!$('out').value){return;} try{ await navigator.clipboard.writeText($('out').value); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('bDownload').onclick=()=>{
+    const v=$('out').value.trim();
+    if(!v){setStatus('没有可下载的内容','err');return;}
+    const a=document.createElement('a');
+    if(v.startsWith('data:')){ a.href=v; a.download='image.png'; }
+    else { a.href='data:image/png;base64,'+v; a.download='image.png'; }
+    a.click();
+    setStatus('✓ 已开始下载','ok');
+  };
+})();
+</script>
+</body>
+</html>

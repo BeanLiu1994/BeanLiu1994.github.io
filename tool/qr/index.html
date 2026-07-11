@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>二维码生成器 · QR Code Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  select,input[type=range]{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .field label{color:var(--muted);font-size:13px}
+  .qr-box{display:flex;align-items:center;justify-content:center;min-height:260px;background:#fff;border-radius:10px;padding:14px}
+  .qr-box img{max-width:100%;image-rendering:pixelated}
+  .qr-box .ph{color:#9aa4b2;font-size:14px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔳 二维码生成器</h1>
+    <div class="sub">文本 / 链接 → 二维码 · 纯本地生成 · 数据不上传</div>
+  </div>
+  <div class="toolbar">
+    <button id="bDownload" class="primary">下载 PNG</button>
+    <button id="bCopy">复制图片</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">内容 Content</div>
+      <textarea id="text" placeholder="输入要生成二维码的文本或网址…">https://github.com/BeanLiu1994</textarea>
+    </div>
+    <div class="card">
+      <div class="pane-head">选项 Options</div>
+      <div class="field">
+        <label>纠错级别</label>
+        <select id="ec">
+          <option value="L">L（低 7%）</option>
+          <option value="M" selected>M（中 15%）</option>
+          <option value="Q">Q（较高 25%）</option>
+          <option value="H">H（高 30%）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>尺寸</label>
+        <input type="range" id="size" min="1" max="12" value="6" style="flex:1">
+        <span class="hint" id="sizeHint">6 ×</span>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">预览 Preview</div>
+      <div class="qr-box" id="qrBox"><span class="ph">等待生成…</span></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script src="qrcode.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st'), qrBox=$('qrBox');
+  let currentDataUrl=null;
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function render(){
+    const text=$('text').value;
+    if(!text.trim()){ qrBox.innerHTML='<span class="ph">等待生成…</span>'; currentDataUrl=null; setStatus('请输入内容'); return; }
+    try{
+      const ec=$('ec').value;
+      const cell=parseInt($('size').value,10);
+      const qr=qrcode(0,ec); // typeNumber 0 = 自动
+      qr.addData(text);
+      qr.make();
+      const url=qr.createDataURL(cell,4);
+      currentDataUrl=url;
+      qrBox.innerHTML='<img alt="qr" src="'+url+'">';
+      setStatus('✓ 已生成（型号 '+(qr.getModuleCount())+'×'+qr.getModuleCount()+' 模块）','ok');
+    }catch(e){
+      currentDataUrl=null;
+      qrBox.innerHTML='<span class="ph">内容过长或非法</span>';
+      setStatus('✗ 生成失败：'+e.message,'err');
+    }
+  }
+  $('size').addEventListener('input',()=>{ $('sizeHint').textContent=$('size').value+' ×'; render(); });
+  $('ec').addEventListener('change',render);
+  $('text').addEventListener('input',render);
+  $('bClear').onclick=()=>{ $('text').value=''; render(); $('text').focus(); };
+  $('bDownload').onclick=()=>{
+    if(!currentDataUrl){setStatus('没有可下载的二维码','err');return;}
+    const a=document.createElement('a'); a.href=currentDataUrl; a.download='qrcode.png'; a.click();
+    setStatus('✓ 已开始下载 qrcode.png','ok');
+  };
+  $('bCopy').onclick=async()=>{
+    if(!currentDataUrl){setStatus('没有可复制的二维码','err');return;}
+    try{
+      const blob=await (await fetch(currentDataUrl)).blob();
+      await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+      setStatus('✓ 已复制图片到剪贴板','ok');
+    }catch(e){ setStatus('复制失败（浏览器可能不支持）：'+e.message,'err'); }
+  };
+  render();
+})();
+</script>
+</body>
+</html>
