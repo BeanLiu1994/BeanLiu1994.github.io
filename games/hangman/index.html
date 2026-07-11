@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>猜单词 · Hangman</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#161630; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ffb74d; --accent-glow:#ffb74d66; --danger:#ff4d6a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 20%, #402810 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, #201030 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#ffd9a0,#ffb74d); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 11px; text-align:center; min-width:48px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.05rem; font-weight:700; }
+  .score-card.streak .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:12px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  .stage { display:flex; gap:10px; align-items:center; }
+  canvas { background:var(--board); border-radius:10px; flex:0 0 110px; width:110px; height:140px; }
+  .word { flex:1; display:flex; flex-wrap:wrap; gap:6px; align-content:center; justify-content:center; min-height:60px; }
+  .letter { width:26px; height:34px; display:flex; align-items:center; justify-content:center; font-size:1.3rem; font-weight:800; border-radius:6px; background:var(--board); border-bottom:3px solid var(--accent); color:var(--text); }
+  .letter.hidden { color:transparent; }
+  .info { margin-top:8px; font-size:0.78rem; color:var(--muted); text-align:center; min-height:18px; }
+  .keys { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-top:10px; }
+  .keys button { padding:9px 0; border:1px solid #ffffff12; border-radius:8px; background:var(--surface); color:var(--text); font-size:0.92rem; font-weight:700; cursor:pointer; transition:all .12s; }
+  .keys button:active { transform:scale(.92); }
+  .keys button.good { background:#1e4a32; color:var(--ok); border-color:#2e6a48; }
+  .keys button.bad { background:#4a1e28; color:var(--danger); border-color:#6a2e3a; }
+  .keys button.dis { opacity:.3; pointer-events:none; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a1003; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a1003; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>猜单词</h1><div class="sub">H A N G M A N</div></div>
+    <div class="score-panel">
+      <div class="score-card streak"><div class="label">Streak</div><div class="value" id="streak">0</div></div>
+      <div class="score-card"><div class="label">Wins</div><div class="value" id="wins">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <div class="stage">
+      <canvas id="cv" width="110" height="140"></canvas>
+      <div class="word" id="word"></div>
+    </div>
+    <div class="info" id="info">Guess the hidden word</div>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">You Win!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Next Word</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="keys" id="keys"></div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Word</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI guessing...</span></div>
+  <div class="stats-bar"><span id="wrong-stat">Wrong: 0/6</span><span id="len-stat">Length: 0</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const WORDS=['planet','rocket','guitar','dolphin','castle','wizard','forest','puzzle','shadow','crystal','thunder','marble','silver','anchor','window','bridge','lantern','compass','feather','glacier','umbrella','kitten','sunset','orange','pencil','bottle','rocket','dragon','velvet','walnut','zebra','mango','cookie','rabbit','tunnel','violin','secret','island','mountain','golden'];
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const MAXW=6;
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  class Hangman {
+    constructor(){
+      this.keysEl=document.getElementById('keys'); this.wordEl=document.getElementById('word');
+      this.autoPlay=false; this.autoTimer=null;
+      this.streak=0; this.wins=parseInt(localStorage.getItem('hmWins')||'0');
+      document.getElementById('wins').textContent=this.wins;
+      this.buildKeys(); this.restart();
+    }
+    buildKeys(){
+      this.keysEl.innerHTML='';
+      for(let i=0;i<26;i++){ const b=document.createElement('button'); b.textContent=String.fromCharCode(65+i); b.dataset.l=b.textContent.toLowerCase(); b.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.guess(b.dataset.l); }); this.keysEl.appendChild(b); }
+    }
+    keyEl(l){ for(const b of this.keysEl.children) if(b.dataset.l===l) return b; return null; }
+    restart(){
+      this.stopAuto();
+      this.word=WORDS[Math.floor(Math.random()*WORDS.length)];
+      this.guessed=new Set(); this.wrong=0; this.over=false; this.won=false;
+      document.getElementById('overlay-win').classList.remove('active');
+      document.getElementById('overlay-lose').classList.remove('active');
+      document.getElementById('info').textContent='Guess the hidden word ('+this.word.length+' letters)';
+      document.getElementById('len-stat').textContent='Length: '+this.word.length;
+      this.drawKeys(); this.render(); this.draw();
+    }
+    drawKeys(){
+      for(const b of this.keysEl.children){ b.className=''; if(this.guessed.has(b.dataset.l)){ if(this.word.includes(b.dataset.l)) b.classList.add('good'); else b.classList.add('bad'); } else if(this.over) b.classList.add('dis'); }
+    }
+    guess(l){
+      if(this.autoPlay||this.over||this.guessed.has(l)) return;
+      this.guessed.add(l);
+      if(!this.word.includes(l)){ this.wrong++; }
+      this.drawKeys(); this.render(); this.draw();
+      const solved=this.word.split('').every(ch=>this.guessed.has(ch));
+      if(solved){ this.won=true; this.over=true; this.win(); }
+      else if(this.wrong>=MAXW){ this.over=true; this.lose(); }
+    }
+    win(){
+      this.streak++; this.wins++; localStorage.setItem('hmWins',String(this.wins));
+      document.getElementById('streak').textContent=this.streak;
+      document.getElementById('wins').textContent=this.wins;
+      document.getElementById('win-title').textContent=this.streak>1?('Streak x'+this.streak+'!'):'You Win!';
+      document.getElementById('win-msg').textContent='The word was "'+this.word.toUpperCase()+'"';
+      document.getElementById('overlay-win').classList.add('active');
+      if(this.autoPlay) this.stopAuto();
+    }
+    lose(){
+      this.streak=0; document.getElementById('streak').textContent='0';
+      document.getElementById('lose-msg').textContent='The word was "'+this.word.toUpperCase()+'"';
+      document.getElementById('overlay-lose').classList.add('active');
+      if(this.autoPlay) this.stopAuto();
+    }
+    render(){
+      this.wordEl.innerHTML='';
+      for(const ch of this.word){ const d=document.createElement('div'); d.className='letter'+(this.guessed.has(ch)?'':' hidden'); d.textContent=ch; this.wordEl.appendChild(d); }
+      document.getElementById('wrong-stat').textContent='Wrong: '+this.wrong+'/'+MAXW;
+    }
+    draw(){
+      ctx.clearRect(0,0,110,140);
+      ctx.strokeStyle='#ffb74d'; ctx.lineWidth=3; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(20,135); ctx.lineTo(95,135); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(35,135); ctx.lineTo(35,15); ctx.lineTo(70,15); ctx.lineTo(70,28); ctx.stroke();
+      const parts=this.wrong;
+      if(parts>=1){ ctx.beginPath(); ctx.arc(70,40,12,0,7); ctx.stroke(); }
+      if(parts>=2){ ctx.beginPath(); ctx.moveTo(70,52); ctx.lineTo(70,88); ctx.stroke(); }
+      if(parts>=3){ ctx.beginPath(); ctx.moveTo(70,60); ctx.lineTo(55,76); ctx.stroke(); }
+      if(parts>=4){ ctx.beginPath(); ctx.moveTo(70,60); ctx.lineTo(85,76); ctx.stroke(); }
+      if(parts>=5){ ctx.beginPath(); ctx.moveTo(70,88); ctx.lineTo(58,116); ctx.stroke(); }
+      if(parts>=6){ ctx.beginPath(); ctx.moveTo(70,88); ctx.lineTo(82,116); ctx.stroke(); }
+    }
+    // ---- auto ----
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){
+      if(!this.autoPlay||this.over) return;
+      const correct=this.word.split('').filter(ch=>this.guessed.has(ch));
+      const wrongL=this.word.split('').filter(ch=>!this.word.includes(ch)); // none
+      const guessedArr=[...this.guessed];
+      // candidate filter
+      const cands=WORDS.filter(w=>{
+        if(w.length!==this.word.length) return false;
+        for(let i=0;i<w.length;i++){ const ch=w[i]; if(correct.includes(ch)){ if(ch!==this.word[i]) return false; } else { if(guessedArr.includes(ch)) return false; } }
+        return true;
+      });
+      const pool = cands.length? cands : WORDS.filter(w=>w.length===this.word.length);
+      const freq={};
+      for(const w of pool) for(const ch of new Set(w)) if(!this.guessed.has(ch)) freq[ch]=(freq[ch]||0)+1;
+      let best=null,bv=-1; for(const ch in freq){ if(freq[ch]>bv){ bv=freq[ch]; best=ch; } }
+      if(!best){ this.stopAuto(); return; }
+      document.getElementById('ai-status').textContent='AI guesses "'+best.toUpperCase()+'"';
+      this.guess(best);
+      if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),750);
+    }
+  }
+  window.game=new Hangman();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>数字华容道 · Slide</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#101830; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#7c5cfc; --accent-glow:#7c5cfc66; --danger:#ff4d6a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 20%, #251040 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, #102040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:400px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#b388ff,#7c5cfc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 11px; text-align:center; min-width:48px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  .board { position:relative; width:356px; height:356px; max-width:100%; margin:0 auto; border-radius:10px; background:var(--board); }
+  .tile { position:absolute; top:0; left:0; width:78px; height:78px; display:flex; align-items:center; justify-content:center;
+    border-radius:12px; font-size:1.7rem; font-weight:800; color:#fff; cursor:pointer;
+    background:linear-gradient(135deg,var(--accent),#b388ff); box-shadow:0 4px 12px #00000050, inset 0 1px 0 #ffffff40;
+    transition:transform .18s cubic-bezier(.25,.8,.3,1); will-change:transform; }
+  .tile:active { transform-origin:center; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; color:var(--gold); }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#fff; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>数字华容道</h1><div class="sub">S L I D E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Moves</div><div class="value" id="moves">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Solved!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">New Puzzle</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI solving...</span></div>
+  <div class="stats-bar"><span id="left-stat">Solved: 0%</span><span id="tgt-stat">Goal → 1..15</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const PAD=10, CELL=78, GAP=8;
+  const board=document.getElementById('board');
+  const DELTA={up:-4,down:4,left:-1,right:1};
+  const OPP={up:'down',down:'up',left:'right',right:'left'};
+
+  class Slide {
+    constructor(){
+      this.tiles={}; this.best=parseInt(localStorage.getItem('slideBest')||'0');
+      this.autoPlay=false; this.autoTimer=null; this.autoIdx=0; this.autoMoves=null;
+      this.build();
+      document.getElementById('best').textContent=this.best?this.best:'--';
+      this.restart();
+    }
+    build(){
+      board.innerHTML='';
+      for(let v=1;v<=15;v++){ const t=document.createElement('div'); t.className='tile'; t.textContent=v;
+        t.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.click(v); });
+        board.appendChild(t); this.tiles[v]=t; }
+    }
+    posFor(i){ const col=i%4, row=(i/4|0); return { x:PAD+col*(CELL+GAP), y:PAD+row*(CELL+GAP) }; }
+    render(){
+      for(let v=1;v<=15;v++){ const i=this.grid.indexOf(v); const p=this.posFor(i); this.tiles[v].style.transform='translate('+p.x+'px,'+p.y+'px)'; }
+      let correct=0; for(let i=0;i<15;i++) if(this.grid[i]===i+1) correct++;
+      document.getElementById('left-stat').textContent='Solved: '+Math.round(correct/15*100)+'%';
+      document.getElementById('moves').textContent=this.moves;
+    }
+    move(dir){
+      const d=DELTA[dir]; let t=this.empty+d;
+      if(dir==='up'&&this.empty<4) return false;
+      if(dir==='down'&&this.empty>11) return false;
+      if(dir==='left'&&this.empty%4===0) return false;
+      if(dir==='right'&&this.empty%4===3) return false;
+      this.grid[this.empty]=this.grid[t]; this.grid[t]=0; this.empty=t; return true;
+    }
+    click(v){
+      if(this.autoPlay||this.over) return;
+      const i=this.grid.indexOf(v); const er=(this.empty/4|0), ec=this.empty%4, r=(i/4|0), c=i%4;
+      if(Math.abs(er-r)+Math.abs(ec-c)!==1) return;
+      let dir = (r<er)?'down':(r>er)?'up':(c<ec)?'right':'left';
+      this.move(dir); this.moves++; this.render();
+      if(this.solved()) this.win();
+    }
+    solved(){ for(let i=0;i<15;i++) if(this.grid[i]!==i+1) return false; return this.grid[15]===0; }
+    scramble(){
+      this.grid=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0]; this.empty=15; this.M=[];
+      let last=null;
+      for(let k=0;k<90;k++){ const opts=[];
+        for(const dir in DELTA){ const d=DELTA[dir]; let t=this.empty+d; if(dir==='up'&&this.empty<4)continue; if(dir==='down'&&this.empty>11)continue; if(dir==='left'&&this.empty%4===0)continue; if(dir==='right'&&this.empty%4===3)continue; if(dir===OPP[last])continue; opts.push(dir); }
+        const dir=opts[Math.floor(Math.random()*opts.length)]; this.move(dir); this.M.push(dir); last=dir;
+      }
+      if(this.solved()) this.scramble();
+    }
+    win(){
+      this.over=true;
+      if(!this.best || this.moves<this.best){ this.best=this.moves; localStorage.setItem('slideBest',String(this.best)); document.getElementById('best').textContent=this.best; }
+      document.getElementById('win-msg').textContent='Solved in '+this.moves+' moves';
+      document.getElementById('overlay-win').classList.add('active');
+    }
+    restart(){
+      this.stopAuto(); this.over=false; this.moves=0;
+      this.scramble();
+      document.getElementById('overlay-win').classList.remove('active');
+      this.render();
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoIdx=this.M.length-1; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){
+      if(!this.autoPlay) return;
+      if(this.autoIdx<0){ this.win(); this.stopAuto(); return; }
+      const dir=OPP[this.M[this.autoIdx]]; this.move(dir); this.autoIdx--; this.moves++; this.render();
+      document.getElementById('ai-status').textContent='AI step '+(this.M.length-this.autoIdx)+'/'+this.M.length;
+      this.autoTimer=setTimeout(()=>this.autoStep(),240);
+    }
+  }
+  window.game=new Slide();
+})();
+</script>
+</body>
+</html>

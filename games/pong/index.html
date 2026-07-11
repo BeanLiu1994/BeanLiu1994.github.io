@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹乒乓 · Pong</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dffd0; --accent-glow:#4dffd066; --danger:#ff4d6a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 30% 30%, #103a30 0%, transparent 55%), radial-gradient(ellipse at 70% 70%, #301030 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#a0fff0,#4dffd0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.you .value { color:var(--accent); } .score-card.ai .value { color:var(--danger); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:pointer; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#021410; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#021410; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹乒乓</h1><div class="sub">N E O N &nbsp; P O N G</div></div>
+    <div class="score-panel">
+      <div class="score-card you"><div class="label">You</div><div class="value" id="score-you">0</div></div>
+      <div class="score-card ai"><div class="label">AI</div><div class="value" id="score-ai">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="420" height="520"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">You Win!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI rallying...</span></div>
+  <div class="stats-bar"><span id="rally-stat">Rally: 0</span><span id="target-stat">First to 7</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=420,H=520;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const PH=74, PW=12, WIN=7;
+
+  class Pong {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
+      this.you={y:H/2}; this.ai={y:H/2}; this.targetY=H/2; this.rally=0;
+      this.loop=this.loop.bind(this);
+      this.bind(); this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    reset(){ this.ball={ x:W/2, y:H/2, vx:(Math.random()<.5?-1:1)*4.4, vy:(Math.random()*2-1)*2.2 }; this.rally=0; this.updateUI(); }
+    restart(){
+      this.stopAuto();
+      this.youS=0; this.aiS=0; this.over=false;
+      this.you.y=H/2; this.ai.y=H/2; this.targetY=H/2;
+      document.getElementById('overlay-win').classList.remove('active');
+      document.getElementById('overlay-lose').classList.remove('active');
+      this.reset();
+    }
+    updateUI(){ document.getElementById('score-you').textContent=this.youS; document.getElementById('score-ai').textContent=this.aiS; document.getElementById('rally-stat').textContent='Rally: '+this.rally; }
+    aiMovePaddle(p,target,dt){ const sp=7.2*dt; if(p.y<target) p.y=Math.min(target,p.y+sp); else p.y=Math.max(target,p.y-sp); p.y=Math.max(PH/2,Math.min(H-PH/2,p.y)); }
+    step(dt){
+      if(this.over) return;
+      const b=this.ball;
+      // paddles
+      if(this.autoPlay) this.targetY=b.y;
+      this.aiMovePaddle(this.ai,b.y,dt);
+      this.aiMovePaddle(this.you,this.targetY,dt);
+      // ball
+      b.x+=b.vx*dt; b.y+=b.vy*dt;
+      if(b.y<12){ b.y=12; b.vy=Math.abs(b.vy); }
+      if(b.y>H-12){ b.y=H-12; b.vy=-Math.abs(b.vy); }
+      // left paddle
+      if(b.vx<0 && b.x-10< PW+8 && b.x> PW && Math.abs(b.y-this.you.y)<PH/2+10){ const off=(b.y-this.you.y)/(PH/2); b.vx=Math.abs(b.vx)+0.25; b.vy=off*5; b.x=PW+8+10; this.rally++; this.updateUI(); }
+      // right paddle
+      if(b.vx>0 && b.x+10> W-PW-8 && b.x<W-PW && Math.abs(b.y-this.ai.y)<PH/2+10){ const off=(b.y-this.ai.y)/(PH/2); b.vx=-(Math.abs(b.vx)+0.25); b.vy=off*5; b.x=W-PW-8-10; this.rally++; this.updateUI(); }
+      // scoring
+      if(b.x< -10){ this.aiS++; this.score('ai'); }
+      else if(b.x> W+10){ this.youS++; this.score('you'); }
+    }
+    score(who){ this.updateUI();
+      if(this.youS>=WIN || this.aiS>=WIN){ this.over=true; this.finish(); }
+      else setTimeout(()=>{ if(!this.over) this.reset(); }, 700);
+    }
+    finish(){ if(this.autoPlay) this.stopAuto();
+      const win=document.getElementById('overlay-win'), lose=document.getElementById('overlay-lose');
+      if(this.youS>this.aiS){ document.getElementById('win-title').textContent='You Win!'; document.getElementById('win-msg').textContent=this.youS+' — '+this.aiS; win.classList.add('active'); }
+      else { document.getElementById('lose-msg').textContent=this.youS+' — '+this.aiS; lose.classList.add('active'); }
+    }
+    loop(now){
+      const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='#1c2a4a'; ctx.lineWidth=2; ctx.setLineDash([8,12]);
+      ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke(); ctx.setLineDash([]);
+      ctx.shadowColor='#4dffd0'; ctx.shadowBlur=12; ctx.fillStyle='#4dffd0';
+      ctx.fillRect(4, this.you.y-PH/2, PW, PH);
+      ctx.shadowColor='#ff4d6a'; ctx.fillStyle='#ff4d6a'; ctx.fillRect(W-PW-4, this.ai.y-PH/2, PW, PH);
+      ctx.shadowColor='#fff'; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,8,0,7); ctx.fill(); ctx.shadowBlur=0;
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI controls both paddles'; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){
+      canvas.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over) return; const rect=canvas.getBoundingClientRect(); this.targetY=(e.clientY-rect.top)/rect.height*H; });
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; const rect=canvas.getBoundingClientRect(); this.targetY=(e.clientY-rect.top)/rect.height*H; });
+    }
+  }
+  window.game=new Pong();
+})();
+</script>
+</body>
+</html>

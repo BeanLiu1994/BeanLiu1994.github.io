@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>数独 · Sudoku</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#101830; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#b388ff; --accent-glow:#b388ff66; --danger:#ff4d6a; --gold:#ffd700; --ok:#3ecf8e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 20%, #251040 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, #102040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#dcc4ff,#b388ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 11px; text-align:center; min-width:50px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  #grid { display:grid; grid-template-columns:repeat(9,1fr); gap:2px; background:#2a2150; padding:3px; border-radius:8px; }
+  .cell { aspect-ratio:1; display:flex; align-items:center; justify-content:center; background:var(--board); border-radius:4px; font-size:1.15rem; font-weight:700; color:var(--text); cursor:pointer; transition:background .12s, box-shadow .12s; }
+  .cell.fixed { color:var(--accent); cursor:default; }
+  .cell.sel { background:#2a2150; box-shadow:inset 0 0 0 2px var(--accent); }
+  .cell.peer { background:#1a1638; }
+  .cell.conflict { color:var(--danger); }
+  .cell.same { background:#1e2a4a; }
+  .cell.bthick { border-right:2px solid #4a3a8a; }
+  .cell.rbthick { border-bottom:2px solid #4a3a8a; }
+  .cell.fill { animation:fillpop .3s ease-out; }
+  @keyframes fillpop { 0%{transform:scale(.4); box-shadow:0 0 14px var(--accent);} 100%{transform:scale(1);} }
+  .pad { display:grid; grid-template-columns:repeat(9,1fr); gap:5px; margin-top:12px; }
+  .pad button, .ern { padding:11px 0; border:1px solid #ffffff12; border-radius:9px; background:var(--surface); color:var(--text); font-size:1rem; font-weight:700; cursor:pointer; transition:all .15s; }
+  .pad button:active { transform:scale(.94); background:var(--accent); color:#0a0a1a; }
+  .pad button.used { opacity:.32; }
+  .row2 { display:flex; gap:8px; margin-top:8px; }
+  .ern { flex:1; font-size:.82rem; font-weight:600; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; color:var(--gold); }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0a0a1a; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a0a1a; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  @media (max-width:420px){ .cell{font-size:.95rem;} .title-block h1{font-size:1.3rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>数独</h1><div class="sub">S U D O K U</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Time</div><div class="value" id="time">0:00</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <div id="grid"></div>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Solved!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">New Puzzle</button></div></div>
+  </div>
+  <div class="pad" id="pad"></div>
+  <div class="row2">
+    <button class="ern" onclick="game.erase()">⌫ Erase</button>
+    <button class="ern" onclick="game.hint()">💡 Hint</button>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI solving...</span></div>
+  <div class="stats-bar"><span id="left-stat">Empty: 45</span><span id="mist-stat">Mistakes: 0</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=9;
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function genFull(){
+    const g=Array.from({length:N},()=>Array(N).fill(0));
+    function ok(r,c,v){ for(let i=0;i<N;i++) if(g[r][i]===v||g[i][c]===v) return false; const br=(r/3|0)*3, bc=(c/3|0)*3; for(let i=0;i<3;i++)for(let j=0;j<3;j++) if(g[br+i][bc+j]===v) return false; return true; }
+    function fill(pos){ if(pos===81) return true; const r=(pos/9|0), c=pos%9; if(g[r][c]!==0) return fill(pos+1); for(const v of shuffle([1,2,3,4,5,6,7,8,9])){ if(ok(r,c,v)){ g[r][c]=v; if(fill(pos+1)) return true; g[r][c]=0; } } return false; }
+    fill(0); return g;
+  }
+  function conflicts(grid,r,c,v){
+    for(let i=0;i<N;i++) if(i!==c && grid[r][i]===v) return true;
+    for(let i=0;i<N;i++) if(i!==r && grid[i][c]===v) return true;
+    const br=(r/3|0)*3, bc=(c/3|0)*3;
+    for(let i=0;i<3;i++)for(let j=0;j<3;j++){ const rr=br+i, cc=bc+j; if((rr!==r||cc!==c) && grid[rr][cc]===v) return true; }
+    return false;
+  }
+
+  class Sudoku {
+    constructor(){
+      this.grid=document.getElementById('grid'); this.pad=document.getElementById('pad');
+      this.timer=0; this.ticking=false; this.tickTimer=null;
+      this.autoPlay=false; this.autoTimer=null;
+      this.buildPad(); this.buildGrid();
+      this.best=parseInt(localStorage.getItem('bestSudoku')||'0');
+      this.updateBest();
+      this.restart();
+    }
+    buildGrid(){
+      this.grid.innerHTML='';
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        const d=document.createElement('div'); d.className='cell'+(c%3===2&&c!==8?' bthick':'')+(r%3===2&&r!==8?' rbthick':'');
+        d.dataset.r=r; d.dataset.c=c;
+        d.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.select(r,c); });
+        this.grid.appendChild(d);
+      }
+    }
+    buildPad(){
+      this.pad.innerHTML='';
+      for(let n=1;n<=9;n++){ const b=document.createElement('button'); b.textContent=n; b.dataset.n=n; b.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.input(n); }); this.pad.appendChild(b); }
+    }
+    cellEl(r,c){ return this.grid.children[r*N+c]; }
+    restart(){
+      this.stopAuto();
+      const sol=genFull(); this.solution=sol;
+      this.puzzle=sol.map(row=>row.slice());
+      const remove=46; const idx=shuffle([...Array(81).keys()]).slice(0,remove);
+      for(const k of idx) this.puzzle[(k/9|0)][k%9]=0;
+      this.user=this.puzzle.map(row=>row.slice());
+      this.fixed=this.puzzle.map(row=>row.map(v=>v!==0));
+      this.sel=null; this.mistakes=0; this.startTime=0; this.timer=0; this.ticking=false;
+      if(this.tickTimer){ clearInterval(this.tickTimer); this.tickTimer=null; }
+      document.getElementById('overlay-win').classList.remove('active');
+      this.render();
+    }
+    startTick(){ if(this.ticking) return; this.ticking=true; this.startTime=Date.now? performance.now():0; this.startTime=performance.now(); this.tickTimer=setInterval(()=>{ this.timer=(performance.now()-this.startTime)/1000; this.renderTime(); },250); }
+    renderTime(){ const t=Math.floor(this.timer); document.getElementById('time').textContent=Math.floor(t/60)+':'+('0'+(t%60)).slice(-2); }
+    select(r,c){ if(this.fixed[r][c]) { this.sel=null; } else this.sel=[r,c]; this.render(); }
+    input(n){ if(this.autoPlay||!this.sel) return; const [r,c]=this.sel; if(this.fixed[r][c]) return; this.startTick();
+      if(this.user[r][c]!==0 && !conflicts(this.user,r,c,n) && this.solution[r][c]!==n) this.mistakes++;
+      this.user[r][c]=n; this.afterMove(); }
+    erase(){ if(this.autoPlay||!this.sel) return; const [r,c]=this.sel; if(this.fixed[r][c]) return; this.user[r][c]=0; this.afterMove(); }
+    hint(){ if(this.autoPlay||!this.sel) return; const [r,c]=this.sel; if(this.fixed[r][c]) return; this.startTick(); this.user[r][c]=this.solution[r][c]; this.afterMove(); }
+    afterMove(){
+      let full=true, ok=true;
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if(this.user[r][c]===0){ full=false; } else if(this.user[r][c]!==this.solution[r][c]){ ok=false; } }
+      this.render();
+      if(full && ok){ this.win(); }
+    }
+    win(){
+      this.ticking=false; if(this.tickTimer){ clearInterval(this.tickTimer); this.tickTimer=null; }
+      const t=Math.floor(this.timer);
+      if(!this.best || t<this.best){ this.best=t; localStorage.setItem('bestSudoku',String(t)); }
+      this.updateBest();
+      document.getElementById('win-msg').textContent='Time '+Math.floor(t/60)+':'+('0'+(t%60)).slice(-2);
+      document.getElementById('overlay-win').classList.add('active');
+    }
+    updateBest(){ document.getElementById('best').textContent = this.best? (Math.floor(this.best/60)+':'+('0'+(this.best%60)).slice(-2)) : '--'; }
+    render(){
+      const sel=this.sel; const selVal=sel?this.user[sel[0]][sel[1]]:0;
+      let empty=0;
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        const el=this.cellEl(r,c); const v=this.user[r][c];
+        if(v===0) empty++;
+        el.textContent = v? v : '';
+        el.className='cell'+(c%3===2&&c!==8?' bthick':'')+(r%3===2&&r!==8?' rbthick':'');
+        if(this.fixed[r][c]) el.classList.add('fixed');
+        if(sel && sel[0]===r && sel[1]===c) el.classList.add('sel');
+        else if(sel && (sel[0]===r || sel[1]===c || ((sel[0]/3|0)===(r/3|0) && (sel[1]/3|0)===(c/3|0)))) el.classList.add('peer');
+        if(selVal && v===selVal && !(sel[0]===r&&sel[1]===c)) el.classList.add('same');
+        if(v!==0 && conflicts(this.user,r,c,v)) el.classList.add('conflict');
+      }
+      document.getElementById('left-stat').textContent='Empty: '+empty;
+      document.getElementById('mist-stat').textContent='Mistakes: '+this.mistakes;
+      for(const b of this.pad.children){ const n=+b.dataset.n; let cnt=0; for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(this.user[r][c]===n) cnt++; b.classList.toggle('used', cnt>=9); }
+    }
+    // ---- auto solver ----
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(document.getElementById('overlay-win').classList.contains('active')) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    autoStep(){
+      if(!this.autoPlay) return;
+      let done=true, target=null;
+      for(let r=0;r<N && !target;r++) for(let c=0;c<N;c++){ if(this.user[r][c]===0){ done=false; if(!target) target=[r,c]; } }
+      if(done){ this.win(); this.stopAuto(); return; }
+      const [r,c]=target; this.user[r][c]=this.solution[r][c];
+      const el=this.cellEl(r,c); el.classList.add('fill'); setTimeout(()=>el.classList.remove('fill'),320);
+      document.getElementById('ai-status').textContent='AI fills ('+(r+1)+','+(c+1)+') = '+this.solution[r][c];
+      this.render();
+      this.autoTimer=setTimeout(()=>this.autoStep(),170);
+    }
+  }
+  window.game=new Sudoku();
+})();
+</script>
+</body>
+</html>

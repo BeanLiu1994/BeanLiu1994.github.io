@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>飞镖大师 · Darts</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1a28; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ff9f43; --accent-glow:#ff9f4366; --danger:#ff4d6a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 30% 20%, #3a2008 0%, transparent 55%), radial-gradient(ellipse at 70% 80%, #102a40 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:420px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#ffd08a,#ff9f43); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 11px; text-align:center; min-width:48px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:crosshair; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; color:var(--gold); }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0a02; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0a02; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>飞镖大师</h1><div class="sub">D A R T S</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Total</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="360" height="440"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI aiming...</span></div>
+  <div class="stats-bar"><span id="round-stat">Round 1/3</span><span id="dart-stat">Dart 1/5</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=360,H=440, CX=W/2, CY=H/2, ROUT=120, RIN=34, RBULL=13;
+  const NUM=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+
+  class Darts {
+    constructor(){
+      this.best=parseInt(localStorage.getItem('dartsBest')||'0');
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
+      this.flashes=[]; this.dart=null; this.nextThrow=0; this.t=0;
+      this.aim={x:CX,y:CY}; this.bind();
+      this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop.bind(this));
+    }
+    restart(){
+      this.stopAuto();
+      this.total=0; this.round=1; this.dartInRound=1; this.over=false;
+      this.dart=null; this.nextThrow=0; this.flashes=[]; this.aim={x:CX,y:CY};
+      document.getElementById('overlay-win').classList.remove('active');
+      this.updateUI();
+    }
+    updateUI(){ document.getElementById('score').textContent=this.total; document.getElementById('best').textContent=this.best;
+      document.getElementById('round-stat').textContent='Round '+this.round+'/3';
+      document.getElementById('dart-stat').textContent='Dart '+this.dartInRound+'/5'; }
+    throwDart(){
+      if(this.dart||this.over) return;
+      const spread = this.autoPlay? 10 : 22;
+      const tx=this.aim.x + (Math.random()*2-1)*spread;
+      const ty=this.aim.y + (Math.random()*2-1)*spread;
+      this.dart={x0:CX,y0:H+20,x1:tx,y1:ty,p:0,score:0};
+    }
+    land(){
+      const d=this.dart; const dx=d.x1-CX, dy=d.y1-CY, dist=Math.hypot(dx,dy);
+      let s=0;
+      if(dist<=RBULL) s=50; else if(dist<=RIN) s=25;
+      else if(dist<=ROUT){ const a=Math.atan2(dy,dx); let i=Math.floor(((a+Math.PI)/(2*Math.PI))*20)%20; if(i<0)i+=20; s=NUM[i]; }
+      d.score=s; this.total+=s; this.flashes.push({x:d.x1,y:d.y1,t:1});
+      this.dartInRound++; if(this.dartInRound>5){ this.dartInRound=1; this.round++; }
+      if(this.round>3){ this.round=3; this.over=true; this.finish(); }
+      this.dart=null; this.updateUI();
+    }
+    finish(){ if(this.autoPlay) this.stopAuto();
+      if(this.total>this.best){ this.best=this.total; localStorage.setItem('dartsBest',String(this.best)); }
+      document.getElementById('win-msg').textContent='Total score: '+this.total;
+      document.getElementById('overlay-win').classList.add('active'); }
+    loop(now){
+      const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now; this.t+=dt;
+      // aim
+      if(this.autoPlay){ const ox=Math.sin(this.t*0.05)*6; this.aim.x=CX+ox; this.aim.y=CY+Math.cos(this.t*0.07)*6; }
+      // auto throw
+      if(this.autoPlay && !this.dart && !this.over && now>=this.nextThrow){ this.throwDart(); this.nextThrow=now+850; }
+      if(this.dart){ this.dart.p+=0.06*dt; if(this.dart.p>=1) this.land(); }
+      for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].t-=0.04*dt; if(this.flashes[i].t<=0) this.flashes.splice(i,1); }
+      this.draw();
+      this.raf=requestAnimationFrame(this.loop.bind(this));
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      for(let i=0;i<20;i++){ const a0=Math.PI*2*i/20 - Math.PI/2, a1=a0+Math.PI*2/20;
+        ctx.beginPath(); ctx.moveTo(CX,CY); ctx.arc(CX,CY,ROUT,a0,a1); ctx.closePath();
+        ctx.fillStyle = i%2? '#16243a':'#1d2f48'; ctx.fill();
+        ctx.strokeStyle='#0e1626'; ctx.lineWidth=1; ctx.stroke();
+        const am=(a0+a1)/2, lr=ROUT+14; ctx.fillStyle='#9fb4d0'; ctx.font='11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(NUM[i], CX+Math.cos(am)*lr, CY+Math.sin(am)*lr);
+      }
+      // rings
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(CX,CY,RIN,0,7); ctx.strokeStyle='#ff4d6a'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(CX,CY,RBULL,0,7); ctx.fillStyle='#ff4d6a'; ctx.fill();
+      ctx.beginPath(); ctx.arc(CX,CY,RBULL*0.5,0,7); ctx.fillStyle='#3ecf8e'; ctx.fill();
+      // flashes
+      for(const f of this.flashes){ ctx.beginPath(); ctx.arc(f.x,f.y,(1-f.t)*22+4,0,7); ctx.strokeStyle='rgba(255,159,67,'+f.t+')'; ctx.lineWidth=3; ctx.stroke(); }
+      // aim
+      if(!this.over){ const ax=this.aim.x, ay=this.aim.y; ctx.strokeStyle='rgba(255,215,0,0.9)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(ax-12,ay); ctx.lineTo(ax+12,ay); ctx.moveTo(ax,ay-12); ctx.lineTo(ax,ay+12); ctx.stroke();
+        ctx.beginPath(); ctx.arc(ax,ay,5,0,7); ctx.stroke(); }
+      // flying dart
+      if(this.dart){ const p=this.dart.p; const x=this.dart.x0+(this.dart.x1-this.dart.x0)*p, y=this.dart.y0+(this.dart.y1-this.dart.y0)*p;
+        ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x-10,y-10); ctx.lineTo(x,y); ctx.stroke();
+        ctx.fillStyle='#ff9f43'; ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill(); }
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.nextThrow=0; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){
+      canvas.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect(); this.aim.x=(e.clientX-r.left)/r.width*W; this.aim.y=(e.clientY-r.top)/r.height*H; });
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect(); this.aim.x=(e.clientX-r.left)/r.width*W; this.aim.y=(e.clientY-r.top)/r.height*H; this.throwDart(); });
+    }
+  }
+  window.game=new Darts();
+})();
+</script>
+</body>
+</html>

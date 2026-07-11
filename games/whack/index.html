@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>打地鼠 · Whack-a-Mole</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#161033; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ffd166; --accent-glow:#ffd16666; --danger:#ff4d6a; --gold:#ffd700; --ok:#3ecf8e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 30% 20%, #3a2a10 0%, transparent 55%), radial-gradient(ellipse at 70% 80%, #102a40 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#ffe9a0,#ffd166); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 11px; text-align:center; min-width:50px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .score-card.combo .value { color:var(--accent); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .hole { position:relative; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle at 50% 35%, #2a1c44, #140a26); box-shadow:inset 0 8px 16px #00000080, inset 0 -4px 8px #ffffff10; overflow:hidden; cursor:pointer; }
+  .mole { position:absolute; left:50%; bottom:-78%; width:74%; height:74%; transform:translateX(-50%); border-radius:50% 50% 42% 42%; background:linear-gradient(135deg,#b06a3a,#7a4422); box-shadow:0 -2px 6px #00000060; transition:bottom .14s cubic-bezier(.2,1.4,.4,1); }
+  .mole::before { content:''; position:absolute; left:18%; top:30%; width:18%; height:18%; border-radius:50%; background:#1a0e06; box-shadow:46% 0 0 #1a0e06; }
+  .mole::after { content:''; position:absolute; left:30%; top:62%; width:40%; height:10%; border-radius:6px; background:#1a0e06; }
+  .hole.up .mole { bottom:8%; }
+  .hole.hit .mole { bottom:8%; background:linear-gradient(135deg,#ffd166,#ff8a5b); }
+  .hole.hit { animation:hitflash .25s; }
+  @keyframes hitflash { 0%{box-shadow:inset 0 0 0 3px var(--accent),0 0 24px var(--accent);} 100%{box-shadow:inset 0 8px 16px #00000080;} }
+  .timebar { height:6px; border-radius:4px; background:#ffffff14; margin-top:10px; overflow:hidden; }
+  .timebar i { display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--ok)); width:100%; transition:width .12s linear; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; color:var(--gold); }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a1203; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a1203; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>打地鼠</h1><div class="sub">W H A C K</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card combo"><div class="label">Combo</div><div class="value" id="combo">x0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <div class="grid" id="grid"></div>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Time's Up!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+  <div class="timebar"><i id="timebar"></i></div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI whacking...</span></div>
+  <div class="stats-bar"><span id="hit-stat">Hits: 0</span><span id="left-stat">Left: 30s</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const DUR=30000;
+  const gridEl=document.getElementById('grid');
+  const holes=[];
+  class Whack {
+    constructor(){
+      this.best=parseInt(localStorage.getItem('whBest')||'0');
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
+      this.build();
+      document.getElementById('best').textContent=this.best;
+      this.loop=this.loop.bind(this);
+      this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    build(){
+      gridEl.innerHTML='';
+      for(let i=0;i<9;i++){ const h=document.createElement('div'); h.className='hole';
+        const m=document.createElement('div'); m.className='mole'; h.appendChild(m);
+        h.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.whack(i); });
+        gridEl.appendChild(h); holes.push(h); }
+    }
+    restart(){
+      this.stopAuto();
+      this.score=0; this.combo=0; this.hits=0; this.over=false;
+      this.timeLeft=DUR; this.nextSpawn=0; this.nextAuto=0;
+      for(const h of holes){ h.className='hole'; h.classList.remove('hit'); }
+      document.getElementById('overlay-win').classList.remove('active');
+      this.updateUI();
+    }
+    updateUI(){ document.getElementById('score').textContent=this.score; document.getElementById('combo').textContent='x'+this.combo; document.getElementById('best').textContent=this.best; document.getElementById('hit-stat').textContent='Hits: '+this.hits; document.getElementById('left-stat').textContent='Left: '+Math.ceil(this.timeLeft/1000)+'s'; document.getElementById('timebar').style.width=(this.timeLeft/DUR*100)+'%'; }
+    whack(i){
+      if(this.over) return;
+      const h=holes[i];
+      if(h.classList.contains('up')){ h.classList.remove('up'); h.classList.add('hit'); setTimeout(()=>h.classList.remove('hit'),250);
+        this.combo++; this.hits++; const gain=10*this.combo; this.score+=gain; if(this.score>this.best){ this.best=this.score; localStorage.setItem('whBest',String(this.best)); }
+      } else { this.combo=0; }
+      this.updateUI();
+    }
+    loop(now){
+      const dt=Math.max(0, now-this.last); this.last=now;
+      if(!this.over){
+        this.timeLeft-=dt; if(this.timeLeft<=0){ this.timeLeft=0; this.over=true; this.finish(); }
+        if(now>=this.nextSpawn && !this.over){
+          const free=[]; for(let i=0;i<9;i++) if(!holes[i].classList.contains('up')) free.push(i);
+          if(free.length){ const i=free[Math.floor(Math.random()*free.length)]; holes[i].classList.add('up'); setTimeout(()=>{ if(holes[i].classList.contains('up')){ holes[i].classList.remove('up'); if(this.combo>0&&!this.autoPlay) this.combo=0; this.updateUI(); } }, 700+Math.random()*500); }
+          this.nextSpawn=now+420+Math.random()*360;
+        }
+        if(this.autoPlay && now>=this.nextAuto){
+          let up=-1; for(let i=0;i<9;i++) if(holes[i].classList.contains('up')){ up=i; break; }
+          if(up>=0){ this.whack(up); this.nextAuto=now+160; } else this.nextAuto=now+50;
+        }
+        this.updateUI();
+      }
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    finish(){ if(this.autoPlay) this.stopAuto(); document.getElementById('win-msg').textContent='Score '+this.score+' · Hits '+this.hits; document.getElementById('overlay-win').classList.add('active'); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.nextAuto=0; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+  }
+  window.game=new Whack();
+})();
+</script>
+</body>
+</html>
