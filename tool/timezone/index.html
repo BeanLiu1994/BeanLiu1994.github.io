@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时区转换 · 世界时钟</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  .clk{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
+  .clk .city{font-size:13px;color:var(--muted)}
+  .clk .t{font-size:22px;font-family:"SF Mono",Consolas,monospace;margin-top:4px;letter-spacing:.5px}
+  .clk .d{font-size:12px;color:var(--muted);margin-top:2px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=datetime-local],select{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:13px;color-scheme:dark}
+  .out{margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:15px;line-height:1.8}
+  .big{font-size:20px;font-family:"SF Mono",Consolas,monospace;color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌐 时区转换 · 世界时钟</h1>
+    <div class="sub">实时世界时钟 + 时区换算 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>世界时钟</h2>
+    <div class="grid" id="clocks"></div>
+  </section>
+  <section class="card">
+    <h2>时区换算</h2>
+    <div class="row">
+      <input type="datetime-local" id="dt" step="1">
+      <select id="src"></select>
+      <span class="hint">→</span>
+      <select id="tgt"></select>
+      <button id="bConv" class="primary">换算</button>
+    </div>
+    <div class="out" id="convOut">—</div>
+    <div class="hint" style="margin-top:8px">输入的日期时间按“源时区”解释，再换算到“目标时区”。</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const ZONES=[
+    {label:'本地',tz:Intl.DateTimeFormat().resolvedOptions().timeZone},
+    {label:'UTC',tz:'UTC'},
+    {label:'北京',tz:'Asia/Shanghai'},
+    {label:'东京',tz:'Asia/Tokyo'},
+    {label:'新加坡',tz:'Asia/Singapore'},
+    {label:'迪拜',tz:'Asia/Dubai'},
+    {label:'莫斯科',tz:'Europe/Moscow'},
+    {label:'伦敦',tz:'Europe/London'},
+    {label:'巴黎',tz:'Europe/Paris'},
+    {label:'纽约',tz:'America/New_York'},
+    {label:'洛杉矶',tz:'America/Los_Angeles'},
+    {label:'悉尼',tz:'Australia/Sydney'}
+  ];
+  const WD=['日','一','二','三','四','五','六'];
+  function tzOffsetMs(date,tz){const dtf=Intl.DateTimeFormat('en-US',{timeZone:tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const p=dtf.formatToParts(date).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
+    let h=p.hour; if(h==='24')h='00';
+    const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,+h,+p.minute,+p.second);
+    return asUTC-date.getTime();}
+  // build world clock cards
+  const grid=$('clocks');
+  ZONES.forEach((z,i)=>{
+    const d=document.createElement('div'); d.className='clk';
+    d.innerHTML='<div class="city">'+z.label+'</div><div class="t" id="t'+i+'">--:--:--</div><div class="d" id="d'+i+'"></div>';
+    grid.appendChild(d);
+  });
+  function tick(){
+    const now=new Date();
+    ZONES.forEach((z,i)=>{
+      const off=tzOffsetMs(now,z.tz);
+      const sign=off>=0?'+':'-'; const ah=Math.abs(off)/3600000;
+      const offStr='GMT'+sign+ah;
+      const fmt=new Intl.DateTimeFormat('zh-CN',{timeZone:z.tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const parts=fmt.formatToParts(now).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
+      let hh=parts.hour; if(hh==='24')hh='00';
+      $('t'+i).textContent=hh+':'+parts.minute+':'+parts.second+'  ('+offStr+')';
+      $('d'+i).textContent=parts.year+'-'+parts.month+'-'+parts.day+' 周'+WD[{日:0,一:1,二:2,三:3,四:4,五:5,六:6}[parts.weekday]];
+    });
+  }
+  tick(); setInterval(tick,1000);
+  // populate selects
+  ZONES.forEach((z,i)=>{ const o1=document.createElement('option');o1.value=i;o1.textContent=z.label+' ('+z.tz+')';$('src').appendChild(o1);
+    const o2=document.createElement('option');o2.value=i;o2.textContent=z.label+' ('+z.tz+')';$('tgt').appendChild(o2); });
+  $('src').value='2'; $('tgt').value='8';
+  // set datetime-local to now in local
+  (function(){const d=new Date();const off=d.getTimezoneOffset()*60000;$('dt').value=new Date(d.getTime()-off).toISOString().slice(0,16);})();
+  function convert(){
+    const v=$('dt').value; if(!v){setStatus('请选择日期时间','err');return;}
+    const src=ZONES[+$('src').value], tgt=ZONES[+$('tgt').value];
+    const guess=new Date(v+'Z'); if(isNaN(guess)){setStatus('无效时间','err');return;}
+    const off=tzOffsetMs(guess,src.tz);
+    const utc=new Date(guess.getTime()-off);
+    const fmt=new Intl.DateTimeFormat('zh-CN',{timeZone:tgt.tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit'});
+    const p=fmt.formatToParts(utc).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
+    let hh=p.hour; if(hh==='24')hh='00';
+    const res=p.year+'-'+p.month+'-'+p.day+' '+hh+':'+p.minute+' 周'+WD[{日:0,一:1,二:2,三:3,四:4,五:5,六:6}[p.weekday]];
+    $('convOut').innerHTML=src.label+' → <span class="big">'+tgt.label+'：'+res+'</span>';
+    setStatus('✓ 已换算','ok');
+  }
+  $('bConv').onclick=convert; convert();
+})();
+</script>
+</body>
+</html>

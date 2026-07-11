@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随机数 / 抽签 / 骰子 · Random</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=number],input[type=text],select,textarea{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:13px;color-scheme:dark}
+  input[type=number]{width:80px}
+  textarea{width:100%;min-height:90px;font-family:"SF Mono",Consolas,monospace;resize:vertical}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  .res{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:"SF Mono",Consolas,monospace;font-size:14px}
+  .sum{margin-top:12px;font-size:15px}
+  .dice{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+  .die{width:54px;height:54px;border-radius:10px;background:var(--bg);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;font-size:24px;font-family:"SF Mono",Consolas,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎲 随机数 / 抽签 / 骰子</h1>
+    <div class="sub">基于 crypto 安全随机 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>随机整数</h2>
+    <div class="row">
+      <label class="indent">最小 <input type="number" id="rMin" value="1"></label>
+      <label class="indent">最大 <input type="number" id="rMax" value="100"></label>
+      <label class="indent">数量 <input type="number" id="rCnt" value="5" min="1"></label>
+      <label class="indent"><input type="checkbox" id="rUni"> 不重复</label>
+      <button id="bRand" class="primary">生成</button>
+    </div>
+    <div class="res" id="randRes"></div>
+  </section>
+  <section class="card">
+    <h2>抽签（每行一项）</h2>
+    <textarea id="items" spellcheck="false" placeholder="张三&#10;李四&#10;王五"></textarea>
+    <div class="row" style="margin-top:10px">
+      <label class="indent">抽取 <input type="number" id="wCnt" value="1" min="1"></label>
+      <button id="bDraw" class="primary">抽签</button>
+      <button id="bShuffle">打乱全部</button>
+    </div>
+    <div class="res" id="drawRes"></div>
+  </section>
+  <section class="card">
+    <h2>掷骰子</h2>
+    <div class="row">
+      <label class="indent">骰子数 <input type="number" id="dN" value="2" min="1" max="12"></label>
+      <label class="indent">面数
+        <select id="dS"><option>4</option><option selected>6</option><option>8</option><option>10</option><option>12</option><option>20</option></select>
+      </label>
+      <button id="bRoll" class="primary">掷</button>
+    </div>
+    <div class="dice" id="dice"></div>
+    <div class="sum" id="diceSum"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function randInt(min,max){const range=max-min+1;if(range<=0)return min;const maxU=Math.floor(0xffffffff/range)*range;const buf=new Uint32Array(1);let x;do{crypto.getRandomValues(buf);x=buf[0];}while(x>=maxU);return min+(x%range);}
+  function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+  // random integers
+  $('bRand').onclick=()=>{
+    const min=parseInt($('rMin').value),max=parseInt($('rMax').value),cnt=Math.max(1,parseInt($('rCnt').value)||1),uni=$('rUni').checked;
+    if(isNaN(min)||isNaN(max)||max<min){setStatus('范围无效','err');return;}
+    const range=max-min+1;
+    let vals=[];
+    if(uni){ if(cnt>range){setStatus('不重复数量不能超过范围 '+range,'err');return;} const pool=[];for(let i=min;i<=max;i++)pool.push(i);vals=shuffle(pool).slice(0,cnt); }
+    else { for(let i=0;i<cnt;i++)vals.push(randInt(min,max)); }
+    $('randRes').innerHTML=vals.map(v=>'<span class="chip">'+v+'</span>').join('');
+    setStatus('✓ 已生成 '+vals.length+' 个数','ok');
+  };
+  // draw
+  $('bDraw').onclick=()=>{
+    let items=$('items').value.split(/\r?\n/).map(s=>s.trim()).filter(s=>s);
+    if(!items.length){setStatus('请先输入候选项','err');return;}
+    const cnt=Math.max(1,parseInt($('wCnt').value)||1);
+    if(cnt>items.length){setStatus('抽取数量超过候选项（'+items.length+'）','err');return;}
+    const pick=shuffle(items).slice(0,cnt);
+    $('drawRes').innerHTML=pick.map((p,i)=>'<span class="chip">🎉 '+(i+1)+'. '+p+'</span>').join('');
+    setStatus('✓ 已抽出 '+pick.length+' 名','ok');
+  };
+  $('bShuffle').onclick=()=>{
+    let items=$('items').value.split(/\r?\n/).map(s=>s.trim()).filter(s=>s);
+    if(!items.length){setStatus('请先输入候选项','err');return;}
+    $('items').value=shuffle(items).join('\n');
+    setStatus('✓ 已打乱顺序','ok');
+  };
+  // dice
+  $('bRoll').onclick=()=>{
+    const n=Math.min(12,Math.max(1,parseInt($('dN').value)||1)), sides=parseInt($('dS').value)||6;
+    const res=[];for(let i=0;i<n;i++)res.push(randInt(1,sides));
+    $('dice').innerHTML=res.map(v=>'<div class="die">'+v+'</div>').join('');
+    const sum=res.reduce((a,b)=>a+b,0);
+    $('diceSum').textContent='点数：'+res.join(' + ')+' = '+sum;
+    setStatus('✓ 已掷 '+n+' 个 '+sides+' 面骰，合计 '+sum,'ok');
+  };
+  $('bRand').onclick(); $('bRoll').onclick();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片压缩 · Image Compressor</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=file],input[type=number],select{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:13px}
+  input[type=number]{width:90px}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input[type=range]{accent-color:var(--accent)}
+  .preview{margin-top:12px;max-width:100%;border-radius:8px;border:1px solid var(--border)}
+  .stat{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .stat .box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px}
+  .stat .box .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+  .stat .box .v{font-size:16px;font-family:"SF Mono",Consolas,monospace;margin-top:2px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  a.dl{display:inline-block;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ 图片压缩</h1>
+    <div class="sub">缩放 + 压缩 · 全部在本地完成，不上传</div>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>1. 选择图片</h2>
+    <div class="row"><input type="file" id="file" accept="image/*"></div>
+    <div class="stat" id="origStat" style="display:none">
+      <div class="box"><div class="k">原始尺寸</div><div class="v" id="oDim">—</div></div>
+      <div class="box"><div class="k">原始大小</div><div class="v" id="oSize">—</div></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>2. 压缩设置</h2>
+    <div class="row">
+      <label class="indent">最大边长 <input type="number" id="maxSide" value="1920" min="16"> px</label>
+      <label class="indent">格式
+        <select id="fmt"><option value="image/jpeg">JPEG</option><option value="image/webp">WebP</option><option value="image/png">PNG（无损）</option></select>
+      </label>
+      <label class="indent">质量 <span id="qVal">0.80</span>
+        <input type="range" id="qual" min="0.1" max="1" step="0.05" value="0.8" style="width:120px">
+      </label>
+      <button id="bRun" class="primary">压缩</button>
+    </div>
+    <div class="hint" style="margin-top:8px">PNG 为无损格式，质量滑块对其无效。图片仅在浏览器内处理。</div>
+  </section>
+  <section class="card">
+    <h2>3. 结果</h2>
+    <div id="resultHint" class="hint">尚未压缩</div>
+    <div class="stat" id="resStat" style="display:none">
+      <div class="box"><div class="k">压缩后尺寸</div><div class="v" id="rDim">—</div></div>
+      <div class="box"><div class="k">压缩后大小</div><div class="v" id="rSize">—</div></div>
+      <div class="box"><div class="k">节省</div><div class="v" id="rSave">—</div></div>
+    </div>
+    <img id="prev" class="preview" style="display:none" alt="预览">
+    <a id="dl" class="dl btn" style="display:none" download="compressed.png">⬇️ 下载压缩图片</a>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function fmtBytes(n){if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(2)+' MB';}
+  let img=null, origSize=0, origName='image';
+  $('qual').oninput=()=>{$('qVal').textContent=parseFloat($('qual').value).toFixed(2);};
+  $('file').onchange=e=>{
+    const f=e.target.files[0]; if(!f)return;
+    origSize=f.size; origName=f.name.replace(/\.[^.]+$/,'')||'image';
+    const reader=new FileReader();
+    reader.onload=ev=>{ const im=new Image(); im.onload=()=>{ img=im;
+      $('origStat').style.display='flex';
+      $('oDim').textContent=im.naturalWidth+' × '+im.naturalHeight;
+      $('oSize').textContent=fmtBytes(f.size);
+      setStatus('✓ 已载入 '+origName,'ok');
+    }; im.src=ev.target.result; };
+    reader.readAsDataURL(f);
+  };
+  function compress(){
+    if(!img){setStatus('请先选择图片','err');return;}
+    const maxSide=Math.max(16,parseInt($('maxSide').value)||1920);
+    const fmt=$('fmt').value; const q=parseFloat($('qual').value);
+    let w=img.naturalWidth, h=img.naturalHeight;
+    const scale=Math.min(1, maxSide/Math.max(w,h));
+    w=Math.round(w*scale); h=Math.round(h*scale);
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const ctx=cv.getContext('2d');
+    if(fmt==='image/jpeg'){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); }
+    ctx.drawImage(img,0,0,w,h);
+    cv.toBlob(blob=>{
+      if(!blob){setStatus('压缩失败，请换一种格式','err');return;}
+      const url=URL.createObjectURL(blob);
+      if($('prev').dataset.url) URL.revokeObjectURL($('prev').dataset.url);
+      $('prev').src=url; $('prev').dataset.url=url; $('prev').style.display='block';
+      const save=origSize>0?((1-blob.size/origSize)*100):0;
+      $('resStat').style.display='flex';
+      $('rDim').textContent=w+' × '+h;
+      $('rSize').textContent=fmtBytes(blob.size);
+      $('rSave').textContent=(save>=0?'−':'+')+Math.abs(save).toFixed(1)+'%';
+      const ext={ 'image/jpeg':'jpg','image/webp':'webp','image/png':'png' }[fmt];
+      $('dl').href=url; $('dl').download=origName+'_compressed.'+ext; $('dl').style.display='inline-block';
+      $('resultHint').style.display='none';
+      setStatus('✓ 压缩完成，'+fmtBytes(blob.size)+'（'+save.toFixed(1)+'%）','ok');
+    }, fmt, q);
+  }
+  $('bRun').onclick=compress;
+})();
+</script>
+</body>
+</html>

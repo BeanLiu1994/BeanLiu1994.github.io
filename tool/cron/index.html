@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cron 表达式解析 · Cron Parser</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=text],input[type=number]{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 12px;font-size:15px;font-family:"SF Mono",Consolas,monospace}
+  input[type=text]{flex:1;min-width:220px}
+  input[type=number]{width:70px}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  .desc{margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;line-height:1.7}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:12px;color:var(--muted)}
+  .legend code{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-family:"SF Mono",Consolas,monospace;color:var(--text)}
+  .runs{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .run{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;display:flex;gap:10px;align-items:center}
+  .run .idx{color:var(--muted);width:22px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⏰ Cron 表达式解析</h1>
+    <div class="sub">解析含义并预测下次执行时间 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSample">示例</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入表达式（分 时 日 月 周）</h2>
+    <div class="row">
+      <input type="text" id="expr" placeholder="例如：0 9 * * 1-5" spellcheck="false">
+      <label class="indent">预演 <input type="number" id="cnt" value="10" min="1" max="50"> 次</label>
+      <button id="bParse" class="primary">解析</button>
+    </div>
+    <div class="legend">
+      <span><code>*</code> 任意</span><span><code>,</code> 列举</span><span><code>-</code> 区间</span>
+      <span><code>/</code> 步长</span><span>周：0=日 1=一 … 6=六（7 同 0）</span><span>月可用 jan–dec</span>
+    </div>
+    <div class="desc" id="desc">—</div>
+    <div class="runs" id="runs"></div>
+    <div class="hint" style="margin-top:8px">预测基于你浏览器当前的本地时区。</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const DOWS={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
+  function expandToken(tok,min,max,names){tok=tok.trim().toLowerCase();if(tok==='*')return null;let step=1,range=tok;const sl=tok.indexOf('/');if(sl>=0){step=parseInt(tok.slice(sl+1),10);range=tok.slice(0,sl);}let lo,hi;if(range==='*'){lo=min;hi=max;}else if(range.includes('-')){const p=range.split('-');lo=val(p[0],min,max,names);hi=val(p[1],min,max,names);}else{lo=hi=val(range,min,max,names);}if(lo==null||hi==null||isNaN(step))return[];const out=[];for(let v=lo;v<=hi;v+=step)out.push(v);return out;}
+  function val(s,min,max,names){s=s.trim();if(names&&names[s]!=null)return names[s];const n=parseInt(s,10);if(isNaN(n))return null;if(n===7&&min===0&&max===6)return 0;return n;}
+  function parseField(str,min,max,names){const set=new Set();str.split(',').forEach(tok=>{const arr=expandToken(tok,min,max,names);if(arr===null){for(let v=min;v<=max;v++)set.add(v);}else arr.forEach(v=>set.add(v));});return set;}
+  function parseCron(e){const p=e.trim().split(/\s+/);if(p.length!==5)throw new Error('需要 5 个字段');return{minute:parseField(p[0],0,59),hour:parseField(p[1],0,23),dom:parseField(p[2],1,31),month:parseField(p[3],1,12,MONTHS),dow:parseField(p[4],0,6,DOWS)};}
+  function matches(c,d){if(!c.minute.has(d.getMinutes()))return false;if(!c.hour.has(d.getHours()))return false;if(!c.month.has(d.getMonth()+1))return false;const domStar=c.dom.size===31,dowStar=c.dow.size===7,domOk=c.dom.has(d.getDate()),dowOk=c.dow.has(d.getDay());let dayOk;if(domStar)dayOk=dowOk;else if(dowStar)dayOk=domOk;else dayOk=domOk||dowOk;return dayOk;}
+  function nextRuns(expr,count,from){const c=parseCron(expr);const out=[];let d=new Date(from.getTime()+60000);d.setSeconds(0,0);const limit=new Date(from.getTime()+4*366*24*3600*1000);while(d<limit&&out.length<count){if(matches(c,d))out.push(new Date(d));d=new Date(d.getTime()+60000);}return out;}
+  function describe(expr){const c=parseCron(expr);const f=t=>[...t].sort((a,b)=>a-b).join(', ');const minuteFull=c.minute.size===60,hourFull=c.hour.size===24,monthFull=c.month.size===12,domStar=c.dom.size===31,dowStar=c.dow.size===7;let time;if(minuteFull&&hourFull)time='每天';else if(minuteFull)time='每天 '+f(c.hour)+' 时整';else if(hourFull)time='每小时第 '+f(c.minute)+' 分';else time=f(c.hour)+' 时 '+f(c.minute)+' 分';let dp=[];if(!domStar&&!dowStar)dp.push('（每月 '+f(c.dom)+' 日 或 星期 '+f(c.dow).split(',').map(x=>'日一二三四五六'[x]).join('、')+'）');else if(!domStar)dp.push('每月 '+f(c.dom)+' 日');else if(!dowStar)dp.push('每星期 '+f(c.dow).split(',').map(x=>'日一二三四五六'[x]).join('、'));if(!monthFull)dp.push('月份 '+f(c.month));return time+(dp.length?'，'+dp.join('，'):'');}
+  function run(){
+    const e=$('expr').value.trim();
+    if(!e){setStatus('请输入表达式','err');return;}
+    try{
+      const desc=describe(e);
+      $('desc').innerHTML='📌 '+desc;
+      const n=Math.max(1,Math.min(50,parseInt($('cnt').value)||10));
+      const runs=nextRuns(e,n,new Date());
+      const box=$('runs'); box.innerHTML='';
+      if(!runs.length){box.innerHTML='<div class="hint">未来 4 年内未找到匹配时间</div>';}
+      else runs.forEach((d,i)=>{const el=document.createElement('div');el.className='run';
+        el.innerHTML='<span class="idx">'+(i+1)+'</span><span>'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+'</span>';
+        box.appendChild(el);});
+      setStatus('✓ 已解析，展示未来 '+runs.length+' 次执行','ok');
+    }catch(err){$('desc').textContent='—';$('runs').innerHTML='';setStatus('解析失败：'+err.message,'err');}
+  }
+  $('bParse').onclick=run;
+  $('expr').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+  $('bSample').onclick=()=>{$('expr').value='0 9 * * 1-5';run();};
+  $('expr').value='0 9 * * 1-5'; run();
+})();
+</script>
+</body>
+</html>

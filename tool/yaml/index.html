@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YAML ⇄ JSON 转换 · YAML JSON Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:240px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.55;resize:vertical}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔀 YAML ⇄ JSON 转换</h1>
+    <div class="sub">YAML 与 JSON 互相转换 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSample">示例</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入</h2>
+    <textarea id="in" spellcheck="false" placeholder="在此粘贴 YAML 或 JSON …"></textarea>
+    <div class="row">
+      <button id="bToJson" class="primary">YAML → JSON</button>
+      <button id="bToYaml">JSON → YAML</button>
+      <button id="bCopy">复制结果</button>
+      <button id="bClear">清空</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>输出</h2>
+    <textarea id="out" spellcheck="false" readonly placeholder="转换结果将显示在这里"></textarea>
+    <div class="hint" style="margin-top:8px">支持嵌套映射 / 列表 / 行内 [ ] { } / 注释 #。纯本地解析，数据不会上传。</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  /* ---------- YAML core (verified) ---------- */
+  function stripComment(line){let inS=false,inD=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==="'"&&!inD)inS=!inS;else if(c==='"'&&!inS)inD=!inD;else if(c==='#'&&!inS&&!inD)return line.slice(0,i);}return line;}
+  function parseKey(s){s=s.trim();if((s[0]==='"'&&s[s.length-1]==='"')||(s[0]==="'"&&s[s.length-1]==="'"))return s.slice(1,-1);return s;}
+  function parseScalar(s){s=s.trim();if(s===''||s==='~'||/^null$/i.test(s))return null;if(/^true$/i.test(s))return true;if(/^false$/i.test(s))return false;if((s[0]==='"'&&s[s.length-1]==='"')||(s[0]==="'"&&s[s.length-1]==="'"))return s.slice(1,-1);if(/^-?\d+$/.test(s))return parseInt(s,10);if(/^-?\d*\.\d+$/.test(s))return parseFloat(s);return s;}
+  function splitFlow(str){const res=[];let cur='';let b=0,inS=false,inD=false;for(const c of str){if(c==="'"&&!inD){inS=!inS;cur+=c;continue;}if(c==='"'&&!inS){inD=!inD;cur+=c;continue;}if(inS||inD){cur+=c;continue;}if(c==='['||c==='{')b++;if(c===']'||c==='}')b--;if(c===','&&b===0){res.push(cur);cur='';continue;}cur+=c;}if(cur.trim()!=='')res.push(cur);return res;}
+  function parseFlow(str){str=str.trim();if(str[0]==='['&&str[str.length-1]===']')return splitFlow(str.slice(1,-1)).map(v=>parseFlow(v.trim()));if(str[0]==='{'&&str[str.length-1]==='}'){const o={};splitFlow(str.slice(1,-1)).forEach(p=>{const i=p.indexOf(':');if(i<0)return;o[parseKey(p.slice(0,i))]=parseFlow(p.slice(i+1).trim());});return o;}return parseScalar(str);}
+  function parseYAML(text){
+    const toks=[];text.split(/\r?\n/).forEach(raw=>{if(!raw.trim())return;if(raw.trimStart().startsWith('#'))return;const indent=raw.length-raw.trimStart().length;let content=stripComment(raw).trim();if(!content)return;toks.push({indent,content});});
+    let pos=0;
+    function isMapLine(c){return /^[^:]+:\s/.test(c)||/^[^:]+:\s*$/.test(c);}
+    function getKeyVal(c){let m=c.match(/^([^:]+):\s+(.*)$/);if(m)return{key:parseKey(m[1]),val:m[2]};m=c.match(/^([^:]+):\s*$/);if(m)return{key:parseKey(m[1]),val:''};return null;}
+    function parseBlock(indent){if(pos>=toks.length)return null;const t=toks[pos];if(t.indent<indent)return null;if(t.content==='-'||t.content.startsWith('- '))return parseSeq(indent);return parseMap(indent);}
+    function parseMap(indent){const obj={};while(pos<toks.length&&toks[pos].indent===indent){const c=toks[pos].content;const kv=getKeyVal(c);if(!kv)break;pos++;if(kv.val==='')obj[kv.key]=parseBlock(indent+2);else if(kv.val[0]==='['||kv.val[0]==='{')obj[kv.key]=parseFlow(kv.val);else obj[kv.key]=parseScalar(kv.val);}return obj;}
+    function parseSeq(indent){const arr=[];while(pos<toks.length&&toks[pos].indent===indent&&(toks[pos].content==='-'||toks[pos].content.startsWith('- '))){const c=toks[pos].content;const rest=c==='-'?'':c.slice(2).trim();if(rest===''){pos++;arr.push(parseBlock(indent+2));}else{const kv=getKeyVal(rest);if(kv&&kv.val===''){pos++;const o={};o[kv.key]=parseBlock(indent+2);arr.push(o);}else if(kv){pos++;const o={};o[kv.key]=parseScalar(kv.val);if(toks[pos]&&toks[pos].indent===indent+2&&isMapLine(toks[pos].content))Object.assign(o,parseMap(indent+2));arr.push(o);}else if(rest[0]==='['||rest[0]==='{'){pos++;arr.push(parseFlow(rest));}else{pos++;arr.push(parseScalar(rest));}}}return arr;}
+    if(toks.length===0)return '';return parseBlock(0);
+  }
+  function yamlScalar(v){if(v===null||v===undefined)return 'null';if(typeof v==='boolean'||typeof v==='number')return String(v);let s=String(v);const needQuote=s===''||/^[\s!&*\[\]{}|>'"%@`,?#-]/.test(s)||/:\s/.test(s)||/^\s|\s$/.test(s)||/^[\d.]/.test(s)||/^(true|false|null|~)$/i.test(s)||s.includes('\n');return needQuote?'"'+s.replace(/"/g,'\\"')+'"':s;}
+  function toYAML(obj,indent){const pad='  '.repeat(indent);if(obj===null||obj===undefined)return 'null';if(typeof obj!=='object')return yamlScalar(obj);if(Array.isArray(obj)){if(obj.length===0)return '[]';return obj.map(v=>{if(v!==null&&typeof v==='object'){const s=toYAML(v,indent+1).split('\n');s[0]=pad+'- '+s[0].slice(pad.length+2);return s.join('\n');}return pad+'- '+yamlScalar(v);}).join('\n');}const keys=Object.keys(obj);if(keys.length===0)return '{}';return keys.map(k=>{const v=obj[k];if(v!==null&&typeof v==='object')return pad+k+':\n'+toYAML(v,indent+1);return pad+k+': '+yamlScalar(v);}).join('\n');}
+  /* ---------- UI ---------- */
+  function convert(dir){
+    const src=$('in').value;
+    if(!src.trim()){setStatus('请输入内容','err');return;}
+    try{
+      if(dir==='tojson'){const obj=parseYAML(src);$('out').value=JSON.stringify(obj,null,2);setStatus('✓ 已转为 JSON','ok');}
+      else{const obj=JSON.parse(src);$('out').value=toYAML(obj,0);setStatus('✓ 已转为 YAML','ok');}
+    }catch(e){setStatus('转换失败：'+e.message,'err');}
+  }
+  async function copy(){const t=$('out').value;if(!t){setStatus('没有可复制的内容','err');return;}try{await navigator.clipboard.writeText(t);setStatus('✓ 已复制结果','ok');}catch(e){setStatus('复制失败：'+e.message,'err');}}
+  $('bToJson').onclick=()=>convert('tojson');
+  $('bToYaml').onclick=()=>convert('toyaml');
+  $('bCopy').onclick=copy;
+  $('bClear').onclick=()=>{$('in').value='';$('out').value='';setStatus('已清空');};
+  $('bSample').onclick=()=>{$('in').value=`name: 工具箱
+version: 2.1
+enabled: true
+features:
+  - 转换
+  - 校验
+  - 格式化
+config:
+  timeout: 30
+  retries: 3
+  hosts: [a.example.com, b.example.com]
+meta:
+  author: peng
+  note: "冒号: 保留"
+  empty: ~`;setStatus('已填入示例 YAML，点击转换');};
+})();
+</script>
+</body>
+</html>

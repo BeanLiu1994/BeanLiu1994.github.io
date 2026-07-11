@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日期计算器 · Date Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=date],input[type=number],select{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:13px;color-scheme:dark}
+  input[type=number]{width:90px}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  .out{margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:14px;line-height:1.8}
+  .big{font-size:22px;font-family:"SF Mono",Consolas,monospace;color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  code{background:var(--bg);padding:1px 6px;border-radius:4px;font-family:"SF Mono",Consolas,monospace}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📅 日期计算器</h1>
+    <div class="sub">计算日期差 / 推算日期 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bToday">填入今天</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>相差天数</h2>
+    <div class="row">
+      <label class="indent">起始 <input type="date" id="a"></label>
+      <label class="indent">结束 <input type="date" id="b"></label>
+      <button id="bDiff" class="primary">计算差值</button>
+    </div>
+    <div class="out" id="diffOut">—</div>
+  </section>
+  <section class="card">
+    <h2>日期推算</h2>
+    <div class="row">
+      <label class="indent">基准 <input type="date" id="base"></label>
+      <select id="sign"><option value="1">+</option><option value="-1">−</option></select>
+      <input type="number" id="amount" value="30" min="0">
+      <select id="unit"><option value="day">天</option><option value="week">周</option><option value="month">个月</option><option value="year">年</option></select>
+      <button id="bAdd" class="primary">推算</button>
+    </div>
+    <div class="out" id="addOut">—</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const WD=['日','一','二','三','四','五','六'];
+  function fmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' 星期'+WD[d.getDay()];}
+  function parse(v){ if(!v){setStatus('请选择日期','err');return null;} const d=new Date(v+'T00:00:00'); if(isNaN(d)){setStatus('无效日期','err');return null;} return d; }
+  function ymd(a,b){ let y=b.getFullYear()-a.getFullYear(),m=b.getMonth()-a.getMonth(),d=b.getDate()-a.getDate();
+    if(d<0){m--;const prev=new Date(b.getFullYear(),b.getMonth(),0);d+=prev.getDate();}
+    if(m<0){y--;m+=12;} return {y,m,d}; }
+  function diff(){
+    const a=parse($('a').value),b=parse($('b').value); if(!a||!b)return;
+    const ms=Math.abs(b-a); const days=Math.floor(ms/86400000);
+    const [lo,hi]=a<=b?[a,b]:[b,a];
+    const r=ymd(lo,hi);
+    const order = a<=b ? '起始 → 结束' : '结束 → 起始（已自动调换）';
+    $('diffOut').innerHTML='<div class="big">'+days+'</div> 天（'+Math.floor(days/7)+' 周 '+days%7+' 天）'+
+      '<div style="margin-top:8px">≈ '+r.y+' 年 '+r.m+' 个月 '+r.d+' 天</div>'+
+      '<div class="hint" style="margin-top:6px">'+order+'</div>';
+    setStatus('✓ 相差 '+days+' 天','ok');
+  }
+  function add(){
+    const base=parse($('base').value); if(!base)return;
+    const n=parseInt($('amount').value)||0; const sign=parseInt($('sign').value); const u=$('unit').value;
+    const d=new Date(base);
+    if(u==='day') d.setDate(d.getDate()+sign*n);
+    else if(u==='week') d.setDate(d.getDate()+sign*n*7);
+    else if(u==='month') d.setMonth(d.getMonth()+sign*n);
+    else if(u==='year') d.setFullYear(d.getFullYear()+sign*n);
+    $('addOut').innerHTML='结果：<span class="big">'+fmt(d)+'</span>';
+    setStatus('✓ 已推算','ok');
+  }
+  $('bDiff').onclick=diff;
+  $('bAdd').onclick=add;
+  $('bToday').onclick=()=>{ const t=new Date(); const v=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+    $('a').value=v; $('b').value=v; $('base').value=v; setStatus('已填入今天 '+v,'ok'); };
+  const t=new Date(); const v=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  $('a').value=v; $('b').value=v; $('base').value=v;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>密码强度检测 · Password Strength</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; --warn:#ffb454; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .pw{display:flex;gap:10px;align-items:center}
+  input[type=text],input[type=password]{flex:1;min-width:200px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:15px;font-family:"SF Mono",Consolas,monospace}
+  .meter{height:10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);overflow:hidden;margin-top:14px}
+  .meter > div{height:100%;width:0;transition:.25s}
+  .label{margin-top:8px;font-size:14px;font-weight:600}
+  .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:12px}
+  .chk{font-size:13px;display:flex;align-items:center;gap:8px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--border);flex:0 0 auto}
+  .dot.on{background:var(--ok)} .dot.bad{background:var(--err)}
+  .info{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px}
+  .box .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+  .box .v{font-size:16px;font-family:"SF Mono",Consolas,monospace;margin-top:2px}
+  .tips{margin-top:12px;font-size:13px;color:var(--muted);line-height:1.8}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 密码强度检测</h1>
+    <div class="sub">本地评估强度与熵值 · 不上传</div>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入密码</h2>
+    <div class="pw">
+      <input type="password" id="pw" placeholder="输入要检测的密码…" autocomplete="off">
+      <button id="bShow">显示</button>
+    </div>
+    <div class="meter"><div id="bar"></div></div>
+    <div class="label" id="lab">请输入密码</div>
+    <div class="checks">
+      <div class="chk"><span class="dot" id="cLen"></span>长度 ≥ 12</div>
+      <div class="chk"><span class="dot" id="cLow"></span>小写字母</div>
+      <div class="chk"><span class="dot" id="cUp"></span>大写字母</div>
+      <div class="chk"><span class="dot" id="cNum"></span>数字</div>
+      <div class="chk"><span class="dot" id="cSym"></span>符号</div>
+    </div>
+    <div class="info">
+      <div class="box"><div class="k">字符种类</div><div class="v" id="classes">0 / 4</div></div>
+      <div class="box"><div class="k">熵值（bits）</div><div class="v" id="entropy">0</div></div>
+      <div class="box"><div class="k">暴力破解（10¹⁰/s）</div><div class="v" id="crack">—</div></div>
+    </div>
+    <div class="tips" id="tips">提示：长度比复杂度更重要，建议使用 16 位以上且包含多种字符的密码。</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  const COMMON=['password','123456','12345678','123456789','qwerty','abc123','letmein','admin','welcome','monkey','iloveyou','111111','123123','1q2w3e4r','000000','passw0rd','qwerty123','password1','1234','football','dragon','sunshine','princess','azerty','trustno1','666666','!@#$%^&*','baseball','master','shadow'];
+  $('bShow').onclick=()=>{const i=$('pw');i.type=i.type==='password'?'text':'password';$('bShow').textContent=i.type==='password'?'显示':'隐藏';};
+  function crackTime(bits){ if(bits<=0)return '瞬间'; const secs=0.5*Math.pow(2,bits)/1e10;
+    if(secs<1)return '不足 1 秒';
+    const u=[[31536000,'年'],[86400,'天'],[3600,'小时'],[60,'分钟']];
+    for(const[s,n] of u){ if(secs>=s) return (secs/s).toFixed(secs/s>100?0:1)+' '+n; }
+    return secs.toFixed(1)+' 秒'; }
+  function analyze(p){
+    const len=p.length;
+    const low=/[a-z]/.test(p), up=/[A-Z]/.test(p), num=/\d/.test(p), sym=/[^A-Za-z0-9]/.test(p);
+    const classes=[low,up,num,sym].filter(Boolean).length;
+    let bits=len*Math.log2([1,26,26,10,32][classes]||2);
+    let score=0, weak=[];
+    if(COMMON.includes(p.toLowerCase())){ weak.push('命中常见弱密码库'); score=0; }
+    if(/(.)\1{2,}/.test(p)) weak.push('存在连续重复字符');
+    if(/0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef|qwer|asdf|zxcv/i.test(p)) weak.push('存在连续序列（如 1234 / qwer）');
+    if(len>0 && new Set(p).size===1) weak.push('所有字符相同');
+    if(len>=8) score++; if(len>=12) score++; if(len>=16) score++;
+    score+=classes; if(weak.length) score=Math.max(0,score-2);
+    score=Math.max(0,Math.min(4,score));
+    const map=[
+      {t:'非常弱',c:'var(--err)'},
+      {t:'弱',c:'var(--err)'},
+      {t:'中等',c:'var(--warn)'},
+      {t:'强',c:'var(--ok)'},
+      {t:'非常强',c:'var(--ok)'}
+    ];
+    return {len,low,up,num,sym,classes,bits:Math.round(bits),score,weak,map:map[score]};
+  }
+  function update(){
+    const p=$('pw').value;
+    const set=(id,on)=>{const e=$(id);e.className='dot'+(on?' on':'');};
+    if(!p){ $('bar').style.width='0'; $('lab').textContent='请输入密码'; $('lab').style.color='var(--muted)';
+      ['cLen','cLow','cUp','cNum','cSym'].forEach(id=>$(id).className='dot');
+      $('classes').textContent='0 / 4'; $('entropy').textContent='0'; $('crack').textContent='—';
+      $('tips').textContent='提示：长度比复杂度更重要，建议使用 16 位以上且包含多种字符的密码。'; return; }
+    const r=analyze(p);
+    $('bar').style.width=(r.score/4*100)+'%'; $('bar').style.background=r.map.c;
+    $('lab').textContent=r.map.t; $('lab').style.color=r.map.c;
+    set('cLen',r.len>=12); set('cLow',r.low); set('cUp',r.up); set('cNum',r.num); set('cSym',r.sym);
+    $('classes').textContent=r.classes+' / 4'; $('entropy').textContent=r.bits; $('crack').textContent=crackTime(r.bits);
+    let tips=[];
+    if(r.len<12) tips.push('增加到 12 位以上（越长越好）');
+    if(r.classes<3) tips.push('混合大小写字母、数字和符号');
+    if(r.weak.length) tips.push(r.weak.join('；'));
+    if(!tips.length) tips.push('很棒！这是一个强度较高的密码。');
+    $('tips').textContent='建议：'+tips.join('；')+'。';
+    setStatus('强度：'+r.map.t+'（'+r.bits+' bits）','ok');
+  }
+  $('pw').oninput=update;
+})();
+</script>
+</body>
+</html>
