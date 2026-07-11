@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Neon Tower of Hanoi</title>
+<style>
+  :root{
+    --bg:#0a0f1a;--surface:#111a2b;--text:#e7edf7;--muted:#8090a8;
+    --accent:#b58cff;--accent-glow:#b58cff66;--danger:#ff5d6c;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;margin:0;}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #16213a 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    padding:18px;
+  }
+  .header{width:min(92vw,520px);display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .title{font-size:clamp(18px,4.4vw,26px);font-weight:700;letter-spacing:.5px;
+    background:linear-gradient(90deg,var(--accent),#7ee8fa);-webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 18px var(--accent-glow);}
+  .scores{display:flex;gap:10px;}
+  .score-card{
+    background:rgba(17,26,43,.7);border:1px solid rgba(181,140,255,.25);
+    border-radius:14px;padding:8px 14px;min-width:74px;text-align:center;
+    backdrop-filter:blur(8px);box-shadow:0 4px 24px rgba(0,0,0,.35);
+  }
+  .score-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+  .score-card .value{font-size:22px;font-weight:700;color:var(--text);text-shadow:0 0 12px var(--accent-glow);}
+  .board-wrap{
+    position:relative;width:min(92vw,520px);aspect-ratio:1/1;
+    background:linear-gradient(180deg, rgba(17,26,43,.55), rgba(10,15,26,.7));
+    border:1px solid rgba(181,140,255,.22);border-radius:20px;
+    box-shadow:0 10px 50px rgba(0,0,0,.5), inset 0 0 40px rgba(181,140,255,.06);
+    overflow:hidden;
+  }
+  .board-wrap,.board-wrap *{touch-action:none;}
+  #game{width:100%;height:100%;display:block;}
+  .overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;background:rgba(8,12,22,.72);backdrop-filter:blur(6px);
+    opacity:0;pointer-events:none;transition:opacity .35s ease;
+  }
+  .overlay.show{opacity:1;}
+  .overlay h2{margin:0;font-size:clamp(26px,7vw,40px);color:var(--accent);text-shadow:0 0 24px var(--accent-glow);}
+  .overlay p{margin:0;color:var(--muted);}
+  .controls{width:min(92vw,520px);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  button{
+    font:inherit;color:var(--text);cursor:pointer;border-radius:12px;padding:11px 16px;
+    background:rgba(17,26,43,.8);border:1px solid rgba(181,140,255,.3);
+    transition:transform .12s ease, box-shadow .25s ease, background .25s ease;
+  }
+  button:active{transform:scale(.96);}
+  button:hover{box-shadow:0 0 18px var(--accent-glow);}
+  #btn-new{background:linear-gradient(90deg,rgba(181,140,255,.25),rgba(126,232,250,.18));border-color:rgba(181,140,255,.5);}
+  #btn-auto.on{background:linear-gradient(90deg,rgba(126,232,250,.3),rgba(181,140,255,.3));border-color:var(--accent);box-shadow:0 0 20px var(--accent-glow);}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-left:auto;opacity:.25;transition:opacity .3s ease;}
+  .ai-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse-glow 1.1s infinite ease-in-out;}
+  #ai-status{font-size:13px;color:var(--muted);}
+  .hint{width:min(92vw,520px);text-align:center;color:var(--muted);font-size:13px;}
+  @keyframes pulse-glow{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.5);opacity:.5;}}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Neon Hanoi</div>
+    <div class="scores">
+      <div class="score-card"><div class="label">Moves</div><div class="value" id="moves">0</div></div>
+      <div class="score-card"><div class="label">Best</div><div class="value" id="best">-</div></div>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay" id="overlay-end">
+      <h2 id="end-title">Solved!</h2>
+      <p id="end-msg">Moves: 0</p>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btn-new" onclick="game.restart()">New Game</button>
+    <button id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+    <div class="ai-indicator" id="ai-indicator">
+      <span class="ai-dot"></span>
+      <span id="ai-status">AI idle</span>
+    </div>
+  </div>
+
+  <div class="hint">Tap a peg to select its top disk, tap another peg to move it (smaller onto larger/empty).</div>
+
+<script>
+(function(){ 'use strict';
+function lerp(a,b,t){return a+(b-a)*t;}
+function roundRect(ctx,x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r);
+  ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+class G{
+  constructor(){
+    this.canvas=document.getElementById('game');
+    this.ctx=this.canvas.getContext('2d');
+    this.N=4;
+    this.btnAuto=document.getElementById('btn-auto');
+    this.aiIndicator=document.getElementById('ai-indicator');
+    this.aiStatus=document.getElementById('ai-status');
+    this.overlay=document.getElementById('overlay-end');
+    this.endTitle=document.getElementById('end-title');
+    this.endMsg=document.getElementById('end-msg');
+    this.elMoves=document.getElementById('moves');
+    this.elBest=document.getElementById('best');
+
+    this.w=this.fitCanvas();
+    this.autoPlay=false;
+    this._autoAcc=0;
+    this._doneAcc=0;
+    this.best=parseInt((localStorage.getItem('best_hanoi')||'0'),10)||0;
+    this.selectedPeg=null;
+    this.anim=null;
+    this.phase='idle';
+    this.won=false;
+
+    this.reset();
+    this.updateIndicators();
+
+    this.canvas.addEventListener('pointerdown',(e)=>{e.preventDefault();this.handlePointer(e);});
+    window.addEventListener('resize',()=>{ this.w=this.fitCanvas(); });
+
+    this._tick=this.tick.bind(this);
+    requestAnimationFrame(this._tick);
+  }
+
+  fitCanvas(){
+    const c=this.canvas, ctx=this.ctx;
+    const w=(c.clientWidth||c.width||440);
+    const dpr=window.devicePixelRatio||1;
+    c.width=w*dpr; c.height=w*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return w;
+  }
+
+  computeSolution(n,from,to,via,arr){
+    if(n===0)return;
+    this.computeSolution(n-1,from,via,to,arr);
+    arr.push({from:from,to:to});
+    this.computeSolution(n-1,via,to,from,arr);
+  }
+
+  // reset board WITHOUT stopping auto
+  reset(){
+    this.N=4;
+    this.pegs=[[],[],[]];
+    for(let s=this.N;s>=1;s--){ this.pegs[0].push(s); }
+    this.moves=0;
+    this.selectedPeg=null;
+    this.anim=null;
+    this.phase='idle';
+    this.won=false;
+    this._autoAcc=0;
+    this._doneAcc=0;
+    this.solution=[];
+    this.computeSolution(this.N,0,2,1,this.solution);
+    this.solutionIndex=0;
+    this.hideOverlay();
+    this.updateBest();
+  }
+
+  // restart = reset + stopAuto + indicators
+  restart(){
+    this.reset();
+    this.stopAuto();
+    this.updateIndicators();
+  }
+
+  stopAuto(){
+    this.autoPlay=false;
+    this.updateIndicators();
+  }
+
+  toggleAuto(){
+    this.autoPlay=!this.autoPlay;
+    if(this.autoPlay){
+      if(this.phase==='done'||this.won){ this.reset(); }
+      this._autoAcc=0;
+    }else{
+      this.stopAuto();
+    }
+    this.updateIndicators();
+  }
+
+  updateIndicators(){
+    const on=this.autoPlay;
+    this.btnAuto.textContent='Auto: '+(on?'ON':'OFF');
+    this.btnAuto.classList.toggle('on',on);
+    this.aiIndicator.style.opacity = on?1:0.25;
+    this.aiStatus.textContent = on?'AI solving…':'AI idle';
+  }
+
+  updateBest(){
+    this.elMoves.textContent=this.moves;
+    if(this.moves>0 && (this.best===0 || this.moves<this.best)){
+      this.best=this.moves;
+      try{ localStorage.setItem('best_hanoi',String(this.best)); }catch(e){}
+    }
+    this.elBest.textContent = this.best>0?this.best:'-';
+  }
+
+  showSolved(){
+    this.endTitle.textContent='Solved!';
+    this.endMsg.textContent='Moves: '+this.moves+(this.autoPlay?'  ·  Auto looping…':'');
+    this.overlay.classList.add('show');
+  }
+  hideOverlay(){ this.overlay.classList.remove('show'); }
+
+  handlePointer(e){
+    if(this.phase==='done') return;
+    if(this.autoPlay) return; // human input disabled while AI plays
+    const rect=this.canvas.getBoundingClientRect();
+    const w=this.w;
+    const cx=(e.clientX-rect.left)*(w/(rect.width||w));
+    const px=[w*0.2,w*0.5,w*0.8];
+    let peg=0,bd=1e9;
+    for(let i=0;i<3;i++){ const d=Math.abs(cx-px[i]); if(d<bd){bd=d;peg=i;} }
+    this.onPeg(peg);
+  }
+
+  onPeg(i){
+    if(this.phase==='anim'||this.phase==='done') return;
+    if(this.selectedPeg===null){
+      if(this.pegs[i].length>0){ this.selectedPeg=i; }
+      return;
+    }
+    if(this.selectedPeg===i){ this.selectedPeg=null; return; }
+    const from=this.selectedPeg, to=i;
+    const disk=this.pegs[from][this.pegs[from].length-1];
+    const topTo=this.pegs[to][this.pegs[to].length-1];
+    if(topTo===undefined || disk<topTo){
+      this.startMove(from,to,disk);
+      this.selectedPeg=null;
+    }else{
+      this.selectedPeg = this.pegs[i].length>0 ? i : null;
+    }
+  }
+
+  startMove(from,to,disk){
+    this.anim={fromPeg:from,toPeg:to,disk:disk,t:0,dur:0.3};
+    this.phase='anim';
+  }
+
+  autoStep(){
+    if(this.solutionIndex < this.solution.length){
+      const m=this.solution[this.solutionIndex];
+      this.solutionIndex++;
+      const disk=this.pegs[m.from][this.pegs[m.from].length-1];
+      this.startMove(m.from,m.to,disk);
+    }else{
+      this.phase='done';
+      this._doneAcc=0;
+      this.won=true;
+      this.showSolved();
+    }
+  }
+
+  finishMove(){
+    const from=this.anim.fromPeg, to=this.anim.toPeg, disk=this.anim.disk;
+    this.pegs[from].pop();
+    this.pegs[to].push(disk);
+    this.moves++;
+    this.anim=null;
+    this.phase='idle';
+    this.updateBest();
+    if(this.pegs[2].length===this.N){
+      this.won=true;
+      this.phase='done';
+      this._doneAcc=0;
+      this.showSolved();
+    }
+  }
+
+  update(dt){
+    if(this.phase==='anim'){
+      this.anim.t+=dt;
+      if(this.anim.t>=this.anim.dur){ this.finishMove(); }
+    }
+    if(this.autoPlay){
+      if(this.phase==='done'){
+        this._doneAcc+=dt;
+        if(this._doneAcc>=1.2){ this.reset(); this.updateBest(); this.updateIndicators(); }
+      }else if(this.phase==='idle'){
+        this._autoAcc+=dt;
+        if(this._autoAcc>=0.35){ this._autoAcc=0; this.autoStep(); }
+      }
+    }
+  }
+
+  drawDisk(x,cy,dw,dh,size){
+    const ctx=this.ctx;
+    const hue=(size-1)/(this.N)*300;
+    const col='hsl('+hue+',85%,62%)';
+    const col2='hsl('+hue+',85%,46%)';
+    let grad=null;
+    try{
+      grad=ctx.createLinearGradient(x-dw/2,0,x+dw/2,0);
+      grad.addColorStop(0,col2); grad.addColorStop(0.5,col); grad.addColorStop(1,col2);
+    }catch(e){ grad=null; }
+    ctx.save();
+    ctx.shadowBlur=14; ctx.shadowColor=col;
+    ctx.fillStyle=grad||col;
+    roundRect(ctx,x-dw/2,cy-dh/2,dw,dh,dh/2); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,0.22)';
+    roundRect(ctx,x-dw/2+4,cy-dh/2+3,dw-8,dh*0.3,dh*0.15); ctx.fill();
+    ctx.restore();
+  }
+
+  render(){
+    const w=this.w, ctx=this.ctx;
+    ctx.clearRect(0,0,w,w);
+    const margin=w*0.06;
+    const baseY=w-margin*1.3;
+    const pegAreaH=w*0.6;
+    const pegTopY=baseY-pegAreaH;
+    const diskH=Math.min(pegAreaH/this.N, w*0.075);
+    const pegX=[w*0.2,w*0.5,w*0.8];
+    const pegW=Math.max(4,w*0.012);
+
+    // base bar
+    ctx.save();
+    ctx.shadowBlur=14; ctx.shadowColor='rgba(181,140,255,0.5)';
+    ctx.fillStyle='rgba(181,140,255,0.20)';
+    roundRect(ctx,margin,baseY,w-2*margin,w*0.03,w*0.015); ctx.fill();
+    ctx.restore();
+
+    // pegs
+    for(let i=0;i<3;i++){
+      const sel=this.selectedPeg===i;
+      ctx.save();
+      ctx.shadowBlur=sel?22:12;
+      ctx.shadowColor='rgba(181,140,255,0.75)';
+      ctx.fillStyle= sel?'rgba(181,140,255,0.95)':'rgba(140,120,200,0.55)';
+      roundRect(ctx,pegX[i]-pegW/2,pegTopY,pegW,baseY-pegTopY,pegW/2); ctx.fill();
+      ctx.restore();
+    }
+
+    // disks
+    const maxDiskW=w*0.22, minW=w*0.06;
+    for(let p=0;p<3;p++){
+      const stack=this.pegs[p];
+      for(let k=0;k<stack.length;k++){
+        if(this.anim && p===this.anim.fromPeg && k===stack.length-1) continue;
+        const size=stack[k];
+        const dw=minW+(size-1)/(this.N-1)*(maxDiskW-minW);
+        const cy=baseY-k*diskH-diskH/2;
+        this.drawDisk(pegX[p],cy,dw,diskH*0.86,size);
+      }
+    }
+
+    // moving disk along arc
+    if(this.anim){
+      const from=this.anim.fromPeg, to=this.anim.toPeg, disk=this.anim.disk;
+      const prog=Math.min(1,this.anim.t/this.anim.dur);
+      const xFrom=pegX[from], xTo=pegX[to];
+      const yFrom=baseY-(this.pegs[from].length-1)*diskH-diskH/2;
+      const yTo=baseY-(this.pegs[to].length)*diskH-diskH/2;
+      const peakY=pegTopY-diskH*0.6;
+      let x,y;
+      if(prog<0.4){ const u=prog/0.4; x=xFrom; y=lerp(yFrom,peakY,u); }
+      else if(prog<0.6){ const u=(prog-0.4)/0.2; x=lerp(xFrom,xTo,u); y=peakY; }
+      else { const u=(prog-0.6)/0.4; x=xTo; y=lerp(peakY,yTo,u); }
+      const dw=minW+(disk-1)/(this.N-1)*(maxDiskW-minW);
+      this.drawDisk(x,y,dw,diskH*0.86,disk);
+    }
+  }
+
+  tick(ts){
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):(16/1000));
+    this._last=ts;
+    this.update(dt);
+    this.render();
+    requestAnimationFrame(this._tick);
+  }
+}
+
+window.game = new G();
+})();
+</script>
+</body>
+</html>

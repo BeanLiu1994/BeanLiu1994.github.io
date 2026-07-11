@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Game of Life</title>
+<style>
+  :root{
+    --bg:#0a0f1a;
+    --surface:#111a2b;
+    --text:#e7edf7;
+    --muted:#8090a8;
+    --accent:#5ce1ff;
+    --accent-glow:#5ce1ff66;
+    --danger:#ff5d6c;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;margin:0;padding:0;}
+  body{
+    background:radial-gradient(120% 120% at 50% 0%, #0e1626 0%, var(--bg) 60%, #060a12 100%);
+    color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .app{
+    width:min(96vw,560px);
+    display:flex;flex-direction:column;gap:14px;
+    padding:16px;
+  }
+  header{
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .title{
+    font-size:26px;font-weight:700;letter-spacing:1px;
+    text-align:center;
+    color:var(--text);
+    text-shadow:0 0 18px var(--accent-glow),0 0 4px var(--accent-glow);
+  }
+  .scorecards{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  }
+  .card{
+    background:var(--surface);
+    border:1px solid #1c2942;
+    border-radius:14px;
+    padding:10px 12px;
+    text-align:center;
+    box-shadow:0 0 0 1px rgba(92,225,255,0.05) inset, 0 8px 24px rgba(0,0,0,0.35);
+    transition:box-shadow .4s ease, border-color .4s ease;
+  }
+  .card .k{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+  .card .v{font-size:22px;font-weight:700;color:var(--accent);text-shadow:0 0 12px var(--accent-glow);}
+  .board-wrap{
+    position:relative;
+    width:100%;
+    aspect-ratio:48/40;
+    border-radius:18px;
+    background:linear-gradient(180deg,#0c1422,#0a0f1a);
+    border:1px solid #1c2942;
+    box-shadow:0 0 40px rgba(92,225,255,0.08), 0 10px 30px rgba(0,0,0,0.5);
+    overflow:hidden;
+  }
+  .board-wrap,#game{touch-action:none;}
+  canvas#game{
+    display:block;width:100%;height:100%;
+    border-radius:18px;
+  }
+  .controls{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;
+  }
+  button{
+    font-family:inherit;
+    font-size:14px;font-weight:600;letter-spacing:.5px;
+    color:var(--text);
+    background:var(--surface);
+    border:1px solid #25344f;
+    border-radius:12px;
+    padding:10px 16px;
+    cursor:pointer;
+    transition:transform .12s ease, border-color .3s ease, box-shadow .3s ease, background .3s ease;
+    box-shadow:0 4px 14px rgba(0,0,0,0.3);
+  }
+  button:hover{transform:translateY(-1px);border-color:var(--accent);box-shadow:0 0 18px var(--accent-glow);}
+  button:active{transform:translateY(0);}
+  #btn-auto.on{
+    border-color:var(--accent);
+    color:var(--accent);
+    box-shadow:0 0 22px var(--accent-glow);
+    background:#0e1a2c;
+  }
+  .ai-row{
+    display:flex;align-items:center;gap:10px;justify-content:center;
+    min-height:22px;
+  }
+  .ai-indicator{
+    width:11px;height:11px;border-radius:50%;
+    background:var(--muted);
+    box-shadow:0 0 0 rgba(92,225,255,0);
+    transition:background .3s ease, box-shadow .3s ease;
+  }
+  .ai-indicator.active{
+    background:var(--accent);
+    animation:pulse-glow 1.4s ease-in-out infinite;
+  }
+  #ai-status{font-size:13px;color:var(--muted);letter-spacing:.5px;}
+  #ai-status.active{color:var(--accent);}
+  .hint{
+    text-align:center;font-size:12px;color:var(--muted);line-height:1.5;
+  }
+  @keyframes pulse-glow{
+    0%{box-shadow:0 0 4px var(--accent-glow);}
+    50%{box-shadow:0 0 16px var(--accent),0 0 28px var(--accent-glow);}
+    100%{box-shadow:0 0 4px var(--accent-glow);}
+  }
+  .blink{animation:blink 1s steps(2,start) infinite;}
+  @keyframes blink{50%{opacity:0.35;}}
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">Game of Life</div>
+      <div class="scorecards">
+        <div class="card"><div class="k">Gen</div><div class="v" id="gen">0</div></div>
+        <div class="card"><div class="k">Alive</div><div class="v" id="alive">0</div></div>
+        <div class="card"><div class="k">Best</div><div class="v" id="best">0</div></div>
+      </div>
+    </header>
+
+    <div class="board-wrap">
+      <canvas id="game"></canvas>
+    </div>
+
+    <div class="controls">
+      <button onclick="window.game.restart()">New Game</button>
+      <button id="btn-auto" onclick="window.game.toggleAuto()">Auto: OFF</button>
+      <button onclick="window.game.randomize()">Random</button>
+      <button onclick="window.game.clear()">Clear</button>
+    </div>
+
+    <div class="ai-row">
+      <span class="ai-indicator" id="ai-indicator"></span>
+      <span id="ai-status">Paused</span>
+    </div>
+
+    <div class="hint">Tap or drag on the grid to paint life. Turn on <b>Auto</b> to let evolution run — it reseeds itself when life stalls.</div>
+  </div>
+
+<script>
+(function(){
+  const COLS = 48, ROWS = 40;
+  const STEP_INTERVAL = 0.12;            // seconds per generation in auto mode
+  const RESEED_STALE_GENS = 24;          // generations of no change -> reseed
+  const RESURRECT_ZERO_GENS = 16;        // empty gens -> reseed
+  const BEST_KEY = 'best_life';
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+
+  class G{
+    constructor(){
+      this.canvas = document.getElementById('game');
+      this.ctx = this.canvas.getContext('2d');
+      this.genEl = document.getElementById('gen');
+      this.aliveEl = document.getElementById('alive');
+      this.bestEl = document.getElementById('best');
+      this.btnAuto = document.getElementById('btn-auto');
+      this.aiIndicator = document.getElementById('ai-indicator');
+      this.aiStatus = document.getElementById('ai-status');
+
+      this.cols = COLS; this.rows = ROWS;
+      this.autoPlay = false;
+      this.acc = 0;
+      this.staleGens = 0;
+      this.zeroGens = 0;
+      this.lastHash = '';
+      this.best = 0;
+      try{ const b = parseInt(localStorage.getItem(BEST_KEY)||'0',10); if(!isNaN(b)) this.best = b; }catch(e){}
+
+      // state grids
+      this.grid = new Array(this.rows*this.cols).fill(false);
+      this.next = new Array(this.rows*this.cols).fill(false);
+      this.age  = new Array(this.rows*this.cols).fill(0);
+      this.alpha= new Array(this.rows*this.cols).fill(0); // eased display alpha
+
+      this.generation = 0;
+      this.aliveCount = 0;
+
+      this._drawing = false;
+      this._paintVal = true;
+
+      this.size = this.fitCanvas();
+
+      this._bindPointer();
+
+      this._tick = this.tick.bind(this);
+      requestAnimationFrame(this._tick);
+    }
+
+    fitCanvas(){
+      const w = (this.canvas.clientWidth || this.canvas.width || 440);
+      const dpr = window.devicePixelRatio || 1;
+      this.canvas.width = w * dpr;
+      this.canvas.height = w * dpr;
+      this.ctx.setTransform(dpr,0,0,dpr,0,0);
+      return w;
+    }
+
+    idx(x,y){ return y*this.cols + x; }
+
+    /* ---------- seeding ---------- */
+    reseed(){
+      this.grid.fill(false);
+      const r = Math.random;
+      const mode = Math.floor(r()*3);
+      if(mode===0){
+        // ~25% random fill
+        for(let i=0;i<this.grid.length;i++) this.grid[i] = r()<0.25;
+      } else if(mode===1){
+        // scatter gliders
+        const glider = [[1,0],[2,1],[0,2],[1,2],[2,2]];
+        const count = 6 + Math.floor(r()*6);
+        for(let k=0;k<count;k++){
+          const ox = Math.floor(r()*(this.cols-5));
+          const oy = Math.floor(r()*(this.rows-5));
+          const flip = r()<0.5;
+          for(const [gx,gy] of glider){
+            const x = flip ? ox+gy : ox+gx;
+            const y = flip ? oy+gx : oy+gy;
+            if(x>=0&&x<this.cols&&y>=0&&y<this.rows) this.grid[this.idx(x,y)] = true;
+          }
+        }
+      } else {
+        // pulsar + a few blocks
+        this.placePulsar(Math.floor(this.cols/2)-6, Math.floor(this.rows/2)-6);
+        for(let k=0;k<10;k++){
+          const x = Math.floor(r()*(this.cols-2));
+          const y = Math.floor(r()*(this.rows-2));
+          this.grid[this.idx(x,y)] = true;
+          this.grid[this.idx(x+1,y)] = true;
+        }
+      }
+      this.refresh();
+    }
+
+    placePulsar(ox,oy){
+      const pts=[];
+      const ring=[2,3,4,8,9,10];
+      for(const a of ring){ pts.push([a,0]); pts.push([a,5]); pts.push([a,7]); pts.push([a,12]);
+        pts.push([0,a]); pts.push([5,a]); pts.push([7,a]); pts.push([12,a]); }
+      for(const [px,py] of pts){
+        const x=ox+px, y=oy+py;
+        if(x>=0&&x<this.cols&&y>=0&&y<this.rows) this.grid[this.idx(x,y)] = true;
+      }
+    }
+
+    randomize(){ this.reseed(); }
+
+    clear(){
+      this.grid.fill(false);
+      this.refresh();
+    }
+
+    /* reset WITHOUT stopping auto */
+    reset(){
+      this.generation = 0;
+      this.acc = 0;
+      this.staleGens = 0;
+      this.zeroGens = 0;
+      this.lastHash = '';
+      this.reseed();
+    }
+
+    /* restart = reset + stop auto + update indicators */
+    restart(){
+      this.reset();
+      this.stopAuto();
+    }
+
+    /* ---------- evolution ---------- */
+    step(){
+      const c=this.cols, r=this.rows, g=this.grid, n=this.next;
+      for(let y=0;y<r;y++){
+        for(let x=0;x<c;x++){
+          let cnt=0;
+          for(let dy=-1;dy<=1;dy++){
+            for(let dx=-1;dx<=1;dx++){
+              if(dx===0&&dy===0) continue;
+              const nx=x+dx, ny=y+dy;
+              if(nx<0||nx>=c||ny<0||ny>=r) continue; // bounded dead border
+              if(g[ny*c+nx]) cnt++;
+            }
+          }
+          const alive = g[y*c+x];
+          n[y*c+x] = (!alive && cnt===3) || (alive && (cnt===2||cnt===3));
+        }
+      }
+      // swap
+      const tmp=this.grid; this.grid=this.next; this.next=tmp;
+      this.generation++;
+      this.refresh();
+    }
+
+    refresh(){
+      let count=0;
+      for(let i=0;i<this.grid.length;i++){
+        if(this.grid[i]){ count++; this.age[i]++; }
+        else { this.age[i]=0; }
+      }
+      this.aliveCount = count;
+      if(count > this.best){
+        this.best = count;
+        try{ localStorage.setItem(BEST_KEY, String(this.best)); }catch(e){}
+      }
+      // update DOM
+      this.genEl.textContent = this.generation;
+      this.aliveEl.textContent = count;
+      this.bestEl.textContent = this.best;
+    }
+
+    autoStep(){
+      // hash current state to detect stagnation
+      let sum=0;
+      for(let i=0;i<this.grid.length;i+=7){ sum=(sum*31 + (this.grid[i]?1:0))>>>0; }
+      const h = sum + ':' + this.aliveCount;
+      if(h === this.lastHash){
+        this.staleGens++;
+      } else {
+        this.staleGens=0; this.lastHash=h;
+      }
+      if(this.aliveCount===0){ this.zeroGens++; } else { this.zeroGens=0; }
+
+      this.step();
+
+      if(this.staleGens>=RESEED_STALE_GENS || this.zeroGens>=RESURRECT_ZERO_GENS){
+        this.staleGens=0; this.zeroGens=0; this.lastHash='';
+        this.reseed();
+      }
+    }
+
+    /* ---------- auto control ---------- */
+    toggleAuto(){
+      this.autoPlay = !this.autoPlay;
+      this._updateIndicators();
+      return this.autoPlay;
+    }
+
+    stopAuto(){
+      this.autoPlay = false;
+      this._updateIndicators();
+    }
+
+    _updateIndicators(){
+      if(this.autoPlay){
+        this.btnAuto.textContent = 'Auto: ON';
+        this.btnAuto.classList.add('on');
+        this.aiIndicator.classList.add('active');
+        this.aiStatus.classList.add('active');
+        this.aiStatus.textContent = 'Evolving…';
+      } else {
+        this.btnAuto.textContent = 'Auto: OFF';
+        this.btnAuto.classList.remove('on');
+        this.aiIndicator.classList.remove('active');
+        this.aiStatus.classList.remove('active');
+        this.aiStatus.textContent = this.aliveCount ? 'Paused' : 'Empty';
+      }
+    }
+
+    /* ---------- loop ---------- */
+    tick(ts){
+      const dt = Math.min(0.05, ((ts!==undefined) ? ((ts-(this._last||ts)) / 1000) : 0.016));
+      this._last = ts;
+      this.update(dt);
+      this.render();
+      requestAnimationFrame(this._tick);
+    }
+
+    update(dt){
+      if(this.autoPlay){
+        this.acc += dt;
+        while(this.acc >= STEP_INTERVAL){
+          this.acc -= STEP_INTERVAL;
+          this.autoStep();
+        }
+      }
+      // ease display alpha toward target each frame (smooth fade)
+      const target = this.grid;
+      const a = this.alpha;
+      for(let i=0;i<a.length;i++){
+        const t = target[i] ? 1 : 0;
+        a[i] = a[i] + (t - a[i]) * Math.min(1, dt*12);
+      }
+    }
+
+    /* ---------- rendering ---------- */
+    render(){
+      const ctx=this.ctx;
+      const size=this.size;
+      const cw = size/this.cols;
+      ctx.clearRect(0,0,size,size);
+
+      // faint grid
+      ctx.strokeStyle='rgba(92,225,255,0.05)';
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      for(let x=0;x<=this.cols;x++){ const px=Math.round(x*cw)+0.5; ctx.moveTo(px,0); ctx.lineTo(px,size); }
+      for(let y=0;y<=this.rows;y++){ const py=Math.round(y*cw)+0.5; ctx.moveTo(0,py); ctx.lineTo(size,py); }
+      ctx.stroke();
+
+      const pad = Math.max(1, cw*0.12);
+      const rad = Math.max(1, cw*0.22);
+      for(let y=0;y<this.rows;y++){
+        for(let x=0;x<this.cols;x++){
+          const i=this.idx(x,y);
+          const al=this.alpha[i];
+          if(al < 0.02) continue;
+          const age=this.age[i];
+          // young = bright cyan, old = deeper violet/blue
+          const ageT = Math.min(1, age/14);
+          const rC = Math.round(lerp(92,140,ageT));
+          const gC = Math.round(lerp(225,90,ageT));
+          const bC = Math.round(lerp(255,230,ageT));
+          const cx = x*cw, cy = y*cw;
+          ctx.save();
+          ctx.globalAlpha = al;
+          ctx.shadowColor = `rgba(${rC},${gC},${bC},0.9)`;
+          ctx.shadowBlur = cw*0.6;
+          ctx.fillStyle = `rgb(${rC},${gC},${bC})`;
+          this._roundRect(ctx, cx+pad, cy+pad, cw-2*pad, cw-2*pad, rad);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    _roundRect(ctx,x,y,w,h,r){
+      r=Math.min(r,w/2,h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+
+    /* ---------- pointer painting ---------- */
+    _bindPointer(){
+      const cv=this.canvas;
+      const getCell = (e)=>{
+        const rect=cv.getBoundingClientRect();
+        const px=(e.clientX-rect.left), py=(e.clientY-rect.top);
+        const cw=rect.width/this.cols;
+        const x=Math.floor(px/cw), y=Math.floor(py/cw);
+        if(x<0||x>=this.cols||y<0||y>=this.rows) return null;
+        return this.idx(x,y);
+      };
+      cv.addEventListener('pointerdown',(e)=>{
+        e.preventDefault();
+        const i=getCell(e); if(i==null) return;
+        this._drawing=true;
+        this._paintVal = !this.grid[i]; // toggle on first touch
+        this.grid[i]=this._paintVal;
+        this.refresh();
+        try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+      });
+      cv.addEventListener('pointermove',(e)=>{
+        if(!this._drawing) return;
+        e.preventDefault();
+        const i=getCell(e); if(i==null) return;
+        this.grid[i]=this._paintVal;
+        this.refresh();
+      });
+      const end=(e)=>{ if(e&&e.preventDefault) e.preventDefault(); this._drawing=false; };
+      cv.addEventListener('pointerup',end);
+      cv.addEventListener('pointercancel',end);
+      cv.addEventListener('pointerleave',end);
+    }
+  }
+
+  window.game = new G();
+})();
+</script>
+</body>
+</html>

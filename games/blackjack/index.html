@@ -1,0 +1,223 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/><meta name="theme-color" content="#0a0f1a"/><title>Blackjack · Neon</title><style>
+:root{--bg:#0a0f1a;--surface:#111a2b;--text:#e7edf7;--muted:#8090a8;--accent:#36e08a;--accent-glow:#36e08a66;--danger:#ff5d6c;--gold:#ffd76a;}
+*{margin:0;padding:0;box-sizing:border-box;}html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+.container{width:100%;max-width:480px;padding:16px;}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+.title-block h1{font-size:1.7rem;font-weight:800;background:linear-gradient(135deg,#9bffd0,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;}
+.score-panel{display:flex;gap:8px;}.score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:6px 12px;text-align:center;min-width:58px;}
+.score-card .label{font-size:.55rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);}.score-card .value{font-size:1rem;font-weight:700;font-variant-numeric:tabular-nums;}
+.board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:10px;box-shadow:0 0 40px #00000040,0 0 70px var(--accent-glow);}
+.board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+canvas{display:block;width:100%;height:auto;border-radius:10px;}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;z-index:10;opacity:0;transition:opacity .35s;pointer-events:none;}.overlay.active{opacity:1;pointer-events:auto;}
+.overlay-bg{position:absolute;inset:0;background:#0a0f1aee;backdrop-filter:blur(4px);border-radius:14px;}
+.overlay-content{position:relative;text-align:center;z-index:1;}.overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;}.overlay-content p{color:var(--muted);margin-bottom:16px;font-size:.9rem;}
+.controls{display:flex;gap:10px;margin-top:14px;}.btn{flex:1;min-width:80px;padding:12px 16px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s;}.btn:hover{background:#ffffff10;}.btn:active{transform:scale(.97);}.btn.primary{background:var(--accent);border-color:var(--accent);color:#0a0f1a;}.btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
+.btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0f1a;animation:pulse-glow 2s infinite;}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--accent-glow);}50%{box-shadow:0 0 22px var(--accent-glow),0 0 40px var(--accent-glow);}}
+.ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;}.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+.hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
+</style></head><body><div class="container">
+<div class="header"><div class="title-block"><h1>Blackjack</h1><div class="sub">21 · N E O N&nbsp;C A S I N O</div></div>
+<div class="score-panel"><div class="score-card"><div class="label">Wins</div><div class="value" id="wins">0</div></div><div class="score-card"><div class="label">Streak</div><div class="value" id="streak">0</div></div><div class="score-card"><div class="label">Best</div><div class="value" id="best">0</div></div></div></div>
+<div class="board-wrap" id="board-wrap"><canvas id="game" width="440" height="440"></canvas>
+<div class="overlay" id="overlay-end"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="end-title">Round</h2><p id="end-msg"></p><button class="btn primary" onclick="game.restart()">New Round</button></div></div></div>
+<div class="controls"><button class="btn" id="btn-hit" onclick="game.hit()">Hit</button><button class="btn" id="btn-stand" onclick="game.stand()">Stand</button><button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button></div>
+<div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI playing…</span></div>
+<div class="hint">Tap Hit / Stand. Auto = AI dealer vs AI player (basic strategy).</div>
+</div><script>
+(function(){'use strict';
+const canvas=document.getElementById('game');const ctx=canvas.getContext('2d');
+function fitCanvas(){const w=(canvas.clientWidth||canvas.width||440);const dpr=window.devicePixelRatio||1;canvas.width=w*dpr;canvas.height=w*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);return w;}
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+const SUITS=['spades','hearts','diamonds','clubs'];
+const GLYPH={spades:'♠',hearts:'♥',diamonds:'♦',clubs:'♣'};
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+class G{
+ constructor(){
+  this.autoPlay=false;
+  this.wins=0;this.streak=0;this.best=this.loadBest();
+  this.size=fitCanvas();
+  this.deck=[];this.buildShoe();
+  this.player=[];this.dealer=[];
+  this.phase='player';this.over=false;
+  this.autoAccum=0;this.dealerAccum=0;this.doneAccum=0;
+  this.bindInput();
+  this.restart();
+  this._tick=this.tick.bind(this);requestAnimationFrame(this._tick);
+ }
+ loadBest(){try{const v=parseInt(localStorage.getItem('best_blackjack'),10);return (v&&!isNaN(v))?v:0;}catch(e){return 0;}}
+ saveBest(){try{localStorage.setItem('best_blackjack',String(this.best));}catch(e){}}
+ buildShoe(){
+  const s=[];
+  for(let d=0;d<4;d++)for(const su of SUITS)for(const r of RANKS){
+   let v=(r==='A')?11:((r==='J'||r==='Q'||r==='K')?10:parseInt(r,10));
+   s.push({rank:r,suit:su,value:v});
+  }
+  for(let i=s.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=s[i];s[i]=s[j];s[j]=t;}
+  this.deck=s;
+ }
+ dealCard(hand){
+  if(this.deck.length<15)this.buildShoe();
+  const c=this.deck.pop();
+  hand.push({card:c,anim:{p:0}});
+ }
+ computeTotal(hand,hideHole){
+  let total=0,aces=0;
+  const count=hideHole?Math.max(0,hand.length-1):hand.length;
+  for(let i=0;i<count;i++){const c=hand[i].card;total+=c.value;if(c.rank==='A')aces++;}
+  while(total>21&&aces>0){total-=10;aces--;}
+  return {total:total,soft:aces>0};
+ }
+ reset(){
+  if(this.deck.length<15)this.buildShoe();
+  this.player=[];this.dealer=[];
+  this.phase='player';this.over=false;
+  this.dealCard(this.player);this.dealCard(this.dealer);
+  this.dealCard(this.player);this.dealCard(this.dealer);
+  this.autoAccum=0;this.dealerAccum=0;this.doneAccum=0;
+  const o=document.getElementById('overlay-end');o.classList.remove('active');
+ }
+ restart(){this.reset();this.stopAuto();this.updateIndicators();}
+ updateIndicators(){
+  document.getElementById('wins').textContent=this.wins;
+  document.getElementById('streak').textContent=this.streak;
+  document.getElementById('best').textContent=this.best;
+ }
+ hit(){if(this.autoPlay||this.phase!=='player'||this.over)return;this.dealCard(this.player);const t=this.computeTotal(this.player).total;if(t>21)this.resolveRound();}
+ stand(){if(this.autoPlay||this.phase!=='player'||this.over)return;this.phase='dealer';this.dealerAccum=0;this.updateIndicators();}
+ dealerStep(){
+  const t=this.computeTotal(this.dealer).total;
+  if(t<17){this.dealCard(this.dealer);}
+  else{this.resolveRound();}
+ }
+ applyResult(res){
+  if(res==='win'){this.wins++;this.streak++;if(this.streak>this.best){this.best=this.streak;this.saveBest();}}
+  else if(res==='lose'){this.streak=0;}
+  this.updateIndicators();
+ }
+ resolveRound(){
+  const pt=this.computeTotal(this.player).total;
+  const dt2=this.computeTotal(this.dealer).total;
+  let res;
+  if(pt>21)res='lose';else if(dt2>21)res='win';else if(pt>dt2)res='win';else if(pt<dt2)res='lose';else res='push';
+  this.applyResult(res);
+  this.over=true;this.phase='done';
+  const title=document.getElementById('end-title');
+  const msg=document.getElementById('end-msg');
+  if(res==='win'){title.textContent='WIN';title.style.color='#36e08a';}
+  else if(res==='lose'){title.textContent='LOSE';title.style.color='#ff5d6c';}
+  else{title.textContent='PUSH';title.style.color='#ffd76a';}
+  msg.textContent='你 '+pt+' · 庄家 '+dt2;
+  document.getElementById('overlay-end').classList.add('active');
+ }
+ autoStep(){
+  if(this.phase==='player'){
+   const t=this.computeTotal(this.player).total;
+   const st=document.getElementById('ai-status');
+   if(t<17){this.hit();if(st)st.textContent='AI 玩家: 要牌 ('+this.computeTotal(this.player).total+')';}
+   else{this.stand();if(st)st.textContent='AI 玩家: 停 ('+t+')';}
+  }
+ }
+ update(dt){
+  const all=this.player.concat(this.dealer);
+  for(const c of all){if(c.anim)c.anim.p=Math.min(1,c.anim.p+dt/0.25);}
+  if(this.autoPlay){
+   this.autoAccum=(this.autoAccum||0)+dt;
+   if(this.autoAccum>=0.4){this.autoAccum=0;this.autoStep();}
+  }
+  if(this.phase==='dealer'){
+   this.dealerAccum=(this.dealerAccum||0)+dt;
+   if(this.dealerAccum>=0.4){this.dealerAccum=0;this.dealerStep();}
+  }
+  if(this.phase==='done'&&this.autoPlay){
+   this.doneAccum=(this.doneAccum||0)+dt;
+   if(this.doneAccum>=0.8){this.reset();}
+  }
+ }
+ drawCard(cx,cy,w,h,card,faceUp){
+  const x=cx-w/2,y=cy-h/2;
+  ctx.save();
+  if(faceUp){
+   rr(x,y,w,h,8);ctx.fillStyle='#f4f7ff';ctx.fill();
+   ctx.strokeStyle='#cdd6e6';ctx.lineWidth=1;ctx.stroke();
+   const red=(card.suit==='hearts'||card.suit==='diamonds');
+   ctx.fillStyle=red?'#ff5d6c':'#0a0f1a';
+   ctx.textAlign='left';ctx.textBaseline='top';
+   ctx.font='700 14px Segoe UI';ctx.fillText(card.rank,x+6,y+5);
+   ctx.font='16px Segoe UI';ctx.fillText(GLYPH[card.suit],x+6,y+21);
+   ctx.textAlign='center';ctx.textBaseline='middle';
+   ctx.font='26px Segoe UI';ctx.fillText(GLYPH[card.suit],cx,cy);
+  }else{
+   rr(x,y,w,h,8);
+   const g=ctx.createLinearGradient(x,y,x,y+h);g.addColorStop(0,'#1b3a5c');g.addColorStop(1,'#10243a');
+   ctx.fillStyle=g;ctx.fill();
+   ctx.strokeStyle='#36e08a';ctx.lineWidth=1.5;ctx.shadowColor='#36e08a';ctx.shadowBlur=10;ctx.stroke();ctx.shadowBlur=0;
+   ctx.strokeStyle='#36e08a44';ctx.lineWidth=1;
+   rr(x+6,y+6,w-12,h-12,5);ctx.stroke();
+  }
+  ctx.restore();
+ }
+ render(){
+  const s=this.size;if(!s)return;
+  ctx.clearRect(0,0,s,s);
+  const g=ctx.createLinearGradient(0,0,s,s);
+  g.addColorStop(0,'#0c2a1c');g.addColorStop(1,'#08160f');
+  rr(0,0,s,s,10);ctx.fillStyle=g;ctx.fill();
+  ctx.strokeStyle='#36e08a';ctx.lineWidth=2;ctx.shadowColor='#36e08a';ctx.shadowBlur=18;rr(6,6,s-12,s-12,10);ctx.stroke();ctx.shadowBlur=0;
+  // shoe top-right
+  const sx=s-34,sy=30;
+  ctx.save();ctx.fillStyle='#10243a';ctx.strokeStyle='#36e08a88';ctx.lineWidth=1;
+  for(let i=0;i<3;i++){rr(sx-18-i,sy-26-i,36,52,6);ctx.fill();ctx.stroke();}
+  ctx.restore();
+  // labels + totals
+  const pTot=this.computeTotal(this.player).total;
+  const dTot=this.computeTotal(this.dealer,!this.over).total;
+  ctx.fillStyle='#8090a8';ctx.font='600 12px Segoe UI';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillText('庄家 DEALER  ·  '+dTot,18,30);
+  ctx.fillText('玩家 PLAYER  ·  '+pTot,18,s-30);
+  // layout
+  const cw=Math.min(54,(s-50)/Math.max(5,this.dealer.length,this.player.length,4));
+  const ch=cw*1.42;const gap=10;
+  const drawRow=(hand,baseY,hideHole)=>{
+   const n=hand.length;const tw=n*cw+(n-1)*gap;const startX=(s-tw)/2;
+   for(let i=0;i<n;i++){
+    const tx=startX+i*(cw+gap)+cw/2;const ty=baseY+ch/2;
+    const p=hand[i].anim?hand[i].anim.p:1;
+    const x=lerp(sx,tx,p),y=lerp(sy,ty,p);
+    const faceUp=(i!==1)||!hideHole;
+    this.drawCard(x,y,cw,ch,hand[i].card,faceUp);
+   }
+  };
+  drawRow(this.dealer,52,!this.over);
+  drawRow(this.player,s-52-ch,false);
+ }
+ tick(ts){const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);this._last=ts;this.update(dt);this.render();requestAnimationFrame(this._tick);}
+ toggleAuto(){if(this.autoPlay)this.stopAuto();else{if(this.over)this.restart();this.startAuto();}}
+ startAuto(){
+  this.autoPlay=true;this.autoAccum=0;
+  const b=document.getElementById('btn-auto');b.textContent='Auto: ON';b.classList.add('auto-on');
+  document.getElementById('ai-indicator').style.display='flex';
+  const st=document.getElementById('ai-status');if(st)st.textContent='AI playing…';
+ }
+ stopAuto(){
+  this.autoPlay=false;
+  const b=document.getElementById('btn-auto');b.textContent='Auto: OFF';b.classList.remove('auto-on');
+  document.getElementById('ai-indicator').style.display='none';
+ }
+ bindInput(){
+  const wrap=document.getElementById('board-wrap');
+  wrap.addEventListener('pointerdown',(e)=>{if(this.autoPlay)return;e.preventDefault();if(this.over)this.restart();});
+  if(window.addEventListener)window.addEventListener('resize',()=>{this.size=fitCanvas();});
+ }
+}
+window.game=new G();
+})();
+</script></body></html>

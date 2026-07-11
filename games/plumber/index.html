@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Pipe Flow</title>
+<style>
+  :root{
+    --bg:#0a0f1a;
+    --surface:#111a2b;
+    --text:#e7edf7;
+    --muted:#8090a8;
+    --accent:#3fe0c8;
+    --accent-glow:#3fe0c866;
+    --danger:#ff5d6c;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;margin:0;padding:0;background:var(--bg);}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+    color:var(--text);
+    touch-action:none;
+    overscroll-behavior:none;
+    user-select:none;
+    -webkit-user-select:none;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    padding:14px;
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #16263f 0%, rgba(10,15,26,0) 60%),
+      radial-gradient(900px 600px at 90% 110%, #102033 0%, rgba(10,15,26,0) 55%),
+      var(--bg);
+  }
+  header{
+    width:min(96vw,520px);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .title{
+    font-size:26px;
+    font-weight:800;
+    letter-spacing:.5px;
+    color:var(--text);
+    text-shadow:0 0 18px var(--accent-glow);
+  }
+  .title .drop{
+    color:var(--accent);
+    text-shadow:0 0 22px var(--accent-glow);
+  }
+  .scores{
+    display:flex;
+    gap:10px;
+  }
+  .card{
+    background:linear-gradient(180deg, rgba(63,224,200,.08), rgba(63,224,200,.02));
+    border:1px solid rgba(63,224,200,.22);
+    border-radius:14px;
+    padding:8px 14px;
+    min-width:74px;
+    text-align:center;
+    box-shadow:0 6px 24px rgba(0,0,0,.35), inset 0 0 18px rgba(63,224,200,.04);
+    backdrop-filter:blur(6px);
+  }
+  .card .label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1.2px;
+    color:var(--muted);
+  }
+  .card .value{
+    font-size:22px;
+    font-weight:800;
+    color:var(--accent);
+    text-shadow:0 0 14px var(--accent-glow);
+  }
+  .board-wrap{
+    position:relative;
+    width:min(96vw,520px);
+    aspect-ratio:1/1;
+    border-radius:20px;
+    padding:12px;
+    background:linear-gradient(160deg, rgba(17,26,43,.9), rgba(8,13,22,.95));
+    border:1px solid rgba(63,224,200,.18);
+    box-shadow:0 18px 60px rgba(0,0,0,.5), inset 0 0 40px rgba(63,224,200,.05);
+  }
+  .board-wrap *{touch-action:none;}
+  canvas#game{
+    width:100%;
+    height:100%;
+    display:block;
+    border-radius:12px;
+    cursor:pointer;
+  }
+  #overlay{
+    position:absolute;
+    inset:12px;
+    border-radius:12px;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    background:rgba(8,13,22,.72);
+    backdrop-filter:blur(4px);
+    z-index:5;
+    animation:fade .35s ease;
+  }
+  #overlay .overlay-title{
+    font-size:30px;
+    font-weight:800;
+    color:var(--accent);
+    text-shadow:0 0 26px var(--accent-glow);
+  }
+  #overlay .overlay-sub{
+    font-size:14px;
+    color:var(--muted);
+    letter-spacing:1px;
+  }
+  .controls{
+    width:min(96vw,520px);
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  button{
+    font-family:inherit;
+    font-size:15px;
+    font-weight:700;
+    color:var(--text);
+    background:linear-gradient(180deg, rgba(63,224,200,.16), rgba(63,224,200,.05));
+    border:1px solid rgba(63,224,200,.35);
+    border-radius:14px;
+    padding:12px 20px;
+    cursor:pointer;
+    transition:transform .12s ease, box-shadow .2s ease, background .2s ease;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
+  }
+  button:hover{box-shadow:0 8px 26px var(--accent-glow);transform:translateY(-1px);}
+  button:active{transform:translateY(0);}
+  #btn-auto{
+    margin-left:auto;
+  }
+  #btn-auto.active{
+    background:linear-gradient(180deg, rgba(63,224,200,.34), rgba(63,224,200,.12));
+    border-color:var(--accent);
+    box-shadow:0 0 22px var(--accent-glow);
+  }
+  .ai-row{
+    width:min(96vw,520px);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-height:22px;
+  }
+  #ai-indicator{
+    width:11px;height:11px;border-radius:50%;
+    background:var(--muted);
+    box-shadow:0 0 0 rgba(63,224,200,0);
+    opacity:.4;
+  }
+  #ai-indicator.on{
+    background:var(--accent);
+    opacity:1;
+    animation:pulse 1.1s ease-in-out infinite;
+  }
+  #ai-status{
+    font-size:13px;
+    color:var(--accent);
+    letter-spacing:.5px;
+    visibility:hidden;
+  }
+  .hint{
+    width:min(96vw,520px);
+    text-align:center;
+    font-size:12.5px;
+    color:var(--muted);
+    letter-spacing:.4px;
+  }
+  @keyframes pulse{
+    0%,100%{box-shadow:0 0 0 0 var(--accent-glow);}
+    50%{box-shadow:0 0 0 8px rgba(63,224,200,0);}
+  }
+  @keyframes fade{from{opacity:0;}to{opacity:1;}}
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">Pipe <span class="drop">Flow</span></div>
+    <div class="scores">
+      <div class="card"><div class="label">Moves</div><div class="value" id="score-moves">0</div></div>
+      <div class="card"><div class="label">Best</div><div class="value" id="score-best">—</div></div>
+    </div>
+  </header>
+
+  <div class="board-wrap">
+    <canvas id="game"></canvas>
+    <div id="overlay">
+      <div class="overlay-title" id="overlay-text">Water Connected!</div>
+      <div class="overlay-sub" id="overlay-sub"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btn-new">New Game</button>
+    <button id="btn-auto">Auto: OFF</button>
+  </div>
+
+  <div class="ai-row">
+    <div id="ai-indicator"></div>
+    <div id="ai-status">AI plumbing…</div>
+  </div>
+
+  <div class="hint">Tap a pipe to rotate it · connect the source to the sink</div>
+
+<script>
+function fitCanvas(canvas){
+  var ctx = canvas.getContext('2d');
+  var w = (canvas.clientWidth || canvas.width || 440);
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = w * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return w;
+}
+
+// Direction indices: N=0, E=1, S=2, W=3
+var BASE = {
+  straight: [0,2],
+  elbow:    [0,1],
+  tee:      [0,1,2],
+  cross:    [0,1,2,3]
+};
+var ND = [ {x:0,y:-1}, {x:1,y:0}, {x:0,y:1}, {x:-1,y:0} ]; // N,E,S,W normalized edge vectors
+var DX = [0,1,0,-1];
+var DY = [-1,0,1,0];
+
+function setEq(a,b){
+  if(a.size!==b.size) return false;
+  for(var v of a){ if(!b.has(v)) return false; }
+  return true;
+}
+function openDirs(cell){
+  var out=[];
+  var base=BASE[cell.type];
+  for(var i=0;i<base.length;i++){ out.push((base[i]+cell.rot)%4); }
+  return out;
+}
+function findRotation(type, dirs){
+  var base=BASE[type];
+  var target=new Set(dirs);
+  for(var r=0;r<4;r++){
+    var s=new Set();
+    for(var i=0;i<base.length;i++){ s.add((base[i]+r)%4); }
+    if(setEq(s,target)) return r;
+  }
+  return 0;
+}
+function typeForDirs(dirs){
+  // dirs always length 2 for path cells
+  if(dirs.length!==2) return 'cross';
+  var a=dirs[0], b=dirs[1];
+  if(((a+2)%4)===b) return 'straight';
+  return 'elbow';
+}
+
+class G {
+  constructor(){
+    this.cols = 6;
+    this.rows = 6;
+    this.canvas = document.getElementById('game');
+    this.ctx = this.canvas.getContext('2d');
+    this.autoPlay = false;
+    this.moves = 0;
+    this.best = parseInt(localStorage.getItem('best_plumber')||'0',10) || 0;
+    this.won = false;
+    this._winHandled = false;
+    this._autoAcc = 0;
+    this._winAcc = 0;
+    this._solveIndex = 0;
+    this._last = undefined;
+    this.boardSize = fitCanvas(this.canvas);
+
+    this.canvas.addEventListener('pointerdown', (e)=>this.onPointer(e), {passive:false});
+    window.addEventListener('resize', ()=>{ this.boardSize = fitCanvas(this.canvas); });
+    document.getElementById('btn-new').addEventListener('click', ()=>this.restart());
+    document.getElementById('btn-auto').addEventListener('click', ()=>this.toggleAuto());
+
+    this.reset();
+    this.updateScores();
+    this.updateIndicators();
+    this._tick = this.tick.bind(this);
+    requestAnimationFrame(this._tick);
+  }
+
+  fit(){
+    this.boardSize = fitCanvas(this.canvas);
+    return this.boardSize;
+  }
+
+  makeCell(){
+    var types=['straight','elbow','tee','cross'];
+    return {
+      type: types[Math.floor(Math.random()*types.length)],
+      rot: 0,
+      displayRot: 0,
+      solutionRot: 0
+    };
+  }
+
+  makePath(){
+    var rows=this.rows, cols=this.cols;
+    var row=this.sourceRow;
+    var path=[];
+    for(var col=0; col<cols; col++){
+      var targetRow;
+      if(col===cols-1){ targetRow = this.sinkRow; }
+      else {
+        var delta = Math.floor(Math.random()*3)-1; // -1, 0, +1 (keep path short & pretty)
+        targetRow = Math.max(0, Math.min(rows-1, row+delta));
+      }
+      var step = targetRow>row ? 1 : (targetRow<row ? -1 : 0);
+      while(row!==targetRow){
+        path.push({col:col, row:row});
+        row += step;
+      }
+      path.push({col:col, row:targetRow});
+    }
+    return path;
+  }
+
+  dirBetween(a, b){
+    if(b.col === a.col+1) return 1; // E
+    if(b.col === a.col-1) return 3; // W
+    if(b.row === a.row+1) return 2; // S
+    if(b.row === a.row-1) return 0; // N
+    return 0;
+  }
+
+  requiredDirs(p){
+    var idx = this.path.indexOf(p);
+    var dirs=[];
+    if(idx===0){
+      dirs.push(3); // source feeds from West
+    } else {
+      dirs.push(this.dirBetween(p, this.path[idx-1]));
+    }
+    if(idx===this.path.length-1){
+      dirs.push(1); // sink accepts on East
+    } else {
+      dirs.push(this.dirBetween(p, this.path[idx+1]));
+    }
+    return dirs;
+  }
+
+  reset(){
+    var cols=this.cols, rows=this.rows;
+    this.sourceRow = Math.floor(Math.random()*rows);
+    this.sinkRow   = Math.floor(Math.random()*rows);
+
+    this.grid=[];
+    for(var r=0;r<rows;r++){
+      var rowArr=[];
+      for(var c=0;c<cols;c++){ rowArr.push(this.makeCell()); }
+      this.grid.push(rowArr);
+    }
+
+    this.path = this.makePath();
+
+    // assign correct pipe types + solution rotations for path cells
+    for(var i=0;i<this.path.length;i++){
+      var p=this.path[i];
+      var cell=this.grid[p.row][p.col];
+      var dirs=this.requiredDirs(p);
+      cell.type = typeForDirs(dirs);
+      cell.solutionRot = findRotation(cell.type, dirs);
+    }
+    // scramble every cell's rotation (puzzle)
+    for(var r2=0;r2<rows;r2++){
+      for(var c2=0;c2<cols;c2++){
+        var cc=this.grid[r2][c2];
+        cc.rot = Math.floor(Math.random()*4);
+        cc.displayRot = cc.rot;
+      }
+    }
+
+    this.moves = 0;
+    this.won = false;
+    this._winHandled = false;
+    this._solveIndex = 0;
+    this._autoAcc = 0;
+    this._winAcc = 0;
+    this.hideOverlay();
+    this.updateScores();
+  }
+
+  restart(){
+    this.reset();
+    this.stopAuto();
+  }
+
+  toggleAuto(){
+    this.autoPlay = !this.autoPlay;
+    if(this.autoPlay){
+      this._solveIndex = 0;
+      this._autoAcc = 0;
+      this._winAcc = 0;
+    }
+    this.updateIndicators();
+  }
+
+  stopAuto(){
+    this.autoPlay = false;
+    this.updateIndicators();
+  }
+
+  updateIndicators(){
+    var btn=document.getElementById('btn-auto');
+    btn.textContent = 'Auto: ' + (this.autoPlay ? 'ON' : 'OFF');
+    if(this.autoPlay) btn.classList.add('active'); else btn.classList.remove('active');
+    var ai=document.getElementById('ai-indicator');
+    var st=document.getElementById('ai-status');
+    if(this.autoPlay){ ai.classList.add('on'); st.style.visibility='visible'; }
+    else { ai.classList.remove('on'); st.style.visibility='hidden'; }
+  }
+
+  updateScores(){
+    document.getElementById('score-moves').textContent = this.moves;
+    document.getElementById('score-best').textContent = (this.best>0) ? this.best : '—';
+  }
+
+  showOverlay(){
+    var o=document.getElementById('overlay');
+    o.style.display='flex';
+    document.getElementById('overlay-text').textContent = this.autoPlay ? 'Flow Restored' : 'Water Connected!';
+    document.getElementById('overlay-sub').textContent = this.autoPlay ? 'auto-solver ready for next' : ('Moves: '+this.moves);
+  }
+  hideOverlay(){
+    var o=document.getElementById('overlay');
+    if(o) o.style.display='none';
+  }
+
+  onPointer(e){
+    e.preventDefault();
+    if(this.autoPlay) return;
+    var rect=this.canvas.getBoundingClientRect();
+    var x=(e.clientX-rect.left);
+    var y=(e.clientY-rect.top);
+    var cw=this.boardSize/this.cols;
+    var col=Math.floor(x/cw);
+    var row=Math.floor(y/cw);
+    if(col<0||col>=this.cols||row<0||row>=this.rows) return;
+    var cell=this.grid[row][col];
+    cell.rot += 1;
+    this.moves += 1;
+    this.updateScores();
+  }
+
+  computeFlood(){
+    var rows=this.rows, cols=this.cols;
+    var watered=[];
+    for(var r=0;r<rows;r++){ watered.push(new Array(cols).fill(false)); }
+    var start=this.grid[this.sourceRow][0];
+    var sd=openDirs(start);
+    if(sd.indexOf(3)===-1){ return {watered:watered, win:false}; }
+    var queue=[[0,this.sourceRow]];
+    watered[this.sourceRow][0]=true;
+    while(queue.length){
+      var cur=queue.pop();
+      var c=cur[0], r=cur[1];
+      var od=openDirs(this.grid[r][c]);
+      for(var k=0;k<od.length;k++){
+        var d=od[k];
+        var nc=c+DX[d], nr=r+DY[d];
+        if(nc<0||nc>=cols||nr<0||nr>=rows) continue;
+        if(watered[nr][nc]) continue;
+        var ncell=this.grid[nr][nc];
+        var nod=openDirs(ncell);
+        if(nod.indexOf((d+2)%4)!==-1){
+          watered[nr][nc]=true;
+          queue.push([nc,nr]);
+        }
+      }
+    }
+    var sink=this.grid[this.sinkRow][cols-1];
+    var swin = watered[this.sinkRow][cols-1] && (openDirs(sink).indexOf(1)!==-1);
+    return {watered:watered, win:swin};
+  }
+
+  autoStep(){
+    if(this._solveIndex >= this.path.length) return;
+    var p=this.path[this._solveIndex];
+    var cell=this.grid[p.row][p.col];
+    if(((cell.rot % 4) + 4) % 4 === ((cell.solutionRot % 4) + 4) % 4){
+      this._solveIndex += 1;
+      return;
+    }
+    cell.rot += 1;
+  }
+
+  update(dt){
+    var rows=this.rows, cols=this.cols;
+    var k=Math.min(1, dt*12);
+    for(var r=0;r<rows;r++){
+      for(var c=0;c<cols;c++){
+        var cell=this.grid[r][c];
+        cell.displayRot += (cell.rot - cell.displayRot) * k;
+      }
+    }
+
+    this.flood = this.computeFlood();
+    this.won = this.flood.win;
+
+    if(this.won && !this._winHandled){
+      this._winHandled = true;
+      if(!this.autoPlay){
+        if(this.moves>0 && (this.best===0 || this.moves<this.best)){
+          this.best = this.moves;
+          try{ localStorage.setItem('best_plumber', String(this.best)); }catch(err){}
+        }
+      }
+      this.updateScores();
+      this.showOverlay();
+    }
+
+    if(this.autoPlay){
+      if(this.won){
+        this._winAcc += dt;
+        if(this._winAcc > 1.3){ this.reset(); }
+      } else {
+        this._autoAcc += dt;
+        while(this._autoAcc >= 0.35){
+          this._autoAcc -= 0.35;
+          this.autoStep();
+        }
+      }
+    }
+  }
+
+  render(){
+    var ctx=this.ctx;
+    var size=this.boardSize;
+    var cw=size/this.cols;
+    ctx.clearRect(0,0,size,size);
+    ctx.fillStyle='#0a0f1a';
+    ctx.fillRect(0,0,size,size);
+
+    // subtle grid
+    ctx.strokeStyle='rgba(63,224,200,0.06)';
+    ctx.lineWidth=1;
+    for(var i=0;i<=this.cols;i++){
+      ctx.beginPath(); ctx.moveTo(i*cw,0); ctx.lineTo(i*cw,size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,i*cw); ctx.lineTo(size,i*cw); ctx.stroke();
+    }
+
+    var watered = this.flood ? this.flood.watered : null;
+    var lw=cw*0.16;
+    for(var r=0;r<this.rows;r++){
+      for(var c=0;c<this.cols;c++){
+        var cell=this.grid[r][c];
+        var cx=(c+0.5)*cw;
+        var cy=(r+0.5)*cw;
+        var isW = watered ? watered[r][c] : false;
+        ctx.save();
+        ctx.translate(cx,cy);
+        ctx.rotate(cell.displayRot * Math.PI/2);
+        ctx.lineCap='round';
+        ctx.lineWidth=lw;
+        if(isW){
+          ctx.strokeStyle='#3fe0c8';
+          ctx.shadowColor='#3fe0c8';
+          ctx.shadowBlur=16;
+        } else {
+          ctx.strokeStyle='#3a4d6b';
+          ctx.shadowBlur=0;
+        }
+        var base=BASE[cell.type];
+        for(var b=0;b<base.length;b++){
+          var d=base[b];
+          ctx.beginPath();
+          ctx.moveTo(0,0);
+          ctx.lineTo(ND[d].x*cw*0.5, ND[d].y*cw*0.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    // source node (left edge, sourceRow)
+    var sy=(this.sourceRow+0.5)*cw;
+    ctx.shadowColor='#3fe0c8';
+    ctx.shadowBlur=20;
+    ctx.fillStyle='#3fe0c8';
+    ctx.beginPath(); ctx.arc(cw*0.5, sy, cw*0.15, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(63,224,200,0.7)';
+    ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(cw*0.5, sy, cw*0.24, 0, Math.PI*2); ctx.stroke();
+
+    // sink node (right edge, sinkRow)
+    var tx=(this.cols-0.5)*cw;
+    var ty=(this.sinkRow+0.5)*cw;
+    var reached = this.flood ? this.flood.win : false;
+    ctx.fillStyle = reached ? '#3fe0c8' : '#ff5d6c';
+    ctx.shadowColor = reached ? '#3fe0c8' : '#ff5d6c';
+    ctx.beginPath(); ctx.arc(tx, ty, cw*0.15, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = reached ? 'rgba(63,224,200,0.7)' : 'rgba(255,93,108,0.7)';
+    ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(tx, ty, cw*0.24, 0, Math.PI*2); ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+
+  tick(ts){
+    var dt;
+    if(ts!==undefined){
+      dt=Math.min(0.05, ((ts-(this._last!==undefined?this._last:ts))/1000));
+      this._last=ts;
+    } else {
+      dt=0.016;
+    }
+    this.update(dt);
+    this.render();
+    requestAnimationFrame(this._tick);
+  }
+}
+
+window.game = new G();
+</script>
+</body>
+</html>

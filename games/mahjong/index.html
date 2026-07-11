@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mahjong Link</title>
+<style>
+  :root{
+    --bg:#0a0f1a; --surface:#111a2b; --text:#e7edf7; --muted:#8090a8;
+    --accent:#ff7bd5; --accent-glow:#ff7bd566; --danger:#ff5d6c;
+  }
+  html,body{height:100%;overflow:hidden;}
+  body{
+    margin:0; background:radial-gradient(1200px 800px at 50% -10%, #16223b 0%, var(--bg) 60%);
+    color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    touch-action:none; overscroll-behavior:none; user-select:none; -webkit-user-select:none;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  }
+  .app{ width:min(96vw,520px); display:flex; flex-direction:column; gap:12px; padding:14px 0 18px; box-sizing:border-box; }
+  header.top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .title{ font-size:22px; font-weight:700; letter-spacing:.5px;
+    background:linear-gradient(90deg,var(--accent),#9d7bff); -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 18px var(--accent-glow); }
+  .scores{ display:flex; gap:10px; }
+  .card{ background:var(--surface); border:1px solid #1f2c45; border-radius:14px; padding:8px 14px;
+    box-shadow:0 6px 18px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.02); text-align:center; min-width:62px; }
+  .card .label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .card .value{ font-size:22px; font-weight:700; color:var(--text); text-shadow:0 0 12px var(--accent-glow); }
+  .board-wrap{ position:relative; width:100%; aspect-ratio:1/1; border-radius:18px;
+    background:linear-gradient(180deg, rgba(255,123,213,.06), rgba(157,123,255,.04));
+    border:1px solid #1c2840; box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 0 40px rgba(157,123,255,.05);
+    overflow:hidden; }
+  .board-wrap *{touch-action:none;}
+  canvas#game{ display:block; width:100%; height:100%; }
+  .controls{ display:flex; gap:10px; align-items:center; }
+  button{ font:inherit; cursor:pointer; border:1px solid #2a3a5c; color:var(--text);
+    background:linear-gradient(180deg,#1a2740,#121d31); border-radius:12px; padding:11px 16px; font-weight:600;
+    transition:transform .12s ease, box-shadow .2s ease, border-color .2s ease; }
+  button:hover{ border-color:var(--accent); box-shadow:0 0 16px var(--accent-glow); }
+  button:active{ transform:translateY(1px) scale(.99); }
+  #btn-new{ flex:1; }
+  #btn-auto{ min-width:120px; }
+  #btn-auto.on{ border-color:var(--accent); color:#fff; box-shadow:0 0 18px var(--accent-glow);
+    background:linear-gradient(180deg,#3a1f3a,#241327); }
+  .ai-row{ display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); }
+  .ai-dot{ width:10px; height:10px; border-radius:50%; background:#33425f; transition:all .25s ease; box-shadow:0 0 0 rgba(255,123,213,0); }
+  #ai-indicator.active{ background:var(--accent); box-shadow:0 0 14px var(--accent); }
+  #ai-status{ color:var(--muted); }
+  .hint{ text-align:center; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="title">Mahjong Link</div>
+      <div class="scores">
+        <div class="card"><div class="label">Pairs</div><div class="value" id="pairs">0</div></div>
+        <div class="card"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      </div>
+    </header>
+    <div class="board-wrap">
+      <canvas id="game"></canvas>
+    </div>
+    <div class="controls">
+      <button id="btn-new">New Game</button>
+      <button id="btn-auto">Auto: OFF</button>
+    </div>
+    <div class="ai-row">
+      <span class="ai-dot" id="ai-indicator"></span>
+      <span id="ai-status">Idle</span>
+    </div>
+    <div class="hint">Tap two matching tiles to connect</div>
+  </div>
+
+<script>
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function roundRect(ctx,x,y,w,h,r){ if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); return; } ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+class G{
+  constructor(){
+    this.rows=10; this.cols=8;
+    this.glyphs=['★','●','▲','■','◆','♥','♣','♠','♦','⬟','⬢','✦','❖','⚫','⬤','◉','✺','✚'];
+    this.palette=['#ff7bd5','#7bdcff','#9d7bff','#ffd27b','#7bff9d','#ff7b7b','#7bfff0','#ff9d7b','#c77bff','#7b9dff','#ff7be0','#7bffd2','#ffe07b','#ff7bb0','#7bb0ff','#b0ff7b','#ff7b9d','#9dff7b'];
+    this.autoPlay=false;
+    this.time=0; this._last=undefined; this._autoAcc=0; this._stuckAcc=0;
+    this.removeDur=0.35;
+    this.best=this.loadBest();
+    this.canvas=document.getElementById('game');
+    this.ctx=this.canvas.getContext('2d');
+    this.pairsEl=document.getElementById('pairs');
+    this.bestEl=document.getElementById('best');
+    this.btnAuto=document.getElementById('btn-auto');
+    this.aiIndicator=document.getElementById('ai-indicator');
+    this.aiStatus=document.getElementById('ai-status');
+    this._bind();
+    this.layout();
+    this.reset();
+    this._tick=this.tick.bind(this);
+    requestAnimationFrame(this._tick);
+  }
+
+  _bind(){
+    const h=e=>{ e.preventDefault(); this.onPointer(e); };
+    this.canvas.addEventListener('pointerdown',h,{passive:false});
+    document.getElementById('btn-new').addEventListener('click',()=>this.restart());
+    this.btnAuto.addEventListener('click',()=>this.toggleAuto());
+    window.addEventListener('resize',()=>this.layout());
+  }
+
+  fitCanvas(){
+    const w=(this.canvas.clientWidth||this.canvas.width||440);
+    const dpr=window.devicePixelRatio||1;
+    this.canvas.width=w*dpr; this.canvas.height=w*dpr;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    return w;
+  }
+  layout(){
+    this.w=this.fitCanvas();
+    this.tile=Math.min(this.w/this.cols, this.w/this.rows);
+    this.originX=(this.w-this.tile*this.cols)/2;
+    this.originY=(this.w-this.tile*this.rows)/2;
+  }
+
+  colorFor(sym){ const i=this.glyphs.indexOf(sym); return this.palette[(i<0?0:i)%this.palette.length]; }
+
+  reset(){
+    this.grid=Array.from({length:this.rows},()=>new Array(this.cols).fill(null));
+    const total=this.rows*this.cols;
+    const pairs=total/2;
+    const syms=[];
+    for(let i=0;i<pairs;i++){ const g=this.glyphs[i%this.glyphs.length]; syms.push(g,g); }
+    shuffle(syms);
+    let k=0;
+    for(let r=0;r<this.rows;r++) for(let c=0;c<this.cols;c++){
+      const s=syms[k++];
+      this.grid[r][c]={sym:s,r,c,color:this.colorFor(s)};
+    }
+    this.remaining=total;
+    this.pairs=0;
+    this.selected=null;
+    this.removing=[];
+    this.pathAnim=null;
+    this.cleared=false;
+    this.clearTimer=0;
+    this._autoAcc=0; this._stuckAcc=0;
+    this.updateIndicators();
+    this.syncScore();
+  }
+  restart(){ this.reset(); this.stopAuto(); this.updateIndicators(); }
+
+  toggleAuto(){ this.autoPlay=!this.autoPlay; this._autoAcc=0; this.updateIndicators(); }
+  stopAuto(){ this.autoPlay=false; this.updateIndicators(); }
+
+  updateIndicators(){
+    this.btnAuto.textContent='Auto: '+(this.autoPlay?'ON':'OFF');
+    this.btnAuto.classList.toggle('on',this.autoPlay);
+    this.aiIndicator.classList.toggle('active',this.autoPlay);
+    this.aiStatus.textContent=this.autoPlay?'AI matching…':'Idle';
+  }
+
+  loadBest(){ try{ const v=parseInt(localStorage.getItem('best_mahjong')||'0',10); return isNaN(v)?0:v; }catch(e){ return 0; } }
+  saveBest(){ try{ localStorage.setItem('best_mahjong',String(this.best)); }catch(e){} }
+  updateBest(){ if(this.pairs>this.best){ this.best=this.pairs; this.saveBest(); this.syncScore(); } }
+  syncScore(){ this.pairsEl.textContent=String(this.pairs); this.bestEl.textContent=String(this.best); }
+
+  allTiles(){ const a=[]; for(let r=0;r<this.rows;r++) for(let c=0;c<this.cols;c++){ if(this.grid[r][c]) a.push(this.grid[r][c]); } return a; }
+
+  // connectivity with <=2 turns through empty cells; border ring counts as empty.
+  canConnect(a,b){
+    if(!a||!b||a===b) return false;
+    if(a.sym!==b.sym) return false;
+    const R=this.rows,C=this.cols;
+    const ar=a.r+1, ac=a.c+1, br=b.r+1, bc=b.c+1;
+    const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+    const passable=(r,c)=>{
+      if(r<0||c<0||r>R+1||c>C+1) return false;
+      if(r===0||c===0||r===R+1||c===C+1) return true; // ring
+      const tr=r-1,tc=c-1;
+      if(tr===a.r&&tc===a.c) return true;
+      if(tr===b.r&&tc===b.c) return true;
+      return this.grid[tr][tc]===null;
+    };
+    const INF=99;
+    const dist=Array.from({length:R+2},()=>Array.from({length:C+2},()=>[INF,INF,INF,INF]));
+    const prev=Array.from({length:R+2},()=>Array.from({length:C+2},()=>[null,null,null,null]));
+    const q=[];
+    for(let d=0;d<4;d++){
+      const nr=ar+dirs[d][0], nc=ac+dirs[d][1];
+      const isT=(nr===br&&nc===bc);
+      if(isT || passable(nr,nc)){
+        if(dist[nr][nc][d]>0){ dist[nr][nc][d]=0; prev[nr][nc][d]=[ar,ac,-1]; q.push([nr,nc,d,0]); }
+      }
+    }
+    let found=false, fd=-1;
+    while(q.length){
+      const [r,c,d,t]=q.shift();
+      if(r===br&&c===bc){ found=true; fd=d; break; }
+      if(t>2) continue;
+      for(let nd=0;nd<4;nd++){
+        const nt=t+(nd!==d?1:0); if(nt>2) continue;
+        const nr=r+dirs[nd][0], nc=c+dirs[nd][1];
+        const isT=(nr===br&&nc===bc);
+        if(!isT && !passable(nr,nc)) continue;
+        if(isT){ dist[nr][nc][nd]=nt; prev[nr][nc][nd]=[r,c,d]; found=true; fd=nd; break; }
+        if(dist[nr][nc][nd]>nt){ dist[nr][nc][nd]=nt; prev[nr][nc][nd]=[r,c,d]; q.push([nr,nc,nd,nt]); }
+      }
+      if(found) break;
+    }
+    if(!found) return false;
+    const path=[]; let cur=[br,bc,fd];
+    while(cur){ path.push([cur[0],cur[1]]); const p=prev[cur[0]][cur[1]][cur[2]]; if(!p) break; cur=p; }
+    path.reverse();
+    return path;
+  }
+
+  findAnyMatch(){
+    const tiles=this.allTiles();
+    const groups={};
+    for(const t of tiles){ (groups[t.sym]||(groups[t.sym]=[])).push(t); }
+    for(const s in groups){
+      const arr=groups[s];
+      for(let i=0;i<arr.length;i++) for(let j=i+1;j<arr.length;j++){
+        const p=this.canConnect(arr[i],arr[j]);
+        if(p) return [arr[i],arr[j],p];
+      }
+    }
+    return null;
+  }
+  hasValidMove(){ return this.findAnyMatch()!==null; }
+
+  straightPath(a,b){ return [[a.r+1,a.c+1],[b.r+1,b.c+1]]; }
+
+  doReshuffle(){
+    const tiles=this.allTiles();
+    if(tiles.length===0) return;
+    const syms=tiles.map(t=>t.sym);
+    for(let tries=0;tries<30;tries++){
+      shuffle(syms);
+      tiles.forEach((t,i)=>{ t.sym=syms[i]; t.color=this.colorFor(syms[i]); });
+      if(this.hasValidMove()) return;
+    }
+  }
+
+  match(a,b,path){
+    this.grid[a.r][a.c]=null; this.grid[b.r][b.c]=null;
+    this.remaining-=2; this.pairs++;
+    this.removing.push({tile:a,t:0},{tile:b,t:0});
+    this.pathAnim={points:path,t:0,dur:0.5};
+    this.selected=null;
+    this.updateBest(); this.syncScore();
+    if(this.remaining===0){ this.cleared=true; this.clearTimer=0; }
+  }
+
+  onTile(r,c){
+    if(this.cleared) return;
+    if(this.removing.length>0) return;
+    const t=this.grid[r][c];
+    if(!t) return;
+    if(this.selected===t){ this.selected=null; return; }
+    if(!this.selected){ this.selected=t; return; }
+    const path=this.canConnect(this.selected,t);
+    if(path){ this.match(this.selected,t,path); }
+    else { this.selected=t; }
+  }
+
+  onPointer(e){
+    if(!this.canvas) return;
+    const rect=this.canvas.getBoundingClientRect();
+    const x=(e.clientX-rect.left); const y=(e.clientY-rect.top);
+    const c=Math.floor((x-this.originX)/this.tile);
+    const r=Math.floor((y-this.originY)/this.tile);
+    if(r>=0&&r<this.rows&&c>=0&&c<this.cols) this.onTile(r,c);
+  }
+
+  autoStep(){
+    if(this.remaining===0) return;
+    const ts=this.allTiles();
+    if(ts.length===2 && ts[0].sym===ts[1].sym){
+      this.match(ts[0],ts[1],this.straightPath(ts[0],ts[1])); return;
+    }
+    const m=this.findAnyMatch();
+    if(m){ this.match(m[0],m[1],m[2]); }
+    else { this.doReshuffle(); }
+  }
+
+  update(dt){
+    this.time+=dt;
+    for(const rm of this.removing) rm.t+=dt;
+    this.removing=this.removing.filter(rm=>rm.t<this.removeDur);
+    if(this.pathAnim){ this.pathAnim.t+=dt; if(this.pathAnim.t>=this.pathAnim.dur) this.pathAnim=null; }
+    if(this.cleared){
+      this.clearTimer+=dt;
+      if(this.autoPlay && this.clearTimer>1.2){ this.reset(); }
+      return;
+    }
+    const busy=this.removing.length>0 || this.pathAnim!==null;
+    if(this.autoPlay && !busy){
+      this._autoAcc+=dt;
+      if(this._autoAcc>=0.4){ this._autoAcc=0; this.autoStep(); }
+    }
+    if(!busy){
+      this._stuckAcc+=dt;
+      if(this._stuckAcc>=0.5){ this._stuckAcc=0; if(this.remaining>0 && !this.hasValidMove()) this.doReshuffle(); }
+    }
+  }
+
+  mapPoint(pr,pc){
+    return [ this.originX+(pc-1)*this.tile+this.tile/2,
+             this.originY+(pr-1)*this.tile+this.tile/2 ];
+  }
+
+  drawTile(cx,cy,size,sym,color,scale,alpha,glow){
+    const ctx=this.ctx;
+    const s=size*scale;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.shadowColor=glow; ctx.shadowBlur=glow?16:0;
+    roundRect(ctx,cx-s/2,cy-s/2,s,s,Math.max(4,s*0.18));
+    const g=ctx.createLinearGradient(cx-s/2,cy-s/2,cx+s/2,cy+s/2);
+    g.addColorStop(0,'#16223c'); g.addColorStop(1,'#0e1626');
+    ctx.fillStyle=g; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle=color; ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle=color;
+    ctx.font='700 '+(s*0.52)+'px system-ui,Segoe UI,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(sym,cx,cy+s*0.04);
+    ctx.restore();
+  }
+
+  render(){
+    const ctx=this.ctx, w=this.w;
+    ctx.clearRect(0,0,w,w);
+    // board panel
+    ctx.save();
+    roundRect(ctx,this.originX-this.tile*0.25,this.originY-this.tile*0.25,this.tile*this.cols+this.tile*0.5,this.tile*this.rows+this.tile*0.5,this.tile*0.3);
+    ctx.fillStyle='rgba(17,26,43,0.55)'; ctx.fill();
+    ctx.restore();
+
+    // tiles
+    const base=this.tile*0.86;
+    for(let r=0;r<this.rows;r++) for(let c=0;c<this.cols;c++){
+      const t=this.grid[r][c]; if(!t) continue;
+      const [cx,cy]=this.mapPoint(r+1,c+1);
+      const sel=(t===this.selected);
+      let scale=1, glow=0;
+      if(sel){ const p=(Math.sin(this.time*6)*0.5+0.5); scale=1+0.06*p; glow=18+10*p; }
+      this.drawTile(cx,cy,base,t.sym,t.color,scale,1,glow);
+    }
+
+    // removing animation
+    for(const rm of this.removing){
+      const k=rm.t/this.removeDur;
+      const [cx,cy]=this.mapPoint(rm.tile.r+1,rm.tile.c+1);
+      this.drawTile(cx,cy,base,rm.tile.sym,rm.tile.color,Math.max(0.01,1-k),Math.max(0,1-k),20);
+    }
+
+    // connecting path
+    if(this.pathAnim){
+      const a=Math.max(0,1-this.pathAnim.t/this.pathAnim.dur);
+      const pts=this.pathAnim.points;
+      ctx.save();
+      ctx.globalAlpha=a;
+      ctx.strokeStyle='#ff7bd5'; ctx.lineWidth=this.tile*0.14;
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.shadowColor='#ff7bd5'; ctx.shadowBlur=18;
+      ctx.beginPath();
+      for(let i=0;i<pts.length;i++){ const [x,y]=this.mapPoint(pts[i][0],pts[i][1]); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // cleared overlay
+    if(this.cleared){
+      ctx.save();
+      ctx.fillStyle='rgba(10,15,26,0.72)'; ctx.fillRect(0,0,w,w);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='#ff7bd5'; ctx.shadowBlur=24;
+      ctx.fillStyle='#ff7bd5'; ctx.font='700 '+(w*0.11)+'px system-ui,sans-serif';
+      ctx.fillText('Cleared!',w/2,w/2-10);
+      ctx.shadowBlur=0;
+      ctx.fillStyle='#8090a8'; ctx.font='500 '+(w*0.04)+'px system-ui,sans-serif';
+      ctx.fillText(this.autoPlay?'Starting new board…':'Tap New Game to play again',w/2,w/2+w*0.09);
+      ctx.restore();
+    }
+  }
+
+  tick(ts){
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.update(dt);
+    this.render();
+    requestAnimationFrame(this._tick);
+  }
+}
+
+window.game=new G();
+</script>
+</body>
+</html>

@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Ludo</title>
+<style>
+:root{
+  --bg:#0a0f1a;--surface:#111a2b;--text:#e7edf7;--muted:#8090a8;
+  --c1:#ff5d6c;--c2:#5ce1ff;--c3:#5ce1a8;--c4:#ffd76a;--accent-glow:#5ce1ff66;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+body{touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;}
+.app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px;max-width:680px;margin:0 auto;}
+.topbar{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.logo{font-size:26px;font-weight:800;letter-spacing:3px;margin:0;
+  background:linear-gradient(90deg,var(--c1),var(--c2),var(--c3),var(--c4));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:0 0 18px var(--accent-glow);}
+.scores{display:flex;gap:8px;}
+.card{background:var(--surface);border:1px solid #1e2c44;border-radius:12px;padding:6px 12px;
+  display:flex;flex-direction:column;align-items:center;min-width:62px;
+  box-shadow:0 0 16px rgba(92,225,255,.08) inset;}
+.card-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.card-val{font-size:18px;font-weight:700;}
+.board-wrap{position:relative;width:min(94vw,64vh);aspect-ratio:1/1;touch-action:none;}
+.board-wrap *{touch-action:none;}
+#game{width:100%;height:100%;display:block;border-radius:18px;
+  box-shadow:0 0 40px rgba(92,225,255,.12),0 0 0 1px #1c2a44 inset;}
+.ai-row{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;background:rgba(10,15,26,.6);
+  padding:5px 12px;border-radius:20px;border:1px solid #1e2c44;backdrop-filter:blur(4px);}
+.ai-dot{width:10px;height:10px;border-radius:50%;background:var(--c2);
+  box-shadow:0 0 10px var(--c2);transition:opacity .3s;opacity:.3;}
+.ai-text{font-size:12px;color:var(--muted);}
+.controls{display:flex;gap:12px;}
+.btn{background:var(--surface);color:var(--text);border:1px solid #243650;border-radius:12px;
+  padding:10px 18px;font-size:15px;font-weight:600;cursor:pointer;transition:.15s;
+  box-shadow:0 0 14px rgba(92,225,255,.08);}
+.btn:hover{transform:translateY(-1px);border-color:var(--c2);}
+.btn:active{transform:translateY(0);}
+.btn-accent{border-color:var(--c2);color:var(--c2);box-shadow:0 0 18px var(--accent-glow);}
+.hint{color:var(--muted);font-size:12px;margin:0;text-align:center;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <h1 class="logo">LUDO</h1>
+    <div class="scores">
+      <div class="card"><span class="card-label">Round</span><span class="card-val" id="round-val">1</span></div>
+      <div class="card"><span class="card-label">Winner</span><span class="card-val" id="winner-val">&mdash;</span></div>
+      <div class="card"><span class="card-label">Your Wins</span><span class="card-val" id="best-val">0</span></div>
+    </div>
+  </header>
+  <div class="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="ai-row">
+      <span class="ai-dot" id="ai-indicator"></span>
+      <span class="ai-text" id="ai-status">Your turn &mdash; tap a token</span>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="btn-restart" class="btn">New Game</button>
+    <button id="btn-auto" class="btn btn-accent">Auto: OFF</button>
+  </div>
+  <p class="hint">Tap your token to move. Auto = all AI.</p>
+</div>
+<script>
+(function(){
+"use strict";
+
+function hexA(h,a){const n=parseInt(h.slice(1),16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return 'rgba('+r+','+g+','+b+','+a+')';}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+// 56-cell closed main track (col,row) on 15x15 grid, validated adjacent loop.
+const MAIN=[
+ [6,14],[6,13],[6,12],[6,11],[6,10],[6,9],
+ [6,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8],
+ [0,7],
+ [0,6],[1,6],[2,6],[3,6],[4,6],[5,6],
+ [6,6],[6,5],[6,4],[6,3],[6,2],[6,1],[6,0],
+ [7,0],
+ [8,0],[8,1],[8,2],[8,3],[8,4],[8,5],
+ [8,6],[9,6],[10,6],[11,6],[12,6],[13,6],[14,6],
+ [14,7],
+ [14,8],[13,8],[12,8],[11,8],[10,8],[9,8],
+ [8,8],[8,9],[8,10],[8,11],[8,12],[8,13],[8,14],
+ [7,14]
+];
+
+const COLORS=['#ff5d6c','#5ce1ff','#5ce1a8','#ffd76a']; // red(you),cyan,green,yellow
+const CNAME=['Red','Cyan','Green','Yellow'];
+// start main index per color (aligned to COLORS order)
+const STARTS=[0,42,14,28];
+const SAFE=new Set([0,42,14,28]);
+// home columns (6 cells) leading to center [7,7]
+const HOMECOLS=[
+ [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],   // red  (bottom)
+ [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]],   // cyan (right)
+ [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],       // green (left)
+ [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]]        // yellow(top)
+];
+// base slots (4) inside corner houses
+const BASES=[
+ [[1,10],[4,10],[1,13],[4,13]],  // red  bottom-left
+ [[10,10],[13,10],[10,13],[13,13]],// cyan bottom-right
+ [[1,1],[4,1],[1,4],[4,4]],        // green top-left
+ [[10,1],[13,1],[10,4],[13,4]]    // yellow top-right
+];
+
+class G{
+  constructor(){
+    this.canvas=document.getElementById('game');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false;
+    this.w=0; this.cell=0;
+    this._last=undefined;
+    this._tick=this.tick.bind(this);
+
+    try{ this.best=parseInt(localStorage.getItem('best_ludo')||'0',10)||0; }catch(e){ this.best=0; }
+
+    this.round=0;
+    this.reset();
+
+    this.w=this.fitCanvas();
+
+    const b1=document.getElementById('btn-restart'); if(b1) b1.addEventListener('click',()=>this.restart());
+    const b2=document.getElementById('btn-auto'); if(b2) b2.addEventListener('click',()=>this.toggleAuto());
+    this.canvas.addEventListener('pointerdown',(e)=>this.onPointer(e),{passive:false});
+    window.addEventListener('resize',()=>{ this.w=this.fitCanvas(); });
+
+    this.updateIndicators();
+    requestAnimationFrame(this._tick);
+  }
+
+  fitCanvas(){
+    const w=(this.canvas.clientWidth||this.canvas.width||440);
+    const dpr=window.devicePixelRatio||1;
+    this.canvas.width=Math.max(1,Math.round(w*dpr));
+    this.canvas.height=Math.max(1,Math.round(w*dpr));
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.cell=w/15;
+    return w;
+  }
+
+  grid(c,r){ return {x:(c+0.5)*this.cell, y:(r+0.5)*this.cell}; }
+
+  reset(){
+    this.round=(this.round||0)+1;
+    this.tokens=[];
+    for(let c=0;c<4;c++){
+      for(let i=0;i<4;i++){
+        const p=this.grid(BASES[c][i][0],BASES[c][i][1]);
+        this.tokens.push({color:c,id:i,state:'base',prog:0,x:p.x,y:p.y,tx:p.x,ty:p.y});
+      }
+    }
+    this.turn=0;
+    this.phase='idle';
+    this.timer=0;
+    this.chooseTimer=0;
+    this.dice=0;
+    this.diceShown=1;
+    this.winner=null;
+    this.movingToken=null;
+    this.curMoves=[];
+    this.lastSix=false;
+  }
+
+  restart(){ this.reset(); this.stopAuto(); this.updateIndicators(); }
+  toggleAuto(){ this.autoPlay=!this.autoPlay; this.updateIndicators(); }
+  stopAuto(){ this.autoPlay=false; this.updateIndicators(); }
+
+  tokenPixel(t){
+    if(t.state==='base'){ const s=BASES[t.color][t.id]; return this.grid(s[0],s[1]); }
+    if(t.state==='done'){ const a=t.id/4*Math.PI*2; const r=this.cell*0.2; return {x:this.w/2+Math.cos(a)*r, y:this.w/2+Math.sin(a)*r}; }
+    let c,r;
+    if(t.state==='track'){ const abs=(STARTS[t.color]+t.prog)%56; const cc=MAIN[abs]; c=cc[0]; r=cc[1]; }
+    else { const hc=HOMECOLS[t.color][t.prog-56]; c=hc[0]; r=hc[1]; }
+    return this.grid(c,r);
+  }
+
+  legalMoves(){
+    const c=this.turn, d=this.dice, moves=[];
+    for(const t of this.tokens){
+      if(t.color!==c||t.state==='done') continue;
+      if(t.state==='base'){ if(d===6) moves.push({tok:t,newProg:0,fromBase:true}); continue; }
+      const np=t.prog+d;
+      if(np<=62) moves.push({tok:t,newProg:np,fromBase:false});
+    }
+    return moves;
+  }
+
+  scoreMove(m){
+    const t=m.tok, c=this.turn; let s=0; const np=m.newProg;
+    if(np<=55){
+      const abs=(STARTS[c]+np)%56;
+      if(!SAFE.has(abs)){
+        for(const o of this.tokens){
+          if(o.color!==c && o.state==='track' && ((STARTS[o.color]+o.prog)%56)===abs) s+=1000;
+        }
+      }
+    }
+    if(np>=62) s+=2000;            // finish a token
+    else if(np>=56) s+=900;        // reach the safe home column
+    if(m.fromBase) s+=700;         // release a token from base
+    s+=np*0.5;                      // mild preference for advancing the lead token
+    return s;
+  }
+
+  doAIMove(){
+    if(this.curMoves.length===0){ this.endTurn(); return; }
+    let best=this.curMoves[0], bs=-1e9;
+    for(const m of this.curMoves){ const sc=this.scoreMove(m); if(sc>bs){ bs=sc; best=m; } }
+    this.executeMove(best.tok,best);
+  }
+
+  executeMove(tok,m){
+    tok.state = m.fromBase ? 'track' : (m.newProg>=62 ? 'done' : (m.newProg<=55 ? 'track' : 'home'));
+    tok.prog  = m.fromBase ? 0 : m.newProg;
+    const p=this.tokenPixel(tok);
+    tok.tx=p.x; tok.ty=p.y;
+    this.movingToken=tok;
+    this.phase='moving';
+    this.timer=0;
+  }
+
+  onArrive(tok){
+    if(tok.state==='track'){
+      const abs=(STARTS[tok.color]+tok.prog)%56;
+      if(!SAFE.has(abs)){
+        for(const o of this.tokens){
+          if(o.color!==tok.color && o.state==='track'){
+            const oa=(STARTS[o.color]+o.prog)%56;
+            if(oa===abs){
+              o.state='base'; o.prog=0;
+              const p=this.tokenPixel(o); o.x=p.x;o.y=p.y;o.tx=p.x;o.ty=p.y;
+            }
+          }
+        }
+      }
+    }
+    const all=this.tokens.filter(t=>t.color===tok.color);
+    if(all.every(t=>t.state==='done')){
+      this.winner=tok.color; this.phase='gameover'; this.timer=0;
+      if(tok.color===0){ this.best=(this.best||0)+1; try{ localStorage.setItem('best_ludo',String(this.best)); }catch(e){} }
+      this.updateIndicators();
+      return;
+    }
+    this.lastSix=(this.dice===6);
+    this.phase='post'; this.timer=0;
+  }
+
+  endTurn(){ this.lastSix=false; this.phase='post'; this.timer=0; }
+
+  nextTurn(){
+    if(this.lastSix && this.winner===null){ /* same player extra turn */ }
+    else { this.turn=(this.turn+1)%4; }
+    this.phase='rolling'; this.timer=0; this.dice=0;
+  }
+
+  update(dt){
+    if(this.phase==='idle'){ this.phase='rolling'; this.timer=0; return; }
+    if(this.phase==='rolling'){
+      this.timer+=dt;
+      if(this.timer>=0.30){ this.dice=1+Math.floor(Math.random()*6); this.phase='choose'; this.timer=0; this.chooseTimer=0; this.curMoves=this.legalMoves(); }
+      return;
+    }
+    if(this.phase==='choose'){
+      const ai = this.autoPlay || this.turn!==0;
+      if(ai){
+        this.chooseTimer+=dt;
+        if(this.chooseTimer>=0.10) this.doAIMove();
+      } else {
+        if(this.curMoves.length===0){
+          this.chooseTimer+=dt;
+          if(this.chooseTimer>=0.6) this.endTurn();
+        }
+      }
+      return;
+    }
+    if(this.phase==='moving'){
+      const t=this.movingToken;
+      if(t){
+        t.x+=(t.tx-t.x)*Math.min(1,dt*16);
+        t.y+=(t.ty-t.y)*Math.min(1,dt*16);
+        if(Math.abs(t.tx-t.x)<0.6 && Math.abs(t.ty-t.y)<0.6){ t.x=t.tx; t.y=t.ty; this.onArrive(t); this.movingToken=null; }
+      }
+      return;
+    }
+    if(this.phase==='post'){
+      this.timer+=dt;
+      if(this.timer>=0.10) this.nextTurn();
+      return;
+    }
+    if(this.phase==='gameover'){
+      this.timer+=dt;
+      if(this.autoPlay && this.timer>=2.2) this.reset();
+      return;
+    }
+  }
+
+  onPointer(e){
+    e.preventDefault();
+    if(this.phase!=='choose' || this.autoPlay || this.turn!==0) return;
+    if(this.curMoves.length===0) return;
+    const rect=this.canvas.getBoundingClientRect();
+    const scale=this.w/Math.max(1,rect.width);
+    const x=(e.clientX-rect.left)*scale, y=(e.clientY-rect.top)*scale;
+    let pick=null, bd=this.cell*0.55;
+    for(const m of this.curMoves){ const t=m.tok; const d=Math.hypot(t.x-x,t.y-y); if(d<bd){ bd=d; pick=m; } }
+    if(pick) this.executeMove(pick.tok,pick);
+  }
+
+  updateIndicators(){
+    const btn=document.getElementById('btn-auto'); if(btn) btn.textContent='Auto: '+(this.autoPlay?'ON':'OFF');
+    const ind=document.getElementById('ai-indicator');
+    const st=document.getElementById('ai-status');
+    if(this.phase==='gameover'){
+      if(st) st.textContent=this.winner===0?'You win!':(CNAME[this.winner]+' wins');
+      if(ind) ind.style.opacity=this.winner===0?1:0.4;
+    } else if(this.autoPlay){
+      if(st) st.textContent='AI rolling…'; if(ind) ind.style.opacity=1;
+    } else {
+      if(st) st.textContent=(this.turn===0?'Your turn — tap a token':'AI thinking…');
+      if(ind) ind.style.opacity=(this.turn===0?0.3:1);
+    }
+    const rv=document.getElementById('round-val'); if(rv) rv.textContent=this.round;
+    const wv=document.getElementById('winner-val'); if(wv) wv.textContent=this.winner!==null?(this.winner===0?'You':CNAME[this.winner]):'—';
+    const bv=document.getElementById('best-val'); if(bv) bv.textContent=this.best||0;
+  }
+
+  drawCenter(ctx,cell){
+    const x0=6*cell,y0=6*cell,x1=9*cell,y1=9*cell,cx=this.w/2,cy=this.w/2,R=cell*1.5;
+    const tris=[[[x0,y0],[x1,y0],'#ffd76a'],[[x1,y0],[x1,y1],'#5ce1ff'],[[x1,y1],[x0,y1],'#ff5d6c'],[[x0,y1],[x0,y0],'#5ce1a8']];
+    for(const tr of tris){
+      ctx.save(); ctx.shadowColor=tr[2]; ctx.shadowBlur=cell*0.5;
+      ctx.beginPath(); ctx.moveTo(tr[0][0],tr[0][1]); ctx.lineTo(tr[1][0],tr[1][1]); ctx.lineTo(cx,cy); ctx.closePath();
+      ctx.fillStyle=hexA(tr[2],0.85); ctx.fill(); ctx.restore();
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,cell*0.5,0,7); ctx.fillStyle='#0a0f1a'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#e7edf7'; ctx.stroke();
+  }
+
+  drawToken(ctx,t,cell){
+    const col=COLORS[t.color], r=cell*0.30;
+    ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=cell*0.45;
+    ctx.beginPath(); ctx.arc(t.x,t.y,r,0,7); ctx.fillStyle=col; ctx.fill(); ctx.restore();
+    ctx.beginPath(); ctx.arc(t.x,t.y,r*0.62,0,7); ctx.fillStyle='#0a0f1a'; ctx.fill();
+    ctx.beginPath(); ctx.arc(t.x,t.y,r*0.62,0,7); ctx.fillStyle=col; ctx.globalAlpha=0.45; ctx.fill(); ctx.globalAlpha=1;
+    if(this.phase==='choose' && this.turn===0 && !this.autoPlay){
+      for(const m of this.curMoves){ if(m.tok===t){
+        ctx.beginPath(); ctx.arc(t.x,t.y,r+cell*0.12,0,7);
+        ctx.strokeStyle='#ffffff'; ctx.lineWidth=2; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+      } }
+    }
+  }
+
+  drawDice(ctx,w,cell){
+    const cx=w/2, cy=w/2, s=cell*1.05;
+    ctx.save();
+    ctx.globalAlpha=0.92;
+    roundRect(ctx,cx-s/2,cy-s/2,s,s,cell*0.18);
+    ctx.fillStyle='#0a0f1a'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#5ce1ff'; ctx.shadowColor='#5ce1ff66'; ctx.shadowBlur=cell*0.3; ctx.stroke();
+    ctx.restore();
+    const val=(this.phase==='rolling')?(this.diceShown||1):(this.dice||1);
+    const pos={1:[[.5,.5]],2:[[.3,.3],[.7,.7]],3:[[.3,.3],[.5,.5],[.7,.7]],
+      4:[[.3,.3],[.7,.3],[.3,.7],[.7,.7]],5:[[.3,.3],[.7,.3],[.5,.5],[.3,.7],[.7,.7]],
+      6:[[.3,.3],[.7,.3],[.3,.5],[.7,.5],[.3,.7],[.7,.7]]};
+    const pr=cell*0.085; ctx.fillStyle='#e7edf7';
+    const arr=pos[val]||pos[1];
+    for(const p of arr){ ctx.beginPath(); ctx.arc(cx+(p[0]-.5)*s*0.72, cy+(p[1]-.5)*s*0.72, pr,0,7); ctx.fill(); }
+  }
+
+  drawOverlay(ctx,w){
+    ctx.save();
+    ctx.fillStyle='rgba(5,9,18,0.72)'; ctx.fillRect(0,0,w,w);
+    ctx.textAlign='center';
+    ctx.fillStyle='#e7edf7'; ctx.font='bold '+(w*0.085)+'px system-ui,sans-serif';
+    const txt=this.winner===0?'YOU WIN!':(CNAME[this.winner]+' wins');
+    ctx.fillText(txt,w/2,w/2-w*0.01);
+    ctx.font=(w*0.035)+'px system-ui,sans-serif'; ctx.fillStyle='#8090a8';
+    ctx.fillText(this.autoPlay?'Starting next round…':'Tap New Game',w/2,w/2+w*0.06);
+    ctx.restore();
+  }
+
+  render(){
+    const w=this.w; if(!w) return;
+    const cell=this.cell=w/15;
+    const ctx=this.ctx;
+    ctx.clearRect(0,0,w,w);
+    ctx.fillStyle='#0a0f1a'; ctx.fillRect(0,0,w,w);
+    roundRect(ctx,w*0.02,w*0.02,w*0.96,w*0.96,w*0.03); ctx.fillStyle='#111a2b'; ctx.fill();
+
+    // houses
+    const hpos=[[0,9],[9,9],[0,0],[9,0]]; // red,cyan,green,yellow corner origins (6x6)
+    for(let c=0;c<4;c++){
+      const hx=hpos[c][0]*cell, hy=hpos[c][1]*cell;
+      roundRect(ctx,hx+cell*0.2,hy+cell*0.2,6*cell-cell*0.4,6*cell-cell*0.4,cell*0.5);
+      ctx.fillStyle=hexA(COLORS[c],0.18); ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle=hexA(COLORS[c],0.6); ctx.stroke();
+      for(let i=0;i<4;i++){
+        const s=BASES[c][i]; const p=this.grid(s[0],s[1]);
+        ctx.beginPath(); ctx.arc(p.x,p.y,cell*0.28,0,7);
+        ctx.fillStyle=hexA(COLORS[c],0.22); ctx.fill();
+        ctx.strokeStyle=hexA(COLORS[c],0.7); ctx.lineWidth=1.5; ctx.stroke();
+      }
+    }
+
+    // cross arms surface
+    ctx.fillStyle='#0e1626';
+    ctx.fillRect(6*cell,0,3*cell,w);
+    ctx.fillRect(0,6*cell,w,3*cell);
+
+    // main track cells
+    for(let i=0;i<56;i++){
+      const c=MAIN[i]; const p=this.grid(c[0],c[1]); const safe=SAFE.has(i);
+      const r=cell*0.34;
+      roundRect(ctx,p.x-r,p.y-r,r*2,r*2,cell*0.12);
+      ctx.fillStyle= safe?'#1b2740':'#16213a'; ctx.fill();
+      if(safe){ ctx.lineWidth=2; ctx.strokeStyle='#ffd76a'; ctx.stroke(); }
+    }
+
+    // home columns
+    for(let c=0;c<4;c++){
+      for(let i=0;i<6;i++){
+        const cc=HOMECOLS[c][i]; const p=this.grid(cc[0],cc[1]); const r=cell*0.34;
+        roundRect(ctx,p.x-r,p.y-r,r*2,r*2,cell*0.12);
+        ctx.fillStyle=hexA(COLORS[c],0.35); ctx.fill();
+        ctx.strokeStyle=hexA(COLORS[c],0.85); ctx.lineWidth=1.5; ctx.stroke();
+      }
+    }
+
+    this.drawCenter(ctx,cell);
+
+    for(const t of this.tokens) this.drawToken(ctx,t,cell);
+    this.drawDice(ctx,w,cell);
+    if(this.phase==='gameover') this.drawOverlay(ctx,w);
+
+    this.updateIndicators();
+  }
+
+  tick(ts){
+    if(ts===undefined) ts=(typeof performance!=='undefined'&&performance.now)?performance.now():0;
+    const prev=this._last||ts;
+    let dt=(ts-prev)/1000;
+    if(!(dt>0)) dt=0.016;
+    dt=Math.min(0.05,dt);
+    this._last=ts;
+    this.update(dt);
+    this.render();
+    requestAnimationFrame(this._tick);
+  }
+}
+
+window.game=new G();
+})();
+</script>
+</body>
+</html>

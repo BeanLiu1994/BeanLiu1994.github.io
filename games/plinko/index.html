@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0f1a" />
+<title>弹珠台 · Plinko</title>
+<style>
+  :root {
+    --bg:#0a0f1a; --surface:#111a2b; --text:#e7edf7; --muted:#8090a8;
+    --accent:#c77bff; --accent-glow:#c77bff66; --danger:#ff5d6c;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body {
+    background:var(--bg);
+    background-image:
+      radial-gradient(ellipse at 25% 15%, #2a1140 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 90%, #142a45 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none; touch-action:none;
+  }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 {
+    font-size:1.7rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#e9c6ff,#ff8ae0);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1;
+    text-shadow:0 0 30px var(--accent-glow);
+  }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:3px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card {
+    background:var(--surface); border:1px solid #ffffff0a; border-radius:10px;
+    padding:5px 12px; text-align:center; min-width:52px;
+    box-shadow:0 0 18px #00000040;
+  }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.15rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--accent); text-shadow:0 0 14px var(--accent-glow); }
+  .board-wrap {
+    position:relative; background:var(--surface); border:1px solid #ffffff0a;
+    border-radius:14px; padding:8px; overflow:hidden;
+    box-shadow:0 0 40px #00000040, 0 0 70px var(--accent-glow);
+    aspect-ratio:1 / 1;
+  }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:100%; border-radius:10px; background:#0c1322; cursor:pointer; }
+  .controls { display:flex; gap:8px; margin-top:12px; }
+  .btn {
+    flex:1; min-width:80px; padding:11px 12px; border:1px solid #ffffff12; border-radius:10px;
+    background:var(--surface); color:var(--text); font-size:0.82rem; font-weight:600;
+    cursor:pointer; transition:all .2s; text-align:center;
+  }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0020; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0020; animation:pg 2s infinite; }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--accent-glow);} 50%{box-shadow:0 0 22px var(--accent-glow),0 0 44px var(--accent-glow);} }
+  .ai-indicator {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    margin-top:9px; font-size:0.75rem; color:var(--muted); min-height:18px;
+  }
+  .ai-dot {
+    width:9px; height:9px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 10px var(--accent); animation:bk .8s infinite;
+  }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.35; transform:scale(.65);} }
+  .hint { text-align:center; margin-top:9px; font-size:0.72rem; color:var(--muted); opacity:.85; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title-block">
+        <h1>Plinko</h1>
+        <div class="sub">弹珠台 · Galton</div>
+      </div>
+      <div class="score-panel">
+        <div class="score-card">
+          <div class="label">Score</div>
+          <div class="value" id="score">0</div>
+        </div>
+        <div class="score-card best">
+          <div class="label">Best</div>
+          <div class="value" id="best">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="board-wrap">
+      <canvas id="game"></canvas>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="btn-new">New Game</button>
+      <button class="btn" id="btn-auto">Auto: OFF</button>
+    </div>
+
+    <div class="ai-indicator">
+      <span class="ai-dot" id="ai-indicator" style="opacity:.25"></span>
+      <span id="ai-status">Idle</span>
+    </div>
+
+    <div class="hint">Tap to drop a ball. Auto drops continuously.</div>
+  </div>
+
+<script>
+(function(){
+  var CTX = new Proxy(function(){}, {
+    get:function(){ return CTX; },
+    set:function(){ return true; },
+    apply:function(){ return CTX; }
+  });
+
+  function makeElStub(){
+    return {
+      textContent:'', style:{}, addEventListener:function(){},
+      getBoundingClientRect:function(){ return {left:0,top:0,width:440,height:440}; },
+      clientWidth:440, width:440, height:440,
+      getContext:function(){ return CTX; }
+    };
+  }
+
+  function G(){
+    this.autoPlay = false;
+    this.score = 0;
+    this.best = this.loadBest();
+    this.balls = [];
+    this.flashes = [];
+    this.autoTimer = 0;
+    this._last = undefined;
+
+    this.canvas = document.getElementById('game') || makeElStub();
+    this.ctx = (this.canvas && this.canvas.getContext) ? (this.canvas.getContext('2d') || CTX) : CTX;
+    this.elScore = document.getElementById('score') || makeElStub();
+    this.elBest = document.getElementById('best') || makeElStub();
+    this.btnAuto = document.getElementById('btn-auto') || makeElStub();
+    this.btnNew = document.getElementById('btn-new') || makeElStub();
+    this.aiIndicator = document.getElementById('ai-indicator') || makeElStub();
+    this.aiStatus = document.getElementById('ai-status') || makeElStub();
+
+    var self = this;
+    this.canvas.addEventListener('pointerdown', function(e){ self.onPointer(e); });
+    this.btnAuto.addEventListener('click', function(){ self.toggleAuto(); });
+    this.btnNew.addEventListener('click', function(){ self.restart(); });
+
+    this.fitCanvas();
+    this.reset();
+    this.updateIndicators();
+
+    this._tick = this.tick.bind(this);
+    requestAnimationFrame(this._tick);
+  }
+
+  G.prototype.loadBest = function(){
+    try {
+      var v = window.localStorage && window.localStorage.getItem('best_plinko');
+      return v ? (parseInt(v,10) || 0) : 0;
+    } catch(e) { return 0; }
+  };
+  G.prototype.saveBest = function(){
+    try {
+      if (window.localStorage) window.localStorage.setItem('best_plinko', String(this.best));
+    } catch(e) {}
+  };
+
+  G.prototype.fitCanvas = function(){
+    var w = (this.canvas.clientWidth || this.canvas.width || 440);
+    var dpr = window.devicePixelRatio || 1;
+    this.canvas.width = w * dpr;
+    this.canvas.height = w * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return w;
+  };
+
+  G.prototype.computeLayout = function(){
+    var w = this.w;
+    this.pad = w * 0.04;
+    this.pegTop = w * 0.14;
+    this.pegBot = w * 0.76;
+    this.slotTop = w * 0.80;
+    this.slotBot = w * 0.955;
+    this.rows = 12;
+    this.numSlots = 11;
+    this.slotW = w / this.numSlots;
+    this.ballR = w * 0.018;
+    this.pegR = w * 0.013;
+    this.g = w * 2.0;
+    this.maxV = w * 2.4;
+    this.rest = 0.62;
+
+    this.pegs = [];
+    var sx = w / (this.rows + 3);
+    var sy = (this.pegBot - this.pegTop) / (this.rows - 1);
+    for (var i = 0; i < this.rows; i++) {
+      var n = i + 3;
+      var y = this.pegTop + i * sy;
+      for (var j = 0; j < n; j++) {
+        var x = w / 2 + (j - (n - 1) / 2) * sx;
+        this.pegs.push({ x: x, y: y });
+      }
+    }
+    this.slotMult = [0.5, 1, 2, 5, 10, 20, 10, 5, 2, 1, 0.5];
+  };
+
+  G.prototype.reset = function(){
+    this.score = 0;
+    this.balls = [];
+    this.flashes = [];
+    this.autoTimer = 0;
+    this.w = this.fitCanvas();
+    this.computeLayout();
+    this.updateBest();
+  };
+
+  G.prototype.restart = function(){
+    this.reset();
+    this.stopAuto();
+  };
+
+  G.prototype.stopAuto = function(){
+    this.autoPlay = false;
+    this.updateIndicators();
+  };
+
+  G.prototype.toggleAuto = function(){
+    this.autoPlay = !this.autoPlay;
+    if (this.autoPlay) this.autoTimer = 0.5;
+    this.updateIndicators();
+  };
+
+  G.prototype.updateIndicators = function(){
+    if (this.btnAuto && this.btnAuto.textContent !== undefined) {
+      this.btnAuto.textContent = 'Auto: ' + (this.autoPlay ? 'ON' : 'OFF');
+      if (this.btnAuto.style) {
+        if (this.autoPlay) this.btnAuto.classList ? this.btnAuto.classList.add('auto-on') : (this.btnAuto.style.background = 'var(--accent)');
+        else this.btnAuto.classList ? this.btnAuto.classList.remove('auto-on') : (this.btnAuto.style.background = '');
+      }
+    }
+    if (this.aiIndicator && this.aiIndicator.style) this.aiIndicator.style.opacity = this.autoPlay ? '1' : '.25';
+    if (this.aiStatus && this.aiStatus.textContent !== undefined) this.aiStatus.textContent = this.autoPlay ? 'Dropping…' : 'Idle';
+  };
+
+  G.prototype.updateBest = function(){
+    var s = Math.floor(this.score);
+    if (s > this.best) { this.best = s; this.saveBest(); }
+    if (this.elScore) this.elScore.textContent = s;
+    if (this.elBest) this.elBest.textContent = this.best;
+  };
+
+  G.prototype.spawnBall = function(x){
+    var w = this.w;
+    var minX = this.pad + this.ballR;
+    var maxX = w - this.pad - this.ballR;
+    if (x < minX) x = minX; if (x > maxX) x = maxX;
+    this.balls.push({
+      x: x, y: this.pegTop - this.ballR * 2,
+      vx: (Math.random() - 0.5) * w * 0.12,
+      vy: w * 0.08,
+      trail: [], dead: false
+    });
+  };
+
+  G.prototype.spawnAuto = function(){
+    var w = this.w;
+    this.spawnBall(w / 2 + (Math.random() - 0.5) * w * 0.22);
+  };
+
+  G.prototype.onPointer = function(e){
+    if (e && e.preventDefault) e.preventDefault();
+    var rect = null;
+    try { rect = this.canvas.getBoundingClientRect(); } catch (err) { rect = null; }
+    var x = 0;
+    if (rect && (e.clientX !== undefined)) {
+      var rx = (rect.width && rect.width > 0) ? (this.w / rect.width) : 1;
+      x = (e.clientX - rect.left) * rx;
+    } else if (e.offsetX !== undefined) {
+      x = e.offsetX;
+    } else {
+      x = this.w / 2;
+    }
+    this.spawnBall(x);
+  };
+
+  G.prototype.update = function(dt){
+    if (this.autoPlay) {
+      this.autoTimer += dt;
+      while (this.autoTimer >= 0.5) {
+        this.autoTimer -= 0.5;
+        this.spawnAuto();
+      }
+    }
+
+    var sub = 4;
+    var sdt = dt / sub;
+    var w = this.w, ballR = this.ballR, pegR = this.pegR, g = this.g, maxV = this.maxV, rest = this.rest;
+    var i, s, b, p, k;
+
+    for (s = 0; s < sub; s++) {
+      for (i = 0; i < this.balls.length; i++) {
+        b = this.balls[i];
+        if (b.dead) continue;
+        b.vy += g * sdt;
+        if (b.vy > maxV) b.vy = maxV;
+        if (b.vx > maxV) b.vx = maxV; else if (b.vx < -maxV) b.vx = -maxV;
+
+        b.x += b.vx * sdt;
+        b.y += b.vy * sdt;
+
+        if (b.x < this.pad + ballR) { b.x = this.pad + ballR; b.vx = Math.abs(b.vx) * rest; }
+        if (b.x > w - this.pad - ballR) { b.x = w - this.pad - ballR; b.vx = -Math.abs(b.vx) * rest; }
+
+        for (k = 0; k < this.pegs.length; k++) {
+          p = this.pegs[k];
+          var dx = b.x - p.x, dy = b.y - p.y;
+          var rr = ballR + pegR;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < rr * rr) {
+            var d = Math.sqrt(d2) || 0.0001;
+            var nx = dx / d, ny = dy / d;
+            var overlap = rr - d;
+            b.x += nx * overlap;
+            b.y += ny * overlap;
+            var vn = b.vx * nx + b.vy * ny;
+            if (vn < 0) {
+              b.vx -= (1 + rest) * vn * nx;
+              b.vy -= (1 + rest) * vn * ny;
+            }
+            b.vx += (Math.random() - 0.5) * w * 0.55;
+          }
+        }
+
+        if (b.y > this.slotBot - ballR * 0.5) {
+          var idx = Math.floor(b.x / this.slotW);
+          if (idx < 0) idx = 0; if (idx >= this.numSlots) idx = this.numSlots - 1;
+          this.score += this.slotMult[idx];
+          this.flashes.push({ idx: idx, t: 1 });
+          if (this.flashes.length > 30) this.flashes.shift();
+          b.dead = true;
+        }
+      }
+    }
+
+    for (i = this.balls.length - 1; i >= 0; i--) {
+      if (this.balls[i].dead) this.balls.splice(i, 1);
+    }
+
+    for (i = 0; i < this.balls.length; i++) {
+      b = this.balls[i];
+      b.trail.push({ x: b.x, y: b.y });
+      if (b.trail.length > 6) b.trail.shift();
+    }
+
+    for (i = this.flashes.length - 1; i >= 0; i--) {
+      this.flashes[i].t -= dt * 2.2;
+      if (this.flashes[i].t <= 0) this.flashes.splice(i, 1);
+    }
+
+    this.updateBest();
+  };
+
+  G.prototype.render = function(){
+    var ctx = this.ctx, w = this.w, i, k;
+    ctx.clearRect(0, 0, w, w);
+
+    // peg-field panel
+    ctx.fillStyle = '#0e1726';
+    ctx.fillRect(this.pad * 0.4, this.pegTop - this.ballR * 3, w - this.pad * 0.8, this.pegBot - this.pegTop + this.ballR * 6);
+
+    // pegs
+    for (k = 0; k < this.pegs.length; k++) {
+      var p = this.pegs[k];
+      ctx.shadowColor = 'var(--accent-glow)';
+      ctx.shadowColor = '#c77bff';
+      ctx.shadowBlur = w * 0.02;
+      ctx.fillStyle = '#d9b6ff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, this.pegR, 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    // slots
+    for (i = 0; i < this.numSlots; i++) {
+      var x0 = i * this.slotW;
+      var mult = this.slotMult[i];
+      var isHi = mult >= 10;
+      var col = isHi ? '#ff8ae0' : (mult >= 2 ? '#c77bff' : '#6f7dff');
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(x0 + 2, this.slotTop, this.slotW - 4, this.slotBot - this.slotTop);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.85;
+      ctx.strokeRect(x0 + 2, this.slotTop, this.slotW - 4, this.slotBot - this.slotTop);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = col;
+      ctx.font = 'bold ' + (w * 0.03) + 'px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('x' + mult, x0 + this.slotW / 2, (this.slotTop + this.slotBot) / 2);
+    }
+
+    // slot flashes
+    for (k = 0; k < this.flashes.length; k++) {
+      var f = this.flashes[k];
+      var fx = f.idx * this.slotW;
+      ctx.globalAlpha = Math.max(0, f.t) * 0.6;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(fx + 2, this.slotTop, this.slotW - 4, this.slotBot - this.slotTop);
+      ctx.globalAlpha = 1;
+    }
+
+    // balls
+    for (i = 0; i < this.balls.length; i++) {
+      var b = this.balls[i];
+      for (var t = 0; t < b.trail.length; t++) {
+        var tp = b.trail[t];
+        ctx.globalAlpha = (t / b.trail.length) * 0.4;
+        ctx.fillStyle = '#e9c6ff';
+        ctx.beginPath();
+        ctx.arc(tp.x, tp.y, this.ballR * (0.4 + 0.6 * (t / b.trail.length)), 0, 6.2832);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = '#c77bff';
+      ctx.shadowBlur = w * 0.035;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, this.ballR, 0, 6.2832);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  };
+
+  G.prototype.tick = function(ts){
+    const dt = Math.min(0.05, (ts !== undefined) ? ((ts - (this._last || ts)) / 1000) : 16 / 1000);
+    this._last = ts;
+    this.update(dt);
+    this.render();
+    requestAnimationFrame(this._tick);
+  };
+
+  window.game = new G();
+})();
+</script>
+</body>
+</html>
