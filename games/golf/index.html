@@ -122,7 +122,7 @@
         if(!this.over && Math.hypot(b.x-this.hole.x,b.y-this.hole.y)<HR && Math.hypot(b.vx,b.vy)<6){ this.sink(); return; }
         if(this.stopped(b)){ b.vx=0; b.vy=0; }
       } else if(this.cool>0){ this.cool--; if(this.cool===0 && !this.over && this.autoPlay) this.aiPutt(); }
-      else if(!this.over && this.autoPlay){ this.cool=18; }
+      else if(!this.over && this.autoPlay){ this.cool=6; }
     }
     putt(vx,vy){ this.ball.vx=vx; this.ball.vy=vy; this.strokes++; this.updateUI(); }
     sink(){
@@ -131,20 +131,35 @@
       this.lvl++; this.cool=24; this.loadLevel(this.lvl); this.strokes=0; this.updateUI();
     }
     simulate(ang,power){
-      const b={x:this.ball.x,y:this.ball.y,vx:Math.cos(ang)*power,vy:Math.sin(ang)*power,r:BR};
+      const dt=1; const b={x:this.ball.x,y:this.ball.y,vx:Math.cos(ang)*power,vy:Math.sin(ang)*power,r:BR};
       let steps=0, hit=false;
-      for(let i=0;i<700;i++){ steps++; b.x+=b.vx; b.y+=b.vy; b.vx*=FR; b.vy*=FR; this.collideWalls(b); this.bounds(b);
+      for(let i=0;i<800;i++){ steps++;
+        b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=FR; b.vy*=FR;
+        this.collideWalls(b); this.bounds(b);
         if(Math.hypot(b.x-this.hole.x,b.y-this.hole.y)<HR && Math.hypot(b.vx,b.vy)<6){ hit=true; break; }
         if(b.vx*b.vx+b.vy*b.vy<0.02) break; }
       return {x:b.x,y:b.y,hit,steps};
     }
     aiPutt(){
       const h=this.hole; let best=null, bestScore=1e9;
-      for(let a=0;a<96;a++){ const ang=a/96*Math.PI*2;
-        for(const pw of [8,10,12,14]){
+      // finer angle sweep + more power levels + wider power range
+      const NANG=128, POWERS=[5,7,9,11,13,15,17,19];
+      for(let a=0;a<NANG;a++){ const ang=a/NANG*Math.PI*2;
+        for(const pw of POWERS){
           const s=this.simulate(ang,pw);
           if(s.hit){ const sc=s.steps*0.01; if(sc<bestScore){ bestScore=sc; best={ang,pw}; } }
           else { const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<bestScore){ bestScore=d; best={ang,pw}; } }
+        }
+      }
+      // if max power still far away, try even stronger
+      if(bestScore>150){
+        for(const pw of [21,24,27]){
+          for(let a=0;a<NANG;a+=3){ const ang=a/NANG*Math.PI*2;
+            const s=this.simulate(ang,pw);
+            if(s.hit){ bestScore=s.steps*0.01; best={ang,pw}; break; }
+            const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<bestScore){ bestScore=d; best={ang,pw}; }
+          }
+          if(best&&bestScore<50) break;
         }
       }
       if(best) this.putt(Math.cos(best.ang)*best.pw, Math.sin(best.ang)*best.pw);
