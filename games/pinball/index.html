@@ -121,7 +121,7 @@
     restart(){
       this.stopAuto();
       this.score=0; this.lives=3; this.over=false;
-      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0;
+      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0; this.loiterT=0; this.trapped=false; this.ballLife=0;
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');
       this.updateUI();
@@ -157,6 +157,7 @@
         if(f.ang<tgt) f.ang=Math.min(tgt,f.ang+sp); else if(f.ang>tgt) f.ang=Math.max(tgt,f.ang-sp);
       }
       const b=this.ball; if(!b.alive) return;
+      this.ballLife=(this.ballLife||0)+dt;
       b.vy+=G*dt;
       const sp=Math.hypot(b.vx,b.vy); if(sp>MAXV){ b.vx*=MAXV/sp; b.vy*=MAXV/sp; }
       b.x+=b.vx*dt; b.y+=b.vy*dt;
@@ -185,9 +186,24 @@
       if(b.y > pivotY-34 && b.y < pivotY-6){
         if(Math.hypot(b.vx,b.vy) < 1.2) this._stuck=(this._stuck||0)+dt; else this._stuck=0;
       } else this._stuck=0;
+      // Anti-orbit: if the ball stays in the UPPER field (above the flippers) for a
+      // long time it is looping in a stable high-speed orbit and would never drain
+      // on its own (the older backstops only catch a slow ball in the flipper band).
+      // We bleed energy + add a downward bias so the orbit decays and the ball falls.
+      const inUpper=b.y < pivotY-20;
+      if(inUpper){ this.loiterT=(this.loiterT||0)+dt; } else { this.loiterT=0; this.trapped=false; }
+      if(this.loiterT>40){
+        this.trapped=true;
+        b.vx*=0.985;                 // damp the horizontal orbit component
+        b.vy+=0.6*dt;                // gentle extra gravity to pull it down out of the loop
+        // keep speed up enough to still bounce off walls/bumpers on the way down
+        const s=Math.hypot(b.vx,b.vy); if(s<2.5){ const k=2.5/s; b.vx*=k; b.vy*=k; }
+      }
       const stuckTooLong=(this._stuck||0)>150;
-      if(belowFlippers || atFloor || b.y>H+R || stuckTooLong){
-        b.alive=false; this.lives--; this._stuck=0; this.updateUI();
+      const loiterTooLong=(this.loiterT||0)>350;          // ~5.8s trapped in upper field
+      const lifeTooLong=(this.ballLife||0)>900;           // hard cap on a single ball (~15s)
+      if(belowFlippers || atFloor || b.y>H+R || stuckTooLong || loiterTooLong || lifeTooLong){
+        b.alive=false; this.lives--; this._stuck=0; this.loiterT=0; this.trapped=false; this.ballLife=0; this.updateUI();
         if(this.lives<=0){ this.over=true; this.gameOver(); }
         else { this.sinceDrain=0; setTimeout(()=>{ if(this.over) return; this.ball=makeBall(); }, 600); }
       }
