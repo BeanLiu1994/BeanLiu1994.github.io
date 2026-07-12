@@ -123,15 +123,16 @@ class G{
 
     try{ this.best=parseInt(localStorage.getItem('best_ludo')||'0',10)||0; }catch(e){ this.best=0; }
 
+    this.w=this.fitCanvas();
     this.round=0;
     this.reset();
 
-    this.w=this.fitCanvas();
+    this.layoutTokens();
 
     const b1=document.getElementById('btn-restart'); if(b1) b1.addEventListener('click',()=>this.restart());
     const b2=document.getElementById('btn-auto'); if(b2) b2.addEventListener('click',()=>this.toggleAuto());
     this.canvas.addEventListener('pointerdown',(e)=>this.onPointer(e),{passive:false});
-    window.addEventListener('resize',()=>{ this.w=this.fitCanvas(); });
+    window.addEventListener('resize',()=>{ this.w=this.fitCanvas(); this.layoutTokens(); });
 
     this.updateIndicators();
     requestAnimationFrame(this._tick);
@@ -175,7 +176,18 @@ class G{
     this.lastSix=false;
   }
 
-  restart(){ this.reset(); this.stopAuto(); this.updateIndicators(); }
+  // Recompute every token's pixel position from its logical grid slot. Called after
+  // reset() (which only has a valid this.cell once the canvas is sized) and on resize,
+  // so tokens are never left sitting at (0,0) / a stale location.
+  layoutTokens(){
+    for(const t of this.tokens){
+      if(t===this.movingToken && t.x!==undefined && t.y!==undefined) continue; // don't yank a token mid-flight
+      const p=this.tokenPixel(t);
+      t.x=p.x; t.y=p.y; t.tx=p.x; t.ty=p.y;
+    }
+  }
+
+  restart(){ this.reset(); this.layoutTokens(); this.stopAuto(); this.updateIndicators(); }
   toggleAuto(){ this.autoPlay=!this.autoPlay; this.updateIndicators(); }
   stopAuto(){ this.autoPlay=false; this.updateIndicators(); }
 
@@ -461,7 +473,7 @@ class G{
     // 真实 CSS 宽度比对，尺寸一旦变化立即重算（开销可忽略），杜绝该冻结。
     if(this.canvas&&this.canvas.getBoundingClientRect){
       const rw=(this.canvas.getBoundingClientRect().width)||0;
-      if(rw>0 && rw!==this._cssW){ this._cssW=rw; const w=this.fitCanvas(); if(w) this.w=w; }
+      if(rw>0 && rw!==this._cssW){ this._cssW=rw; const w=this.fitCanvas(); if(w) this.w=w; this.layoutTokens(); }
     }
     try {
       this.update(dt);
