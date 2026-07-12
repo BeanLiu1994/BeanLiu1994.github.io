@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>体脂率计算器</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:720px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .fields{display:flex;gap:14px;flex-wrap:wrap}
+  .f{flex:1;min-width:150px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  select,input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:15px;outline:none;font-family:inherit}
+  select:focus,input:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .out{margin-top:16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+  .out .big{font-size:34px;font-weight:800;color:var(--accent)}
+  .out .cat{margin-top:8px;font-size:15px;color:var(--muted)}
+  .bar{height:10px;border-radius:6px;background:linear-gradient(90deg,#3ecf8e,#4f9cff,#ffb020,#ff5d6c);margin-top:14px;position:relative}
+  .bar .mk{position:absolute;top:-4px;width:4px;height:18px;background:#fff;border-radius:2px;transform:translateX(-50%)}
+  .hint{color:var(--muted);font-size:12px;margin-top:12px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>💪 体脂率计算器</h1><div class="sub">美国海军法 (Navy Method) · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <div class="fields">
+      <div class="f"><label>性别</label>
+        <select id="gender"><option value="m">男</option><option value="f">女</option></select></div>
+      <div class="f"><label>身高 (cm)</label><input id="height" type="number" min="50" value="175"></div>
+      <div class="f"><label>腰围 (cm)</label><input id="waist" type="number" min="30" value="82"></div>
+      <div class="f"><label>颈围 (cm)</label><input id="neck" type="number" min="10" value="38"></div>
+      <div class="f" id="hipF" style="display:none"><label>臀围 (cm，女性)</label><input id="hip" type="number" min="30" value="95"></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="calc">计算</button>
+      <button id="clear">重置</button>
+    </div>
+    <div class="out">
+      <div class="big" id="bf">—</div>
+      <div class="cat" id="cat">—</div>
+      <div class="bar"><div class="mk" id="mk" style="left:0%"></div></div>
+    </div>
+    <p class="hint">采用美国海军人体测量公式（基于腰、颈、身高，女性另需臀围），结果仅供参考，不能替代专业体测。单位为厘米，公式内部换算为英寸计算。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function category(g,bf){
+    if(g==='m'){
+      if(bf<6) return '过低（运动员区间下限）';
+      if(bf<14) return '运动员';
+      if(bf<18) return '健身';
+      if(bf<25) return '正常';
+      if(bf<30) return '偏高';
+      return '肥胖';
+    } else {
+      if(bf<14) return '过低（运动员区间下限）';
+      if(bf<21) return '运动员';
+      if(bf<25) return '健身';
+      if(bf<32) return '正常';
+      if(bf<39) return '偏高';
+      return '肥胖';
+    }
+  }
+  function run(){
+    const g=$('gender').value;
+    const h=+$('height').value, w=+$('waist').value, n=+$('neck').value;
+    if(!(h>0&&w>0&&n>0)){ $('st').textContent='⚠ 请填写有效数值'; return; }
+    const hi=h/2.54, wi=w/2.54, ni=n/2.54;
+    let bf;
+    if(g==='m'){
+      bf=495/(1.0324-0.19077*Math.log10(wi-ni)+0.15456*Math.log10(hi))-450;
+    } else {
+      const hp=+$('hip').value;
+      if(!(hp>0)){ $('st').textContent='⚠ 女性请填写臀围'; return; }
+      const pi=hp/2.54;
+      bf=495/(1.29579-0.35004*Math.log10(wi+pi-ni)+0.22100*Math.log10(hi))-450;
+    }
+    bf=Math.round(bf*10)/10;
+    if(bf<0||bf>70){ $('st').textContent='⚠ 计算结果异常，请核对围度'; return; }
+    $('bf').textContent=bf+'%';
+    $('cat').textContent=category(g,bf);
+    const pct=Math.max(0,Math.min(100,bf/45*100));
+    $('mk').style.left=pct+'%';
+    $('st').textContent='✓ 体脂率约 '+bf+'%';
+  }
+  $('gender').addEventListener('change',()=>{ $('hipF').style.display=$('gender').value==='f'?'flex':'none'; run(); });
+  $('calc').addEventListener('click',run);
+  ['height','waist','neck','hip'].forEach(id=>$(id).addEventListener('input',run));
+  $('clear').addEventListener('click',()=>{ $('height').value=175;$('waist').value=82;$('neck').value=38;$('hip').value=95;run(); });
+  run();
+})();
+</script>
+</body>
+</html>

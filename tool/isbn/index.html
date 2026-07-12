@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISBN 校验与转换</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:720px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:16px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none;letter-spacing:1px}
+  input:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .out{margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;word-break:break-all}
+  .out .k{color:var(--muted);font-size:12px;display:block;margin-bottom:4px}
+  .out .v{color:var(--accent);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px}
+  .out.bad .v{color:var(--err)}
+  .out.ok .v{color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>📚 ISBN 校验与转换</h1><div class="sub">ISBN-10 ⇄ ISBN-13 · 校验位 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <label>输入 ISBN（可带空格 / 连字符）</label>
+    <input id="inp" placeholder="例如：9787111111111 或 0-306-40615-2" value="9787111111111">
+    <div class="row">
+      <button class="primary" id="conv">校验 / 转换</button>
+      <button id="clear">清空</button>
+    </div>
+    <div class="out" id="o1"><span class="k">校验结果</span><span class="v" id="valid">—</span></div>
+    <div class="out" id="o2"><span class="k">ISBN-13</span><span class="v" id="v13">—</span></div>
+    <div class="out" id="o3"><span class="k">ISBN-10</span><span class="v" id="v10">—</span></div>
+    <p class="hint">ISBN（国际标准书号）分为 10 位与 13 位两种。本工具根据校验位算法验证合法性，并在两种格式间转换（ISBN-13 以 978 / 979 开头时可由 ISBN-10 升级而来）。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const clean=s=>s.replace(/[\s-]/g,'');
+  function check10(s){
+    if(s.length!==10) return false;
+    let sum=0;
+    for(let i=0;i<9;i++){ if(!/[0-9]/.test(s[i])) return false; sum+=(10-i)*+s[i]; }
+    const last=s[9]; if(!/[0-9Xx]/.test(last)) return false;
+    sum+= (last==='X'||last==='x')?10:+last;
+    return sum%11===0;
+  }
+  function check13(s){
+    if(s.length!==13||!/[0-9]{13}/.test(s)) return false;
+    let sum=0;
+    for(let i=0;i<13;i++) sum+=(i%2===0?1:3)*+s[i];
+    return sum%10===0;
+  }
+  function to13(s10){
+    if(s10.length!==10) return null;
+    const prefix='978'+s10.slice(0,9);
+    let sum=0; for(let i=0;i<12;i++) sum+=(i%2===0?1:3)*+prefix[i];
+    const cd=(10-(sum%10))%10;
+    return prefix+cd;
+  }
+  function to10(s13){
+    if(s13.length!==13||!/^97[89]/.test(s13)) return null;
+    const body=s13.slice(3,12);
+    let sum=0; for(let i=0;i<9;i++) sum+=(10-i)*+body[i];
+    let cd=(11-(sum%11))%11;
+    return body+(cd===10?'X':String(cd));
+  }
+  function run(){
+    const raw=clean($('inp').value);
+    if(!raw){ set('—','—','—'); $('st').textContent='请输入 ISBN'; return; }
+    let ok=false, v13='—', v10='—';
+    if(raw.length===10){
+      ok=check10(raw);
+      if(ok){ v13=to13(raw); v10=raw; $('st').textContent='✓ 有效 ISBN-10'; }
+      else $('st').textContent='⚠ ISBN-10 校验位错误';
+    } else if(raw.length===13){
+      ok=check13(raw);
+      if(ok){ v13=raw; const t=to10(raw); v10=t||'（非 978/979 前缀，无法转 ISBN-10）'; $('st').textContent='✓ 有效 ISBN-13'; }
+      else $('st').textContent='⚠ ISBN-13 校验位错误';
+    } else { $('st').textContent='⚠ 长度应为 10 或 13 位'; }
+    $('valid').textContent= ok?'✓ 合法':'✗ 非法';
+    $('v13').textContent=v13;
+    $('v10').textContent=v10;
+    $('o1').className='out '+(ok?'ok':'bad');
+  }
+  function set(a,b,c){ $('valid').textContent=a; $('v13').textContent=b; $('v10').textContent=c; }
+  $('conv').addEventListener('click',run);
+  $('inp').addEventListener('input',run);
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
+  run();
+})();
+</script>
+</body>
+</html>

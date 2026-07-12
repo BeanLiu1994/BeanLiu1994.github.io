@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INI ⇄ JSON 转换</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:760px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:14px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none;resize:vertical;min-height:160px}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;margin-left:auto}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>🗂️ INI ⇄ JSON 转换</h1><div class="sub">配置文件互转 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <label>输入（INI 或 JSON，根据下方按钮选择方向）</label>
+    <textarea id="inp">; 示例配置
+[server]
+host = 127.0.0.1
+port = 8080
+debug = true
+
+[user]
+name = "Bean"
+level = 3</textarea>
+    <div class="row">
+      <button class="primary" id="toJson">INI → JSON</button>
+      <button id="toIni">JSON → INI</button>
+      <button id="copy">复制结果</button>
+      <button id="clear">清空</button>
+      <label class="chk"><input type="checkbox" id="coerce" checked> 自动识别数字/布尔</label>
+    </div>
+    <label>结果</label>
+    <textarea id="out" readonly></textarea>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function parseINI(text,coerce){
+    const root={}; let cur=root;
+    text.split(/\r?\n/).forEach(raw=>{
+      const line=raw.trim();
+      if(line===''||line.startsWith(';')||line.startsWith('#')) return;
+      const sec=line.match(/^\[(.+)\]$/);
+      if(sec){ const name=sec[1].trim(); cur=root[name]||(root[name]={}); return; }
+      const m=line.match(/^([^=:]+)[=:](.*)$/);
+      if(m){
+        let key=m[1].trim(), val=m[2].trim();
+        if((val.startsWith('"')&&val.endsWith('"'))||(val.startsWith("'")&&val.endsWith("'"))) val=val.slice(1,-1);
+        else if(coerce){
+          if(val==='true'||val==='false') val=val==='true';
+          else if(val!==''&&!isNaN(Number(val))) val=Number(val);
+        }
+        cur[key]=val;
+      }
+    });
+    return root;
+  }
+  function valStr(v){
+    if(typeof v==='boolean') return v?'true':'false';
+    if(typeof v==='number') return String(v);
+    if(typeof v==='object'&&v!==null) return JSON.stringify(v);
+    return String(v);
+  }
+  function toINI(obj){
+    const out=[]; const top=[];
+    for(const [k,v] of Object.entries(obj)){
+      if(v&&typeof v==='object'&&!Array.isArray(v)) continue;
+      top.push(k+' = '+valStr(v));
+    }
+    if(top.length) out.push(top.join('\n'));
+    for(const [k,v] of Object.entries(obj)){
+      if(v&&typeof v==='object'&&!Array.isArray(v)){
+        out.push('['+k+']');
+        for(const [kk,vv] of Object.entries(v)) out.push(kk+' = '+valStr(vv));
+      }
+    }
+    return out.join('\n');
+  }
+  function toJson(){
+    try{
+      const obj=parseINI($('inp').value,$('coerce').checked);
+      $('out').value=JSON.stringify(obj,null,2);
+      $('st').textContent='✓ INI 已转为 JSON';
+    }catch(e){ $('st').textContent='⚠ '+e.message; }
+  }
+  function toIni(){
+    try{
+      const obj=JSON.parse($('inp').value);
+      $('out').value=toINI(obj);
+      $('st').textContent='✓ JSON 已转为 INI';
+    }catch(e){ $('st').textContent='⚠ '+e.message; }
+  }
+  $('toJson').addEventListener('click',toJson);
+  $('toIni').addEventListener('click',toIni);
+  $('copy').addEventListener('click',()=>{ navigator.clipboard.writeText($('out').value).then(()=>$('st').textContent='✓ 已复制结果'); });
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; $('out').value=''; });
+  toJson();
+})();
+</script>
+</body>
+</html>

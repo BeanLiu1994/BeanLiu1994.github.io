@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>排列组合计算器</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:720px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .fields{display:flex;gap:14px;flex-wrap:wrap}
+  .f{flex:1;min-width:140px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:18px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+  .cell{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+  .cell .k{color:var(--muted);font-size:12px}
+  .cell .v{color:var(--accent);font-size:17px;font-weight:600;word-break:break-all;margin-top:4px;font-variant-numeric:tabular-nums}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>🔢 排列组合计算器</h1><div class="sub">阶乘 / 排列 / 组合 · BigInt · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <div class="fields">
+      <div class="f"><label>总数 n</label><input id="n" type="number" min="0" value="10"></div>
+      <div class="f"><label>选取 k</label><input id="k" type="number" min="0" value="3"></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="calc">计算</button>
+      <button id="clear">重置</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <p class="hint">P(n,k)=n!/(n-k)! 为排列数；C(n,k)=n!/[k!(n-k)!] 为组合数。使用 BigInt 精确计算，支持较大的 n（结果极大时以科学计数法近似显示）。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function fact(x){ let r=1n; for(let i=2n;i<=x;i++) r*=i; return r; }
+  function fmt(b){
+    const s=b.toString();
+    if(s.length<=21) return s;
+    const e=s.length-1;
+    return s[0]+'.'+s.slice(1,9)+'e'+e;
+  }
+  function run(){
+    const n=+$('n').value, k=+$('k').value;
+    if(!Number.isInteger(n)||!Number.isInteger(k)||n<0||k<0){ $('st').textContent='⚠ 请输入非负整数'; return; }
+    if(k>n){ $('st').textContent='⚠ k 不能大于 n'; return; }
+    const N=BigInt(n), K=BigInt(k);
+    const fN=fact(N);
+    const perm=fact(N)/fact(N-K);
+    const comb=perm/fact(K);
+    const cells=[
+      ['n!',fmt(fN)],['P(n,k) 排列数',fmt(perm)],
+      ['C(n,k) 组合数',fmt(comb)],['k!',fmt(fact(K))]
+    ];
+    $('grid').innerHTML=cells.map(([k2,v])=>`<div class="cell"><div class="k">${k2}</div><div class="v">${v}</div></div>`).join('');
+    $('st').textContent='✓ C('+n+','+k+') = '+fmt(comb);
+  }
+  $('calc').addEventListener('click',run);
+  $('n').addEventListener('input',run); $('k').addEventListener('input',run);
+  $('clear').addEventListener('click',()=>{ $('n').value=10; $('k').value=3; run(); });
+  run();
+})();
+</script>
+</body>
+</html>

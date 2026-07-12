@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>词云生成器</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:760px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:14px;outline:none;resize:vertical;min-height:120px}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+  canvas{width:100%;height:auto;background:#0b0d11;border:1px solid var(--border);border-radius:10px;margin-top:14px;display:block}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>☁️ 词云生成器</h1><div class="sub">文本高频词可视化 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <label>粘贴文本（中英文皆可）</label>
+    <textarea id="inp">WorkBuddy 是一个强大的 AI 助手，可以帮助你完成网页工具开发、数据分析、内容创作等任务。工具工具本地运行，注重隐私与实用。</textarea>
+    <div class="row">
+      <button class="primary" id="gen">生成词云</button>
+      <button id="reroll">换个布局</button>
+      <button id="dl">下载 PNG</button>
+      <label class="chk"><input type="checkbox" id="stop" checked> 过滤常见停用词</label>
+    </div>
+    <canvas id="cv" width="720" height="420"></canvas>
+    <p class="hint">按词频（平方根缩放字号）在画布上螺旋排布，避免重叠。中文按单字、英文按单词统计。所有处理在浏览器内完成。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const cv=$('cv'), ctx=cv.getContext('2d');
+  const PAL=['#4f9cff','#3ecf8e','#ffb020','#ff5d6c','#b388ff','#36d1dc','#ff8a5b','#7ee787','#f78fb3','#5ad1ff'];
+  const STOP=new Set('the a an and or of to in on for is are was were be been it this that with as by from at we you they he she i my your our their not but if then than so do does did have has had will would can could should might must may about into out up down over under again more most other some such no nor only own same too very s t just don now t 的 了 和 是 在 我 有 也 就 不 人 都 一 一个 上 来 到 时 大 地 为 子 中 你 说 生 国 年 着 就 那 要 下 以 得 于 他 或 把 后 之 与 及 其 此 它 她 什么 这 我们 你们 他们 因为 所以 但是 如果'.split(/\s+/));
+  function tokenize(text,useStop){
+    const raw=text.toLowerCase().match(/[\u4e00-\u9fff]|[a-z0-9]+/g)||[];
+    const map={};
+    for(const t of raw){
+      if(useStop && STOP.has(t)) continue;
+      if(/^[a-z]$/.test(t)) continue; // 单字母英文忽略
+      map[t]=(map[t]||0)+1;
+    }
+    return Object.entries(map).map(([text,freq])=>({text,freq})).sort((a,b)=>b.freq-a.freq).slice(0,70);
+  }
+  function draw(){
+    const W=cv.width,H=cv.height;
+    ctx.clearRect(0,0,W,H);
+    const words=tokenize($('inp').value,$('stop').checked);
+    if(!words.length){ $('st').textContent='⚠ 没有可统计的词'; return; }
+    const maxF=Math.sqrt(words[0].freq), minF=Math.sqrt(words[words.length-1].freq);
+    const sized=words.map(w=>{
+      const s=Math.sqrt(w.freq);
+      const size=14+(maxF-minF<1e-9?1:(s-minF)/(maxF-minF))*(86-14);
+      return {text:w.text,size:Math.round(size),color:PAL[Math.floor(Math.random()*PAL.length)]};
+    });
+    const placed=[]; const cx=W/2, cy=H/2;
+    for(const w of sized){
+      ctx.font='bold '+w.size+'px -apple-system,Segoe UI,Roboto,Arial';
+      const m=ctx.measureText(w.text);
+      const ww=m.width+6, wh=w.size+6;
+      let done=false;
+      for(let r=0,a=Math.random()*6.28; r<Math.max(W,H); r+=3, a+=0.45){
+        const x=Math.round(cx+Math.cos(a)*r), y=Math.round(cy+Math.sin(a)*r);
+        if(x<0||y<0||x+ww>W||y+wh>H) continue;
+        let hit=false;
+        for(const p of placed){ if(!(x+ww<p.x||x>p.x+p.w||y+wh<p.y||y>p.y+p.h)){ hit=true; break; } }
+        if(!hit){ placed.push({x,y,w:ww,h:wh}); ctx.fillStyle=w.color; ctx.textAlign='left'; ctx.textBaseline='top';
+          ctx.fillText(w.text,x+3,y+3); done=true; break; }
+      }
+      if(!done){ ctx.fillStyle=w.color; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(w.text,Math.max(0,Math.min(W-ww,Math.random()*W)),Math.max(0,Math.min(H-wh,Math.random()*H))); }
+    }
+    $('st').textContent='✓ 已生成 '+words.length+' 个词';
+  }
+  $('gen').addEventListener('click',draw);
+  $('reroll').addEventListener('click',draw);
+  $('inp').addEventListener('input',draw);
+  $('stop').addEventListener('change',draw);
+  $('dl').addEventListener('click',()=>{
+    const a=document.createElement('a'); a.download='wordcloud.png'; a.href=cv.toDataURL('image/png'); a.click();
+    $('st').textContent='✓ 已导出 PNG';
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Punycode / IDN 域名转换</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:720px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;outline:none}
+  input:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:90px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .out{margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;word-break:break-all}
+  .out .k{color:var(--muted);font-size:12px;display:block;margin-bottom:4px}
+  .out .v{color:var(--accent);font-family:ui-monospace,Menlo,Consolas,monospace}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>🌐 Punycode / IDN 域名转换</h1><div class="sub">国际化域名编解码 · RFC 3492 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <label>输入域名（可含中文 / 非 ASCII 字符）</label>
+    <input id="inp" placeholder="例如：例子.中国 或 xn--fsqu00a.xn--fiqs8s" value="例子.中国">
+    <div class="row">
+      <button class="primary" id="conv">转换</button>
+      <button id="swap">⇄ 反向</button>
+      <button id="clear">清空</button>
+    </div>
+    <div class="out"><span class="k">Punycode（ASCII 兼容 / toASCII）</span><span class="v" id="ascii">—</span></div>
+    <div class="out"><span class="k">Unicode（原始 / toUnicode）</span><span class="v" id="uni">—</span></div>
+    <p class="hint">浏览器地址栏中显示的「xn--」形式即为 Punycode 编码，用于支持含非 ASCII 字符的国际化域名（IDN）。本工具在本地完成编码与解码，不会发送任何数据。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const BASE=36,TMIN=1,TMAX=26,SKEW=38,DAMP=700,INITIAL_BIAS=72,INITIAL_N=128,DELIM=45,MAXINT=2147483647;
+  function adapt(delta,numPoints,firstTime){
+    delta=firstTime?Math.floor(delta/DAMP):delta>>1;
+    delta+=Math.floor(delta/numPoints);
+    let k=0;
+    while(delta>((BASE-TMIN)*TMAX)>>1){ delta=Math.floor(delta/(BASE-TMIN)); k+=BASE; }
+    return k+Math.floor((BASE-TMIN+1)*delta/(delta+SKEW));
+  }
+  function encodeDigit(d){ return d+22+75*(d<26); } // 0->a .. 25->z, 26->0 .. 35->9
+  function basicToDigit(cp){
+    if(cp-48<10) return cp-22;      // 0-9
+    if(cp-65<26) return cp-65;      // A-Z
+    if(cp-97<26) return cp-97;      // a-z
+    return BASE;
+  }
+  function codePoints(str){ return Array.from(str).map(c=>c.codePointAt(0)); }
+  function encode(input){
+    const output=[]; let n=INITIAL_N,delta=0,bias=INITIAL_BIAS,basic=0;
+    for(const cp of input){ if(cp<0x80){ output.push(cp); basic++; } }
+    let handled=basic;
+    if(basic) output.push(DELIM);
+    while(handled<input.length){
+      let m=Infinity;
+      for(const cp of input){ if(cp>=n&&cp<m) m=cp; }
+      const h1=handled+1;
+      if(m-n>Math.floor((MAXINT-delta)/h1)) throw new Error('溢出');
+      delta+=(m-n)*h1; n=m;
+      for(const cp of input){
+        if(cp<n){ if(++delta>MAXINT) throw new Error('溢出'); }
+        else if(cp===n){
+          let q=delta;
+          for(let k=BASE;;k+=BASE){
+            const t=k<=bias?TMIN:(k>=bias+TMAX?TMAX:k-bias);
+            if(q<t) break;
+            const qt=q-t, bt=BASE-t;
+            output.push(encodeDigit(t+qt%bt));
+            q=Math.floor(qt/bt);
+          }
+          output.push(encodeDigit(q));
+          bias=adapt(delta,h1,handled===basic);
+          delta=0; handled++;
+        }
+      }
+      delta++; n++;
+    }
+    return output.map(ch=>String.fromCharCode(ch)).join('');
+  }
+  function decode(input){
+    const output=[]; const len=input.length; let i=0,n=INITIAL_N,bias=INITIAL_BIAS;
+    let basic=input.lastIndexOf('-');
+    if(basic>0){
+      for(let j=0;j<basic;j++){
+        if(input.charCodeAt(j)>=0x80) throw new Error('非法输入');
+        output.push(input.charCodeAt(j));
+      }
+    }
+    for(let index=basic>0?basic+1:0; index<len;){
+      const oldi=i;
+      for(let w=1,k=BASE;;k+=BASE){
+        if(index>=len) throw new Error('非法输入');
+        const digit=basicToDigit(input.charCodeAt(index++));
+        if(digit>=BASE) throw new Error('非法输入');
+        i+=digit*w;
+        const t=k<=bias?TMIN:(k>=bias+TMAX?TMAX:k-bias);
+        if(digit<t) break;
+        w=Math.floor(w*(BASE-TMIN)/(BASE-TMIN));
+      }
+      const out=output.length+1;
+      bias=adapt(i-oldi,out,oldi===0);
+      n+=Math.floor(i/out);
+      i%=out;
+      output.splice(i++,0,n);
+    }
+    return output;
+  }
+  function toASCII(domain){
+    return domain.split('.').map(label=>{
+      if(!label) return label;
+      const low=label.toLowerCase();
+      if(/^[\x00-\x7f]*$/.test(low)) return low;
+      return 'xn--'+encode(codePoints(low));
+    }).join('.');
+  }
+  function toUnicode(domain){
+    return domain.split('.').map(label=>{
+      if(!label) return label;
+      const low=label.toLowerCase();
+      if(low.startsWith('xn--')) return String.fromCodePoint(...decode(low.slice(4)));
+      return label;
+    }).join('.');
+  }
+  function run(){
+    const v=$('inp').value.trim();
+    if(!v){ $('ascii').textContent='—'; $('uni').textContent='—'; $('st').textContent='请输入域名'; return; }
+    try{
+      const a=toASCII(v); const u=toUnicode(a);
+      $('ascii').textContent=a;
+      $('uni').textContent=u;
+      $('st').textContent='✓ 转换完成';
+    }catch(e){ $('st').textContent='⚠ '+e.message; }
+  }
+  $('conv').addEventListener('click',run);
+  $('inp').addEventListener('input',run);
+  $('swap').addEventListener('click',()=>{ const a=$('ascii').textContent; const u=$('uni').textContent; if(a&&a!=='—'){ $('inp').value=a; run(); } });
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
+  run();
+})();
+</script>
+</body>
+</html>

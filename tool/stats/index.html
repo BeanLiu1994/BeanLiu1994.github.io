@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>描述性统计</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);width:100%;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;justify-content:center;padding:20px;width:100%}
+  .card{width:720px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:11px 12px;font-size:15px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none;resize:vertical;min-height:110px}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+  .cell{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+  .cell .k{color:var(--muted);font-size:12px}
+  .cell .v{color:var(--accent);font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  @media(max-width:560px){ .grid{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<header><div><h1>📊 描述性统计</h1><div class="sub">均值 / 中位数 / 标准差 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <label>输入数字（每行一个，或用逗号 / 空格分隔）</label>
+    <textarea id="inp" placeholder="1&#10;2&#10;3&#10;4&#10;5">1
+2
+3
+4
+5</textarea>
+    <div class="row">
+      <button class="primary" id="calc">计算</button>
+      <button id="clear">清空</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <p class="hint">支持样本标准差（n-1）与总体标准差（n）。分位数采用线性插值法。所有计算在浏览器本地完成。</p>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function parse(s){
+    const nums=[];
+    s.split(/[\s,;]+/).forEach(t=>{ t=t.trim(); if(t==='') return; const n=Number(t); if(isNaN(n)) throw new Error('无法解析：「'+t+'」'); nums.push(n); });
+    if(nums.length===0) throw new Error('请输入至少一个数字');
+    return nums;
+  }
+  function quantile(sorted,q){
+    const pos=(sorted.length-1)*q, base=Math.floor(pos), rest=pos-base;
+    if(sorted[base+1]!==undefined) return sorted[base]+rest*(sorted[base+1]-sorted[base]);
+    return sorted[base];
+  }
+  function run(){
+    let nums; try{ nums=parse($('inp').value); }catch(e){ $('st').textContent='⚠ '+e.message; return; }
+    const n=nums.length;
+    const sum=nums.reduce((a,b)=>a+b,0);
+    const mean=sum/n;
+    const sorted=[...nums].sort((a,b)=>a-b);
+    const min=sorted[0], max=sorted[n-1];
+    const median= n%2? sorted[(n-1)/2] : (sorted[n/2-1]+sorted[n/2])/2;
+    const q1=quantile(sorted,0.25), q3=quantile(sorted,0.75), iqr=q3-q1;
+    const map={}; let mode=null,maxc=0;
+    nums.forEach(v=>{ map[v]=(map[v]||0)+1; if(map[v]>maxc){maxc=map[v];mode=v;} });
+    const ss=nums.reduce((a,b)=>a+(b-mean)**2,0);
+    const sdPop=Math.sqrt(ss/n);
+    const sdSamp= n>1? Math.sqrt(ss/(n-1)):0;
+    const cv= mean!==0? (sdPop/Math.abs(mean)*100):0;
+    const cells=[
+      ['数据个数 n',n],['求和 Σ',round(sum)],['均值',round(mean)],
+      ['中位数',round(median)],['众数',round(mode)],['最小值',round(min)],
+      ['最大值',round(max)],['极差',round(max-min)],['Q1 (25%)',round(q1)],
+      ['Q3 (75%)',round(q3)],['IQR',round(iqr)],['方差(总体)',round(ss/n)],
+      ['标准差(总体)',round(sdPop)],['标准差(样本)',round(sdSamp)],['变异系数 CV',round(cv)+'%'],
+      ['平方和',round(ss)]
+    ];
+    $('grid').innerHTML=cells.map(([k,v])=>`<div class="cell"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+    $('st').textContent='✓ 已统计 '+n+' 个数值';
+  }
+  function round(x){ return Math.round(x*1e6)/1e6; }
+  $('calc').addEventListener('click',run);
+  $('inp').addEventListener('input',run);
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
+  run();
+})();
+</script>
+</body>
+</html>
