@@ -45,6 +45,16 @@
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
+  .rules-wrap{margin-top:10px;}
+  .rules-toggle{display:block;width:100%;padding:8px 12px;border:1px solid #ffffff0e;border-radius:8px;background:var(--surface);color:var(--muted);font-size:.72rem;cursor:pointer;text-align:center;transition:all .2s;}
+  .rules-toggle:hover{background:#ffffff08;color:var(--text);}
+  .rules-toggle::after{content:' ▾';font-size:.65rem;}
+  details[open] .rules-toggle::after{content:' ▴';}
+  .rules-body{background:#0a1410;border:1px solid #ffffff0a;border-radius:8px;padding:12px 14px;margin-top:6px;font-size:.68rem;color:#b0c0b8;line-height:1.7;}
+  .rules-body h3{color:var(--accent);font-size:.75rem;margin:0 0 6px;letter-spacing:.5px;}
+  .rules-body ol{padding-left:18px;margin:0;}
+  .rules-body li{margin-bottom:5px;}
+  .rules-body .emoji{font-size:1rem;}
   @media(max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
 </style>
 </head>
@@ -66,7 +76,22 @@
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI thinking…</span></div>
-  <div class="hint">Tap one of YOUR pits (bottom row) to sow. Auto plays both sides.</div>
+  <div class="rules-wrap">
+    <details id="rules-details"><summary class="rules-toggle">How to Play Mancala</summary>
+      <div class="rules-body">
+        <h3>Rules</h3>
+        <ol>
+          <li><b>Board:</b> 6 pits on each side, one store (mancala) on each end. Your pits are the bottom row, AI's are the top. Your store is on the right, AI's on the left.</li>
+          <li><b>Sow:</b> Pick a pit on your side (must have seeds). Pick up ALL seeds and drop them one-by-one <b>counterclockwise</b>, skipping the opponent's store.</li>
+          <li><b>Extra turn:</b> If your last seed lands in <b>your own store</b>, you get another turn.</li>
+          <li><b>Capture:</b> If your last seed lands in an <b>empty pit on your side</b>, and the opposite pit has seeds, you capture both — take all seeds from both pits into your store.</li>
+          <li><b>Game ends:</b> When either player's side is completely empty. The other player collects all remaining seeds on their side into their store.</li>
+          <li><b>Win:</b> The player with the most seeds in their store wins.</li>
+        </ol>
+      </div>
+    </details>
+  </div>
+  <div class="hint">Tap a pit on YOUR side (bottom row) to sow. Glowing pits show whose turn it is.</div>
 </div>
 <script>
 (function(){
