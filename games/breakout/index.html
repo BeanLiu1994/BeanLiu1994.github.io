@@ -146,18 +146,22 @@
           if(this.autoPlay){ const mid=this.W/2; let left=0,right=0; for(const br of this.bricks){ if(br.alive){ if((br.x+br.w/2)<mid) left++; else right++; } } let dh=0; if(left+right>0){ const imb=(left-right)/(left+right); dh=Math.max(-0.8,Math.min(0.8,-imb*1.2)); if(Math.abs(dh)<0.4) dh=dh>=0?0.4:-0.4; } this.onBounce(dh); }
           if(navigator.vibrate) navigator.vibrate(8);
         }
-        // bricks — resolve ALL bricks the ball overlaps in this sub-step (not just
-        // the first). At a shared brick corner the ball can overlap two+ bricks;
-        // destroying only one left the second alive for a frame and, once the ball
-        // bounced away, that brick was escaped entirely ("poke-through").
+        // bricks — resolve ALL bricks the ball overlaps in this sub-step.
+        // Decide the bounce axis by where the ball CAME FROM (its position before
+        // this sub-step), NOT by the nearest face. This fixes the wrong-axis bug
+        // at the 4px gap between two side-by-side bricks: a ball diving straight
+        // down the seam overlaps both, and "nearest face" reported a horizontal
+        // hit for each — so the ball never bounced up and punched through
+        // ("brick vanishes but no rebound"). Using the pre-sub-step position,
+        // arriving vertically => reflect Y, arriving horizontally => reflect X.
+        const ppx=b.x-b.vx*subdt, ppy=b.y-b.vy*subdt;
         let flipX=false, flipY=false;
         for(const br of this.bricks){ if(!br.alive) continue;
           if(b.x+this.ballR>br.x && b.x-this.ballR<br.x+br.w && b.y+this.ballR>br.y && b.y-this.ballR<br.y+br.h){
             br.alive=false; this.bricksLeft--; this.score+=10;
-            const fromLeft=Math.abs(b.x-(br.x)); const fromRight=Math.abs(b.x-(br.x+br.w));
-            const fromTop=Math.abs(b.y-br.y); const fromBot=Math.abs(b.y-(br.y+br.h));
-            const m=Math.min(fromLeft,fromRight,fromTop,fromBot);
-            if(m===fromLeft||m===fromRight) flipX=true; else flipY=true;
+            if(ppy<=br.y || ppy>=br.y+br.h) flipY=true;          // arrived top/bottom -> reflect vertically
+            else if(ppx<=br.x || ppx>=br.x+br.w) flipX=true;     // arrived left/right -> reflect horizontally
+            else { if(Math.abs(b.vx)>Math.abs(b.vy)) flipX=true; else flipY=true; } // deep/ambiguous fallback
             if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestBreak',this.best); }
           }
         }
