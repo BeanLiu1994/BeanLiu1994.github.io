@@ -90,10 +90,11 @@
     canvas.width=w*dpr; canvas.height=w*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); return w;
   }
   const lerp=(a,b,t)=>a+(b-a)*t;
+  const easeOut=(t)=>1-Math.pow(1-t,3);
   class Match3{
     constructor(){
       this.best=parseInt(localStorage.getItem('bestMatch3')||'0');
-      this.autoPlay=false; this.autoTimer=null; this.tickTimer=null;
+      this.autoPlay=false; this.autoTimer=null; this.tickTimer=null; this._clock=0;
       this.bindInput(); this.restart();
       this._tick=this.tick.bind(this); requestAnimationFrame(this._tick);
     }
@@ -101,6 +102,7 @@
       this.stopAuto(); this.size=fitCanvas(); this.cell=this.size/COLS;
       this.score=0; this.over=false; this.combo=0;
       this.board=[]; this.scale=[]; this.dispR=[]; this.dispC=[]; this.phase='idle'; this.pt=0; this.sel=null; this.swapPair=null; this.autoAccum=0;
+      this.particles=[]; this.fxRings=[]; this.floaters=[]; this.flash=0; this.clearClusters=[]; this.clearCells=new Set();
       for(let r=0;r<ROWS;r++){
         this.board[r]=[]; this.scale[r]=[]; this.dispR[r]=[]; this.dispC[r]=[];
         for(let c=0;c<COLS;c++){ this.board[r][c]=-1; this.scale[r][c]=1; this.dispR[r][c]=r; this.dispC[r][c]=c; }
@@ -119,14 +121,25 @@
     key(r,c){return r+','+c;}
     inB(r,c){return r>=0&&r<ROWS&&c>=0&&c<COLS;}
     findMatches(){
-      const set=new Set();
-      for(let r=0;r<ROWS;r++){ let run=1; for(let c=1;c<=COLS;c++){ const same=c<COLS&&this.board[r][c]!==-1&&this.board[r][c]===this.board[r][c-1]; if(same)run++; else{ if(run>=3)for(let k=c-run;k<c;k++)set.add(this.key(r,k)); run=1; } } }
-      for(let c=0;c<COLS;c++){ let run=1; for(let r=1;r<=ROWS;r++){ const same=r<ROWS&&this.board[r][c]!==-1&&this.board[r][c]===this.board[r-1][c]; if(same)run++; else{ if(run>=3)for(let k=r-run;k<r;k++)set.add(this.key(k,c)); run=1; } } }
+      const set=new Set(); const clusters=[];
+      for(let r=0;r<ROWS;r++){ let run=1,start=0; for(let c=1;c<=COLS;c++){
+        const same=c<COLS&&this.board[r][c]!==-1&&this.board[r][c]===this.board[r][c-1];
+        if(same)run++; else{ if(run>=3){ const cells=[]; for(let k=c-run;k<c;k++){set.add(this.key(r,k));cells.push([r,k]);} clusters.push({cells,len:run,orient:'h'});} run=1; }
+      } }
+      for(let c=0;c<COLS;c++){ let run=1; for(let r=1;r<=ROWS;r++){
+        const same=r<ROWS&&this.board[r][c]!==-1&&this.board[r][c]===this.board[r-1][c];
+        if(same)run++; else{ if(run>=3){ const cells=[]; for(let k=r-run;k<r;k++){set.add(this.key(k,c));cells.push([k,c]);} clusters.push({cells,len:run,orient:'v'}); } run=1; }
+      } }
+      this.lastClusters=clusters;
       return set;
     }
     hasAnyMatch(){ return this.findMatches().size>0; }
     trySwap(a,b){
       if(this.phase!=='idle'||this.over) return;
+      // The gem now at grid `a` came from `b`, and the one at `b` came from `a`.
+      // Set their display origins to the SOURCE cell so the slide is visible.
+      this.dispR[a[0]][a[1]]=b[0]; this.dispC[a[0]][a[1]]=b[1];
+      this.dispR[b[0]][b[1]]=a[0]; this.dispC[b[0]][b[1]]=a[1];
       this.swapCells(a,b); this.swapPair=[a,b]; this.phase='swap'; this.pt=0;
     }
     swapCells(a,b){ const t=this.board[a[0]][a[1]]; this.board[a[0]][a[1]]=this.board[b[0]][b[1]]; this.board[b[0]][b[1]]=t; }
@@ -145,6 +158,17 @@
         for(let r=ptr;r>=0;r--){ this.board[r][c]=(Math.random()*NCOL)|0; this.scale[r][c]=1; this.dispR[r][c]=r-ROWS-1; this.dispC[r][c]=c; }
       }
     }
+    spawnParticles(cells,colorHex,count){
+      const cell=this.cell;
+      for(const [r,c] of cells){
+        const cx=(c+0.5)*cell, cy=(r+0.5)*cell;
+        const n=Math.ceil(count/cells.length);
+        for(let i=0;i<n;i++){
+          const ang=Math.random()*Math.PI*2, spd=(60+Math.random()*180);
+          this.particles.push({x:cx,y:cy,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd-120,life:0.4+Math.random()*0.45,color:colorHex,r:(cell*0.12+Math.random()*cell*0.08)});
+        }
+      }
+    }
     // ---- AI ----
     chooseAuto(){
       const sw=this.findBestSwap();
@@ -161,18 +185,34 @@
     }
     tick(ts){
       const dt=Math.min(0.05, ts!==undefined?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+      this._clock+=dt;
       this.animate(dt); this.advance(dt); this.render();
       requestAnimationFrame(this._tick);
     }
     animate(dt){
       const k=1-Math.pow(0.001,dt); // smoothing (dt already in seconds)
       const ks=1-Math.pow(0.0015,dt);
+      // Each gem lerps to its grid position. Only cells whose dispR/dispC differ
+      // from their grid (the swapping pair, falling gems) actually move — so we can
+      // always lerp; the swap slide shows naturally because trySwap seeds the
+      // display origins to the source cell.
       for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
         this.dispR[r][c]=lerp(this.dispR[r][c],r,k);
         this.dispC[r][c]=lerp(this.dispC[r][c],c,k);
-        const tgt=(this.phase==='clear'&&this.board[r][c]===-2)?0:1;
+        const tgt=this.clearCells.has(r+','+c)?0:1;
         this.scale[r][c]=lerp(this.scale[r][c],tgt,ks);
       }
+      // particles
+      for(const p of this.particles){ p.vy+=540*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; }
+      this.particles=this.particles.filter(p=>p.life>0);
+      // expanding rings
+      for(const f of this.fxRings){ f.t+=dt; }
+      this.fxRings=this.fxRings.filter(f=>f.t<f.dur);
+      // floating score texts
+      for(const f of this.floaters){ f.y-=34*dt; f.life-=dt; }
+      this.floaters=this.floaters.filter(f=>f.life>0);
+      // flash decay
+      if(this.flash>0) this.flash=Math.max(0,this.flash-dt*1.8);
     }
     advance(dt){
       if(this.over) return;
@@ -185,23 +225,79 @@
         if(this.pt>=SWAP_MS){
           const m=this.findMatches();
           if(m.size>0){ this.combo=0; this.phase='clear'; this.pt=0; }
-          else { this.swapCells(this.swapPair[0],this.swapPair[1]); this.phase='swapback'; this.pt=0; }
+          else {
+            // bad swap: flip data back. The gem that should end at grid `b` came from
+            // `a`, so seed its display origin at `a` to slide it back home.
+            this.swapCells(this.swapPair[0],this.swapPair[1]);
+            const [a,b]=this.swapPair;
+            this.dispR[b[0]][b[1]]=a[0]; this.dispC[b[0]][b[1]]=a[1];
+            this.dispR[a[0]][a[1]]=b[0]; this.dispC[a[0]][a[1]]=b[1];
+            this.phase='swapback'; this.pt=0;
+          }
         }
       } else if(this.phase==='swapback'){
         if(this.pt>=SWAP_MS){ this.phase='idle'; this.pt=0; this.sel=null; }
       } else if(this.phase==='clear'){
         if(this.pt>=CLEAR_MS){
           this.combo++;
-          const cells=[...this.findMatches()];
+          const m=this.findMatches();
+          const cells=[...m];
+          this.clearCells=new Set(cells);
+          // build rich clusters for the bonus / effects
+          const clusters=(this.lastClusters||[]).map(cl=>({
+            orient:cl.orient, len:cl.len, color:this.board[cl.cells[0][0]][cl.cells[0][1]],
+            cx:(cl.cells.reduce((s,p)=>s+p[1],0)/cl.cells.length), cy:(cl.cells.reduce((s,p)=>s+p[0],0)/cl.cells.length),
+            cells:cl.cells, isT:false
+          }));
+          // detect T / L / + shapes: clusters overlapping on a shared cell
+          const occupied={};
+          clusters.forEach((cl,i)=>cl.cells.forEach(([r,c])=>{ (occupied[r+','+c]=occupied[r+','+c]||[]).push(i); }));
+          const isT=new Set();
+          const hit={};
+          clusters.forEach((cl,i)=>cl.cells.forEach(([r,c])=>{ (hit[r+','+c]=hit[r+','+c]||0); if(occupied[r+','+c].length>1) hit[r+','+c]++; if(hit[r+','+c]>=2) isT.add(i); }));
+          clusters.forEach(cl=>{ cl.isT=isT.has(clusters.indexOf(cl)); });
+          this.combo=Math.max(1,this.combo);
           let gained=0;
-          cells.forEach(k=>{ const [r,c]=k.split(',').map(Number); this.board[r][c]=-2; gained+=10*this.combo; });
+          // award base points
+          for(const cl of clusters){ gained+=cl.cells.length*10*this.combo; }
+          // special bonuses + effects
+          for(const cl of clusters){
+            const col=cl.color; const colorHex=GEMS[col];
+            if(cl.isT){
+              gained+=60*this.combo; // T/L/+ bonus
+              this.flash=Math.min(1,this.flash+0.55);
+              this.fxRings.push({cx:cl.cx,cy:cl.cy,t:0,dur:0.55,color:colorHex,max:this.cell*1.7});
+              this.floaters.push({x:cl.cx,y:cl.cy,text:'T-SHAPE!',color:colorHex.replace('#',''),life:1.1,size:0.42});
+              this.spawnParticles(cl.cells,colorHex,22);
+            } else if(cl.len>=5){
+              gained+=50*this.combo; // 5-in-a-row
+              this.flash=Math.min(1,this.flash+0.45);
+              this.fxRings.push({cx:cl.cx,cy:cl.cy,t:0,dur:0.5,color:colorHex,max:this.cell*1.5});
+              this.floaters.push({x:cl.cx,y:cl.cy,text:'5 MATCH!',color:colorHex.replace('#',''),life:1.0,size:0.4});
+              this.spawnParticles(cl.cells,colorHex,18);
+            } else if(cl.len===4){
+              gained+=30*this.combo; // 4-in-a-row
+              this.flash=Math.min(1,this.flash+0.3);
+              this.fxRings.push({cx:cl.cx,cy:cl.cy,t:0,dur:0.42,color:colorHex,max:this.cell*1.2});
+              this.floaters.push({x:cl.cx,y:cl.cy,text:'4 MATCH!',color:colorHex.replace('#',''),life:0.9,size:0.34});
+              this.spawnParticles(cl.cells,colorHex,14);
+            } else {
+              this.spawnParticles(cl.cells,colorHex,8);
+            }
+          }
           this.score+=gained;
           if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestMatch3',this.best); }
           this.updateUI();
-          // remove cleared
-          for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++) if(this.board[r][c]===-2) this.board[r][c]=-1;
-          this.gravity();
-          this.phase='fall'; this.pt=0;
+          // mark cleared: keep color for shrink animation, set sentinel -2
+          for(const k of cells){ const [r,c]=k.split(',').map(Number); this.board[r][c]=-2; }
+          this.phase='shrink'; this.pt=0;
+        }
+      } else if(this.phase==='shrink'){
+        if(this.pt>=0.13){
+          // empty the cleared cells + remove them from the shrink set, then collapse
+          for(const k of this.clearCells){ const [r,c]=k.split(',').map(Number); this.board[r][c]=-1; }
+          this.clearCells=new Set();
+          this.gravity(); this.phase='fall'; this.pt=0;
         }
       } else if(this.phase==='fall'){
         if(this.pt>=FALL_MS){
@@ -252,6 +348,28 @@
         ctx.restore();
         if(this.sel&&this.sel[0]===r&&this.sel[1]===c){ ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,rad+3,0,Math.PI*2); ctx.stroke(); }
       }
+      // ---- FX layer ----
+      // expanding rings (4/5/T-shape)
+      for(const f of this.fxRings){
+        const p=f.t/f.dur; if(p<=0||p>=1) continue;
+        const rr=f.max*easeOut(p);
+        ctx.save(); ctx.globalAlpha=(1-p)*0.9; ctx.strokeStyle=f.color; ctx.lineWidth=3*(1-p)+1;
+        ctx.beginPath(); ctx.arc((f.cx+0.5)*cell,(f.cy+0.5)*cell,rr,0,Math.PI*2); ctx.stroke(); ctx.restore();
+      }
+      // particles
+      for(const p of this.particles){
+        if(p.life<=0) continue; ctx.save(); ctx.globalAlpha=Math.min(1,p.life*1.6);
+        ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+      }
+      // floating score text
+      for(const f of this.floaters){
+        if(f.life<=0) continue; ctx.save(); ctx.globalAlpha=Math.min(1,f.life*1.5);
+        ctx.fillStyle='#'+f.color; ctx.font=`800 ${Math.round(this.size*0.045*f.size+10)}px Segoe UI,sans-serif`;
+        ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.shadowColor='#'+f.color; ctx.shadowBlur=12;
+        ctx.fillText(f.text,f.x*cell+cell*0.5,(f.y+0.5)*cell); ctx.restore();
+      }
+      // full-board flash on big match
+      if(this.flash>0){ ctx.save(); ctx.fillStyle='#ffffff'; ctx.globalAlpha=this.flash*0.35; ctx.fillRect(0,0,this.size,this.size); ctx.restore(); }
     }
   }
   window.game=new Match3();
