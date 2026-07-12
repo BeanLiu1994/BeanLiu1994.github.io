@@ -66,6 +66,7 @@
   <div class="controls">
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-undo" onclick="game.undo()">Undo</button>
+    <button class="btn" id="btn-reset" onclick="game.reset()">Reset</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI solving...</span></div>
@@ -139,20 +140,23 @@
   }
 
   class Sokoban{
-    constructor(){ this.best=parseInt(localStorage.getItem('bestSok')||'0'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this.bindInput(); this.loadLevel(0); }
+    constructor(){ this.best=parseInt(localStorage.getItem('bestSok')||'0'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this._winPending=false; this._winFiring=false; this._confetti=[]; this._celebrateUntil=0; this._celebrateTimer=null; this.bindInput(); this.loadLevel(0); }
     loadLevel(i,keepAuto){ if(!keepAuto) this.stopAuto(); this.lvl=i; const rows=LEVELS[i]; CH=rows.length; CW=Math.max(...rows.map(r=>r.length)); CELL=Math.min(46,Math.floor(430/CW)); W=CW*CELL; H=CH*CELL; ctx=fit();
       const p=parse(rows); this.walls=p.walls; this.goals=p.goals; this.boxes=p.boxes; this.player=p.player; this.boxes.forEach(b=>{b.fromR=b.r;b.fromC=b.c;}); this.player.fromR=this.player.r; this.player.fromC=this.player.c; this.over=false; this.solution=null; this.solIdx=0; this.history=[];
       document.getElementById('overlay-win').classList.remove('active'); this.tween=1; this.startLoop(); this.draw(); this.updateUndoBtn(); }
     restart(){ this.stopAuto(); this.loadLevel(0); }
+    // 重置本关：把棋子恢复到本关初始布局（局内本关重来），保留 level 进度与最高纪录
+    reset(){ if(this.autoPlay) return; this.stopCelebrate(); this.loadLevel(this.lvl,true); }
     pushHistory(){ this.history.push({ player:{r:this.player.r,c:this.player.c}, boxes:this.boxes.map(b=>({r:b.r,c:b.c})) }); if(this.history.length>1000) this.history.shift(); }
-    undo(){ if(this.autoPlay||this.over||!this.history.length) return; const s=this.history.pop();
+    undo(){ if(this._stepDuringAuto||this.autoPlay||this.over||!this.history.length) return; const s=this.history.pop();
       // 撤回瞬时还原（不重放动画，避免看错方向）：所有棋子 from=当前目标，tween=1
       this.player={r:s.player.r,c:s.player.c,fromR:s.player.r,fromC:s.player.c};
       this.boxes=s.boxes.map(b=>({r:b.r,c:b.c,fromR:b.r,fromC:b.c}));
       this.tween=1; this.draw(); this.updateUndoBtn(); }
-    updateUndoBtn(){ const b=document.getElementById('btn-undo'); if(!b) return; const dis=this.autoPlay||this.over||!this.history||this.history.length===0; b.style.opacity=dis?'0.4':'1'; b.style.pointerEvents=dis?'none':'auto'; }
+    updateUndoBtn(){ const b=document.getElementById('btn-undo'); if(!b) return; const dis=this._stepDuringAuto||this.autoPlay||this.over||!this.history||this.history.length===0; b.style.opacity=dis?'0.4':'1'; b.style.pointerEvents=dis?'none':'auto'; }
+    updateResetBtn(){ const b=document.getElementById('btn-reset'); if(!b) return; const dis=this.autoPlay; b.style.opacity=dis?'0.4':'1'; b.style.pointerEvents=dis?'none':'auto'; }
     onGoal(){ return this.boxes.filter(b=>this.goals.has(b.r+','+b.c)).length; }
-    win(){ this.over=true; const cleared=this.lvl+1; if(cleared>this.best){ this.best=cleared; localStorage.setItem('bestSok',this.best); }
+    _beginWin(){ this._winPending=false; this.over=true; const cleared=this.lvl+1; if(cleared>this.best){ this.best=cleared; localStorage.setItem('bestSok',this.best); }
       if(this.autoPlay){ // 自动模式：过关后保持自动，继续下一关
         if(this.lvl>=LEVELS.length-1){ this.stopAuto(); document.getElementById('win-msg').textContent='All levels cleared!'; document.getElementById('overlay-win').classList.add('active'); }
         else { this.loadLevel(this.lvl+1,true); this._autoSolveIfNeeded(); }
@@ -160,29 +164,35 @@
         if(this.lvl>=LEVELS.length-1){ document.getElementById('win-msg').textContent='All levels cleared!'; document.getElementById('overlay-win').classList.add('active'); }
         else { this.loadLevel(this.lvl+1); }
       } }
+    // 先让终步滑动动画播完，再判定胜负，避免成功箱子落定瞬间被跳过
+    _checkWin(){ if(this.onGoal()===this.boxes.length){ if(!this._winPending){ this._winPending=true; this._winFiring=true; this.startCelebrate(); setTimeout(()=>this._beginWin(),380); } } else this._winFiring=false; }
+    startCelebrate(){ const colors=['#4dff91','#ffd700','#ff5d8f','#4dffc4','#7aa2ff','#ffb14d']; const n=90; this._confetti=[]; for(let i=0;i<n;i++){ this._confetti.push({ x:Math.random()*W, y:Math.random()*-H, vx:(Math.random()*2-1)*60, vy:Math.random()*140+90, s:Math.random()*5+3, c:colors[i%colors.length], rot:Math.random()*7, vr:(Math.random()*2-1)*10, life:Math.random()*0.6+1.4 }); } this._celebrateUntil=performance.now()+2200; if(!this._celebrateTimer){ this._celebrateTimer=setTimeout(()=>{ this._celebrateTimer=null; },2400); } }
+    stopCelebrate(){ this._confetti=[]; this._celebrateUntil=0; }
     _autoSolveIfNeeded(){ if(!this.autoPlay) return; this.solution=solve(LEVELS[this.lvl]); this.solIdx=0; if(!this.solution){ document.getElementById('ai-status').textContent='AI: no solution, skipping'; setTimeout(()=>{ if(this.lvl<LEVELS.length-1) this.loadLevel(this.lvl+1,true); else this.loadLevel(0,true); },700); return; } this.autoStep(); }
-    move(dr,dc){ if(this.over||this.autoPlay) return; const nr=this.player.r+dr,nc=this.player.c+dc; if(this.walls.has(nr+','+nc)) return; const bi=this.boxes.findIndex(b=>b.r===nr&&b.c===nc);
+    move(dr,dc){ if(this.over||this.autoPlay) return; if(this._winPending) return; const nr=this.player.r+dr,nc=this.player.c+dc; if(this.walls.has(nr+','+nc)) return; const bi=this.boxes.findIndex(b=>b.r===nr&&b.c===nc);
       let br,bc; if(bi>=0){ br=nr+dr; bc=nc+dc; if(this.walls.has(br+','+bc)||this.boxes.some(b=>b.r===br&&b.c===bc)) return; }
       // 有效移动才记录历史
       this.pushHistory();
       // 关键修复：每步先把所有棋子的动画起点对齐到各自当前格，避免未被推动的箱子重放上一次推箱动画
       this.boxes.forEach(b=>{ b.fromR=b.r; b.fromC=b.c; });
       if(bi>=0){ this.boxes[bi]={r:br,c:bc,fromR:nr,fromC:nc}; }
-      this.player={r:nr,c:nc,fromR:this.player.r,fromC:this.player.c}; this.tween=0; this.tweenStart=performance.now(); this.draw(); this.updateUndoBtn(); if(this.onGoal()===this.boxes.length) this.win(); }
+      this.player={r:nr,c:nc,fromR:this.player.r,fromC:this.player.c}; this.tween=0; this.tweenStart=performance.now(); this.draw(); this.updateUndoBtn(); this._checkWin(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over){ this.loadLevel(0); } this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUndoBtn(); this._autoSolveIfNeeded(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; this.updateUndoBtn(); }
-    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this.win(); return; }
-      const mv=this.solution[this.solIdx++];
+    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
+      const mv=this.solution[this.solIdx++]; this._stepDuringAuto=true;
       this.boxes.forEach(b=>{ b.fromR=b.r; b.fromC=b.c; }); // 同 move：先对齐所有箱子动画起点，避免未推动的箱子回放旧动画
       this.player={r:mv.from.r,c:mv.from.c,fromR:this.player.r,fromC:this.player.c}; const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c); if(bi>=0){ this.boxes[bi]={r:mv.to.r,c:mv.to.c,fromR:mv.box.r,fromC:mv.box.c}; }
-      this.tween=0; this.tweenStart=performance.now(); this.draw();
-      if(this.solIdx>=this.solution.length){ this.win(); return; }
+      this.tween=0; this.tweenStart=performance.now(); this.draw(); this.updateUndoBtn();
+      this._stepDuringAuto=false; this.updateUndoBtn();
+      if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
       this.autoTimer=setTimeout(()=>this.autoStep(),460); }
     startLoop(){ this.stopLoop(); this.running=true; const loop=()=>{ if(!this.running) return; this.draw(); this.rafId=requestAnimationFrame(loop); }; this.rafId=requestAnimationFrame(loop); }
     stopLoop(){ this.running=false; if(this.rafId){ cancelAnimationFrame(this.rafId); this.rafId=null; } }
     bindInput(){ document.addEventListener('keydown',(e)=>{ if(this.autoPlay||this.over) return;
         if(e.key==='z'||e.key==='Z'||(e.ctrlKey&&(e.key==='z'||e.key==='Z'))||e.key==='Backspace'){ e.preventDefault(); this.undo(); return; }
+        if(e.key==='r'||e.key==='R'){ e.preventDefault(); this.reset(); return; }
         let d=null; if(e.key==='ArrowUp'||e.key==='w') d=[-1,0]; else if(e.key==='ArrowDown'||e.key==='s') d=[1,0]; else if(e.key==='ArrowLeft'||e.key==='a') d=[0,-1]; else if(e.key==='ArrowRight'||e.key==='d') d=[0,1]; if(d){ e.preventDefault(); this.move(d[0],d[1]); } });
       const wrap=document.getElementById('board-wrap'); let sx=0,sy=0,id=null,fired=false; const TH=18;
       wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||id!==null) return; id=e.pointerId; sx=e.clientX; sy=e.clientY; fired=false; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); });
@@ -196,7 +206,12 @@
       const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
       const k=ease(this.tween<1?this.tween:1);
       for(const b of this.boxes){ const onG=this.goals.has(b.r+','+b.c); const fr=b.fromR!==undefined?b.fromR:b.r, fc=b.fromC!==undefined?b.fromC:b.c; const rr=fr+(b.r-fr)*k, cc=fc+(b.c-fc)*k; const px=cc*CELL+CELL/2, py=rr*CELL+CELL/2; ctx.save(); ctx.shadowColor=onG?'#4dffc4':'#ffb14d'; ctx.shadowBlur=10; ctx.fillStyle=onG?'#4dffc4':'#ffb14d'; this.rrect(px-CELL*0.32,py-CELL*0.32,CELL*0.64,CELL*0.64,6); ctx.fill(); ctx.restore(); ctx.fillStyle='#0a0e1c'; ctx.fillRect(px-CELL*0.18,py-2,CELL*0.36,4); ctx.fillRect(px-2,py-CELL*0.18,4,CELL*0.36); }
-      const pfr=this.player.fromR!==undefined?this.player.fromR:this.player.r, pfc=this.player.fromC!==undefined?this.player.fromC:this.player.c; const prr=pfr+(this.player.r-pfr)*k, pcc=pfc+(this.player.c-pfc)*k; const px=pcc*CELL+CELL/2, py=prr*CELL+CELL/2; ctx.save(); ctx.shadowColor='#ff5d8f'; ctx.shadowBlur=12; ctx.fillStyle='#ff5d8f'; ctx.beginPath(); ctx.arc(px,py,CELL*0.3,0,7); ctx.fill(); ctx.restore(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px-CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.arc(px+CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.fill();
+      const pfr=this.player.fromR!==undefined?this.player.fromR:this.player.r, pfc=this.player.fromC!==undefined?this.player.fromC:this.player.c; const prr=pfr+(this.player.r-pfr)*k, pcc=pfc+(this.player.c-pfc)*k; const px=pcc*CELL+CELL/2, py=prr*CELL+CELL/2; ctx.save(); ctx.shadowColor='#ff5d8f'; ctx.shadowBlur=12; ctx.fillStyle='#ff5d8f'; ctx.beginPath(); ctx.arc(px,py,CELL*0.3,0,7); ctx.fill(); ctx.restore();       ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px-CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.arc(px+CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.fill();
+      // 过关庆祝彩屑
+      if(this._confetti&&this._confetti.length&&performance.now()<this._celebrateUntil){ const dt=Math.min(0.05,(performance.now()-(this._lastConf||performance.now()))/1000); this._lastConf=performance.now();
+        for(const p of this._confetti){ p.vy+=420*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt; p.life-=dt; const x=p.x,y=p.y; ctx.save(); ctx.translate(x,y); ctx.rotate(p.rot); ctx.globalAlpha=Math.max(0,Math.min(1,p.life)); ctx.fillStyle=p.c; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*0.6); ctx.restore(); }
+        ctx.globalAlpha=1;
+      } else if(this._confetti&&this._confetti.length&&performance.now()>=this._celebrateUntil){ this._confetti=[]; }
       document.getElementById('score').textContent=this.lvl+1; document.getElementById('best').textContent=this.best; document.getElementById('box-stat').textContent='Boxes: '+this.boxes.length; document.getElementById('done-stat').textContent='On goal: '+this.onGoal(); document.getElementById('lvl-stat').textContent='Lv: '+(this.lvl+1)+'/'+LEVELS.length;
       if(this.autoPlay&&!this.over) document.getElementById('ai-status').textContent='AI: solving Lv '+(this.lvl+1)+' · '+(this.solution?this.solIdx+'/'+this.solution.length:'-');
     }
