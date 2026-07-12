@@ -122,6 +122,23 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
 
+  // Precomputed Hamiltonian cycle for a 20x20 board. Following it lets the snake
+  // traverse every cell without ever reversing or self-trapping; over time it walks
+  // through (and therefore opens up) any region divided by the body.
+  const HAM = (function(){
+    const h=[];
+    for(let x=0;x<GRID;x++) h.push({x,y:0});
+    for(let y=1;y<GRID;y++){
+      if(y%2===1){ h.push({x:GRID-1,y}); for(let x=GRID-2;x>=1;x--) h.push({x,y}); }
+      else { h.push({x:1,y}); for(let x=2;x<GRID;x++) h.push({x,y}); }
+    }
+    h.push({x:0,y:GRID-1});
+    for(let y=GRID-2;y>=1;y--) h.push({x:0,y});
+    return h;
+  })();
+  const HAM_INDEX = {};
+  HAM.forEach((p,i)=>{ HAM_INDEX[p.x+','+p.y]=i; });
+
   function fitCanvas(){
     const w = canvas.clientWidth || 400;
     const dpr = window.devicePixelRatio || 1;
@@ -201,28 +218,82 @@
     }
 
     // ---- AI ----
+    // Strategy hierarchy (fixes the "snake traps itself by compressing when the
+    // board is divided" problem):
+    //   1. If a path to the food exists AND taking it keeps the snake survivable,
+    //      follow the shortest path to the food.
+    //   2. Otherwise follow the Hamiltonian cycle: this walks the longest safe path,
+    //      eventually passing through (and thereby reconnecting) any region that the
+    //      body currently splits off — it can never reverse or back itself into a
+    //      pocket the way the greedy "max space" heuristic did.
+    //   3. If the cycle is blocked right now, chase the tail and/or pick the move that
+    //      keeps the most reachable free space as last resort.
     chooseDir(){
-      // BFS from head to food treating snake (minus tail) as obstacles
       const head = this.snake[0];
-      const blocked = new Set(this.snake.slice(0,-1).map(s=>s.x+','+s.y));
+      const bodyBlock = new Set(this.snake.slice(0,-1).map(s=>s.x+','+s.y));
+
       if(this.food){
-        const path = this.bfs(head, this.food, blocked);
+        const path = this.bfs(head, this.food, bodyBlock);
         if(path && path.length>1){
           const n = path[1];
           const d = {x:n.x-head.x, y:n.y-head.y};
-          if(this.isSafe(d)) return d;
+          if(this.isSafe(d) && this.survivableAfter(d)){
+            return d;
+          }
         }
       }
-      // survival: pick move maximizing reachable free space
+
+      // Tail-chase: move toward the tail so the snake keeps advancing along its
+      // own body instead of stalling or compressing into a pocket.
+      const tail = this.snake[this.snake.length-1];
+      const tpath = this.bfs(head, tail, bodyBlock);
+      if(tpath && tpath.length>1){
+        const n = tpath[1];
+        const d = {x:n.x-head.x, y:n.y-head.y};
+        if(this.isSafe(d) && this.survivableAfter(d)) return d;
+      }
+
+      // Hamiltonian-cycle fallback: pick the cycle-neighbour that is currently free.
+      // Walking the full cycle passes through every cell, so over time it opens up
+      // any region the body has split off — it can never back itself into a pocket.
+      const hi = HAM_INDEX[head.x+','+head.y];
+      const candidates = [
+        HAM[(hi+1)%HAM.length],
+        HAM[(hi-1+HAM.length)%HAM.length]
+      ];
+      for(const c of candidates){
+        const d = {x:c.x-head.x, y:c.y-head.y};
+        if(this.isSafe(d) && this.survivableAfter(d)){
+          return d;
+        }
+      }
+
+      // Last resort: largest reachable free space.
       let best=null, bestSpace=-1;
       const dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
       for(const d of dirs){
         if(this.isOpposite(d)) continue;
         if(!this.isSafe(d)) continue;
-        const space = this.floodFill({x:head.x+d.x,y:head.y+d.y}, blocked);
+        const space = this.floodFill({x:head.x+d.x,y:head.y+d.y}, bodyBlock);
         if(space>bestSpace){ bestSpace=space; best=d; }
       }
       return best || this.dir;
+    }
+
+    // After moving in direction d, would the head still be able to reach its own
+    // tail? If yes, the snake is not trapped. Guarantees we never take the food
+    // path into a dead end.
+    survivableAfter(d){
+      const head=this.snake[0];
+      const nx=head.x+d.x, ny=head.y+d.y;
+      const willEat = this.food && nx===this.food.x && ny===this.food.y;
+      const sim = this.snake.map(s=>({x:s.x,y:s.y}));
+      if(willEat){ sim.unshift({x:nx,y:ny}); }      // tail stays
+      else { sim.unshift({x:nx,y:ny}); sim.pop(); } // tail moves away
+      const newHead = sim[0];
+      const tail = sim[sim.length-1];
+      const blocked = new Set(sim.slice(0,-1).map(s=>s.x+','+s.y));
+      return !!this.bfs(newHead, tail, blocked);
     }
 
     isOpposite(d){ return d.x===-this.dir.x && d.y===-this.dir.y && this.snake.length>1; }
