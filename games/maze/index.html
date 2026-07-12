@@ -111,7 +111,20 @@
           stack.push([nx,ny]);
         } else stack.pop();
       }
+      this.braid(g);
       return g;
+    }
+    // Braid: open a fraction of the walls that sit between two rooms, creating
+    // loops. With loops, no single cell can ever be the only route between the
+    // player and a dot — so a ghost can never block the sole path.
+    braid(g){
+      for(let y=1;y<MH-1;y++) for(let x=1;x<MW-1;x++){
+        if(g[y][x]!==1) continue;
+        const horiz=(x%2===0 && y%2===1), vert=(x%2===1 && y%2===0);
+        if(!horiz && !vert) continue;
+        const a=horiz?[x-1,y]:[x,y-1], b=horiz?[x+1,y]:[x,y+1];
+        if(g[a[1]][a[0]]===0 && g[b[1]][b[0]]===0 && Math.random()<0.4) g[y][x]=0;
+      }
     }
     restart(){
       this.stopAuto();
@@ -132,7 +145,7 @@
       document.getElementById('overlay-lose').classList.remove('active');
       this.updateUI(); this.loop();
     }
-    mkGhost(gx,gy,color){ return {gx,gy,px:(gx+0.5)*this.cs,py:(gy+0.5)*this.cs,tx:gx,ty:gy,t:1,moving:false,color}; }
+    mkGhost(gx,gy,color){ return {gx,gy,px:(gx+0.5)*this.cs,py:(gy+0.5)*this.cs,tx:gx,ty:gy,t:1,moving:false,dir:{x:0,y:0},color}; }
     center(c){ return (c+0.5)*this.cs; }
     isFloor(x,y){ return x>=0&&x<MW&&y>=0&&y<MH&&this.maze[y][x]===0; }
     freeNeighbors(x,y){ const r=[]; for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if(this.isFloor(x+dx,y+dy)) r.push({x:x+dx,y:y+dy}); return r; }
@@ -168,8 +181,15 @@
         const t=this.bfsNext(g.gx,g.gy,(x,y)=>x===this.player.gx&&y===this.player.gy);
         if(t) return {x:t.x-g.gx, y:t.y-g.gy};
       }
-      const fn=this.freeNeighbors(g.gx,g.gy); if(fn.length) return {x:fn[0].x-g.gx,y:fn[0].y-g.gy};
-      return null;
+      // Manual ghost: pick a direction that is NOT a 180° reversal of its
+      // current heading, unless the ghost is in a dead end (no other choice).
+      // Choosing randomly among forward options keeps it patrolling the
+      // corridors instead of bouncing back and forth in place.
+      const opts=this.freeNeighbors(g.gx,g.gy).filter(n=>!(n.x===g.gx-g.dir.x && n.y===g.gy-g.dir.y));
+      const pool=opts.length?opts:this.freeNeighbors(g.gx,g.gy);
+      if(!pool.length) return null;
+      const r=pool[Math.floor(Math.random()*pool.length)];
+      return {x:r.x-g.gx, y:r.y-g.gy};
     }
     startMove(e,dir){
       if(!dir) return;
