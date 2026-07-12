@@ -87,12 +87,41 @@
     carHits(fx,r){ const lane=this.laneAt(r); if(!lane) return false; for(const c of lane.cars){ if(fx+0.5> c.x && fx+0.5 < c.x+c.len) return true; } return false; }
     move(dx,dy){ if(this.over||this.flash>0) return; const nx=this.frog.cx+dx, ny=this.frog.ry+dy; if(nx<0||nx>=COLS||ny<0||ny>=ROWS) return; this.frog.cx=nx; this.frog.ry=ny; this.frog.hop=1; if(ny===GOAL){ this.score++; if(this.score>this.best){this.best=this.score;localStorage.setItem('bestCross',this.best);} this.updateUI(); this.resetFrog(); } }
     hit(){ if(this.flash>0) return; this.lives--; this.flash=0.5; this.updateUI(); if(this.lives<=0){ this.over=true; this.stopAuto(); document.getElementById('end-msg').textContent='You crossed '+this.score+' times'; document.getElementById('overlay-end').classList.add('active'); } else { this.resetFrog(); } }
-    // auto
-    decideAuto(){ if(this.over||this.flash>0) return; const f=this.frog; if(f.ry===GOAL){ return; } if(f.ry===START){ this.move(0,-1); return; } const target=f.ry-1; const laneT=this.laneAt(target); const laneC=this.laneAt(f.ry);
-      const clear=(lane)=>{ if(!lane) return true; for(const c of lane.cars){ const d=f.cx-c.x; if(d>-0.6&&d<c.len+0.6) return false; } return true; };
-      if(clear(laneT)){ this.move(0,-1); return; }
-      // try sidestep to a safer column
-      for(const sx of [-1,1]){ const nx=f.cx+sx; if(nx<0||nx>=COLS) continue; let safe=true; if(this.laneAt(f.ry)&&this.carHits(nx,f.ry)) safe=false; if(this.laneAt(target)&&this.carHits(nx,target)) safe=false; if(safe){ this.move(sx,0); return; } }
+    // auto — velocity-aware safe-window AI
+    cellSafe(col,row,H){
+      if(row<ROAD0||row>ROAD1) return true;
+      const lane=this.laneAt(row); if(!lane) return true;
+      const dEnd=lane.dir*lane.speed*H;
+      for(const c of lane.cars){
+        const lo=Math.min(c.x, c.x+dEnd);
+        const hi=Math.max(c.x+c.len, c.x+c.len+dEnd);
+        if(hi > col-0.5 && lo < col+0.5) return false;
+      }
+      return true;
+    }
+    spanSafe(col,row,H){ const a=Math.min(col,this.frog.cx), b=Math.max(col,this.frog.cx); for(let c=a;c<=b;c++){ if(!this.cellSafe(c,row,H)) return false; } return true; }
+    settled(){ const f=this.frog; return Math.abs(f.fx-f.cx)<0.06 && Math.abs(f.fy-f.ry)<0.06; }
+    decideAuto(){
+      if(this.over||this.flash>0) return;
+      const f=this.frog;
+      if(f.ry<=GOAL) return;            // already at goal row: wait for reset
+      if(!this.settled()) return;        // never decide mid-hop
+      const cx=f.cx, ry=f.ry, upRow=ry-1;
+      const HV=0.55, HH=1.05;           // safe-window horizons (s): vertical hop / horizontal hop
+      // 1) step up whenever the cell above is clear for the whole vertical hop
+      if(this.cellSafe(cx, upRow, HV)){ this.move(0,-1); return; }
+      // 2) imminent danger under our own cell -> dodge sideways to a safe corridor
+      if(!this.cellSafe(cx, ry, 0.28)){
+        const order = Math.random()<0.5 ? [-1,1] : [1,-1];
+        for(const sx of order){ const nx=cx+sx; if(nx<0||nx>=COLS) continue;
+          if(this.spanSafe(nx, ry, HH) && this.cellSafe(nx, upRow, HV)){ this.move(sx,0); return; } }
+        for(const sx of order){ const nx=cx+sx; if(nx<0||nx>=COLS) continue;
+          if(this.spanSafe(nx, ry, 0)){ this.move(sx,0); return; } }   // last resort: any instant-clear escape
+      }
+      // 3) shuffle to a column with a safer forward path
+      for(const sx of [-1,1]){ const nx=cx+sx; if(nx<0||nx>=COLS) continue;
+        if(this.spanSafe(nx, ry, HH) && this.cellSafe(nx, upRow, HV)){ this.move(sx,0); return; } }
+      // else hold position and re-evaluate next tick
     }
     chooseAuto(){ this.decideAuto(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
