@@ -15,7 +15,7 @@
     color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
     display:flex; align-items:center; justify-content:center;
     user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
-  .container { width:100%; max-width:460px; padding:14px; }
+  .container { width:100%; max-width:700px; padding:12px; }
   .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
   .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
     background:linear-gradient(135deg,var(--accent),#b6ffcf,#54e08a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
@@ -160,10 +160,11 @@
       if(this.potted>=15){ this.over=true; this.win=true; this.finish(); }
     }
     flash(msg){ const el=document.getElementById('ai-status'); if(el) el.textContent=msg; }
-    clearLine(x0,y0,x1,y1,ignore){
+    clearLine(x0,y0,x1,y1,ignore,marginMul){
       const steps=Math.ceil(Math.hypot(x1-x0,y1-y0)/ (BR*0.8));
+      const margin=BR*0.6*(marginMul||1);
       for(let s=1;s<steps;s++){ const t=s/steps, x=x0+(x1-x0)*t, y=y0+(y1-y0)*t;
-        for(const b of this.balls){ if(b.potted||b===ignore) continue; if(Math.hypot(b.x-x,b.y-y)<b.r+BR*0.6) return false; } }
+        for(const b of this.balls){ if(b.potted||b===ignore) continue; if(Math.hypot(b.x-x,b.y-y)<b.r+margin) return false; } }
       return true;
     }
     aiShoot(){
@@ -171,20 +172,38 @@
       for(const b of this.balls){ if(b.potted||b.cue) continue;
         for(const p of pockets){
           const ux=(p[0]-b.x), uy=(p[1]-b.y); const ul=Math.hypot(ux,uy)||1; const uxh=ux/ul, uyh=uy/ul;
-          const gx=b.x-uxh*2*b.r, gy=b.y-uyh*2*b.r; // ghost ball center
-          if(gx<M+b.r||gx>W-M-b.r||gy<M+b.r||gy>H-M-b.r) continue;
-          const ad=Math.hypot(gx-cue.x,gy-cue.y);
-          if(!this.clearLine(cue.x,cue.y,gx,gy,cue)) continue;
-          if(!this.clearLine(b.x,b.y,p[0],p[1],b)) continue;
-          const cost=ad+ul*0.3;
-          if(cost<bestCost){ bestCost=cost; best={dx:gx-cue.x,dy:gy-cue.y,dist:ad+ul}; }
+          const gx0=b.x-uxh*2*b.r, gy0=b.y-uyh*2*b.r; // nominal ghost ball center
+          // 对 ghost ball 位置做微扰采样（±3px），找到最优碰球角度
+          for(let sa=-1.5;sa<=1.5;sa+=1.5){
+            for(let sb=-1.5;sb<=1.5;sb+=1.5){
+              const gx=gx0+sa, gy=gy0+sb;
+              if(gx<M+b.r||gx>W-M-b.r||gy<M+b.r||gy>H-M-b.r) continue;
+              const ad=Math.hypot(gx-cue.x,gy-cue.y);
+              // 降低 margin：AI 可以用更窄的通道（0.5x margin）
+              if(!this.clearLine(cue.x,cue.y,gx,gy,cue,0.5)) continue;
+              // 推算目标球受击后的方向，与口袋方向的偏差
+              const hitAng=Math.atan2(b.y-gy, b.x-gx);
+              const pktAng=Math.atan2(p[1]-b.y, p[0]-b.x);
+              let angErr=Math.abs(hitAng-pktAng);
+              if(angErr>Math.PI) angErr=2*Math.PI-angErr;
+              if(angErr>0.22) continue; // 偏差太大，跳过
+              if(!this.clearLine(b.x,b.y,p[0],p[1],b,0.5)) continue;
+              const cost=ad + ul*0.25 + angErr*600;
+              if(cost<bestCost){ bestCost=cost; best={dx:gx-cue.x,dy:gy-cue.y,dist:ad+ul}; }
+            }
+          }
         }
       }
       let dx,dy,power;
-      if(best){ dx=best.dx; dy=best.dy; power=Math.min(15, 7+best.dist*0.02); }
-      else { // hit nearest object ball
+      if(best){ dx=best.dx; dy=best.dy; power=clamp(5+best.dist*0.028, 5.5, 19); }
+      else { // 无直接进球路线，打安全球：把目标球往中间驱散
         let nb=null,nd=1e9; for(const b of this.balls){ if(b.potted||b.cue) continue; const d=Math.hypot(b.x-cue.x,b.y-cue.y); if(d<nd){nd=d;nb=b;} }
-        if(!nb) return; dx=nb.x-cue.x; dy=nb.y-cue.y; power=9;
+        if(!nb) return;
+        // 瞄准时往桌面中心方向偏移，减少白球落袋概率
+        const cx=W/2,cy=H/2; const tdx=nb.x-cue.x+(cx-nb.x)*0.4; const tdy=nb.y-cue.y+(cy-nb.y)*0.4;
+        const tdl=Math.hypot(tdx,tdy)||1; dx=tdx/tdl; dy=tdy/tdl; power=clamp(6+nd*0.03, 5.5, 14);
+        dx=dx*power; dy=dy*power;
+        this.shots++; this.updateUI(); cue.vx=dx; cue.vy=dy; return;
       }
       const dl=Math.hypot(dx,dy)||1; cue.vx=dx/dl*power; cue.vy=dy/dl*power; this.shots++; this.updateUI();
     }
