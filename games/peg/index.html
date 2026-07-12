@@ -85,21 +85,32 @@
   function applyMove(board,m){ const nb=new Set(board); nb.delete(m.from); nb.delete(m.over); nb.add(m.to); return nb; }
   function dist(r,c){ return Math.abs(r-center[0])+Math.abs(c-center[1]); }
   function greedyBest(board){ const ms=movesOf(board); if(!ms.length) return null; let best=null,bs=-1; for(const m of ms){ const nb=applyMove(board,m); const after=movesOf(nb).length; const [tr,tc]=m.to.split(',').map(Number); const sc=after*10 - dist(tr,tc); if(sc>bs){ bs=sc; best=m; } } return best; }
+  function key(board){ return [...board].sort().join(';'); }
+  // 完整回溯解法：从任意局面出发寻找「只剩 1 子」的走法序列，能稳定通关
+  function solve(board,visited){ if(board.size===1) return []; const ms=movesOf(board); if(!ms.length) return null;
+    for(const m of ms){ const nb=applyMove(board,m); const k=key(nb); if(visited.has(k)) continue; visited.add(k); const r=solve(nb,visited); if(r!==null) return [m].concat(r); }
+    return null; }
 
   class Peg{
-    constructor(){ this.best=parseInt(localStorage.getItem('bestPeg')||'32'); this.autoPlay=false; this.autoTimer=null; this.bindInput(); this.restart(); }
-    restart(){ this.stopAuto(); this.board=new Set(valid); this.board.delete('3,3'); this.moves=0; this.over=false; this.selected=null; this.lastMove=null;
+    constructor(){ this.best=parseInt(localStorage.getItem('bestPeg')||'32'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this.bindInput(); this.restart(); this.startLoop(); }
+    restart(){ this.stopAuto(); this.board=new Set(valid); this.board.delete('3,3'); this.moves=0; this.over=false; this.selected=null; this.lastMove=null; this.anim=null; this._overPending=null;
       document.getElementById('overlay-win').classList.remove('active'); document.getElementById('overlay-lose').classList.remove('active'); this.draw(); }
-    doMove(m){ if(!m) return; this.board.delete(m.from); this.board.delete(m.over); this.board.add(m.to); this.moves++; this.lastMove=m; this.selected=null;
-      if(this.board.size===1){ this.over=true; this.win(); } else if(movesOf(this.board).length===0){ this.over=true; this.lose(); } this.draw(); }
+    // 动画：anim={from,over,to,start} 用缓动把跳跃子从 from 滑到 to，over 子同时淡出
+    doMove(m){ if(!m) return; this.anim={ from:m.from, over:m.over, to:m.to, start:performance.now() }; this.board.delete(m.from); this.board.delete(m.over); this.board.add(m.to); this.moves++; this.lastMove=m; this.selected=null;
+      if(this.board.size===1){ this.over=true; this._overPending='win'; } else if(movesOf(this.board).length===0){ this.over=true; this._overPending='lose'; } this.draw(); }
     win(){ const left=this.board.size; const score=33-left; if(score>this.best){ this.best=score; localStorage.setItem('bestPeg',this.best); } document.getElementById('win-msg').textContent='Only 1 peg left · score '+(33-1); document.getElementById('overlay-win').classList.add('active'); this.stopAuto(); }
-    lose(){ document.getElementById('lose-msg').textContent='No moves left · '+this.board.size+' pegs remain'; document.getElementById('overlay-lose').classList.add('active'); }
+    lose(){ document.getElementById('lose-msg').textContent='No moves left · '+this.board.size+' pegs remain'; document.getElementById('overlay-lose').classList.add('active'); this.stopAuto(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex';
+      this.solution=solve(this.board,new Set()); this.solIdx=0; if(!this.solution){ document.getElementById('ai-status').textContent='AI: no solution'; return; } this.autoStep(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
-    autoStep(){ if(!this.autoPlay||this.over){ if(this.over){ this.stopAuto(); if(this.board.size>1 && this.autoPlay===false){} } return; }
-      const m=greedyBest(this.board); if(!m){ if(this.board.size===1){ this.win(); } else { this.lose(); } this.stopAuto(); return; }
-      this.doMove(m); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),480); }
+    startLoop(){ this.stopLoop(); this.running=true; const loop=()=>{ if(!this.running) return;
+      if(this.anim){ const t=Math.min(1,(performance.now()-this.anim.start)/280); if(t>=1){ const over=this._overPending; this.anim=null; this._overPending=null; if(over==='win') this.win(); else if(over==='lose') this.lose(); } }
+      this.draw(); this.rafId=requestAnimationFrame(loop); }; this.rafId=requestAnimationFrame(loop); }
+    stopLoop(){ this.running=false; if(this.rafId){ cancelAnimationFrame(this.rafId); this.rafId=null; } }
+    autoStep(){ if(!this.autoPlay||this.over) return; if(this.solIdx>=this.solution.length){ return; }
+      const m=this.solution[this.solIdx++]; this.doMove(m);
+      if(!this.over){ this.autoTimer=setTimeout(()=>this.autoStep(),480); } }
     bindInput(){ const wrap=document.getElementById('board-wrap'); let id=null;
       wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; id=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const r2=canvas.getBoundingClientRect(); const x=(e.clientX-r2.left)/r2.width*W, y=(e.clientY-r2.top)/r2.height*H; const c=Math.floor(x/CELL), r=Math.floor(y/CELL); const k=r+','+c; if(!valid.has(k)) return;
         if(this.selected){ const m=movesOf(this.board).find(mm=>mm.from===this.selected&&mm.to===k); if(m){ this.doMove(m); return; } }
@@ -107,14 +118,23 @@
       wrap.addEventListener('pointerup',(e)=>{ if(e.pointerId===id) id=null; }); wrap.addEventListener('pointercancel',(e)=>{ if(e.pointerId===id) id=null; });
       window.addEventListener('resize',()=>this.draw()); }
     draw(){ ctx.clearRect(0,0,W,H);
+      const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+      const anim=this.anim; const t=anim?ease(Math.min(1,(performance.now()-anim.start)/280)):1;
+      const pegAt=(cx,cy,sel)=>{ ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=10; ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.arc(cx,cy,CELL*0.3,0,7); ctx.fill(); ctx.restore(); if(sel){ ctx.strokeStyle='#4dff91'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,CELL*0.34,0,7); ctx.stroke(); } };
       for(const k of valid){ const [r,c]=k.split(',').map(Number); const x=c*CELL,y=r*CELL; ctx.fillStyle='#0c1124'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.fill(); ctx.strokeStyle='#ffffff0a'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.stroke();
-        if(this.board.has(k)){ const cx=x+CELL/2,cy=y+CELL/2; ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=10; ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.arc(cx,cy,CELL*0.3,0,7); ctx.fill(); ctx.restore();
-          if(this.selected===k){ ctx.strokeStyle='#4dff91'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,CELL*0.34,0,7); ctx.stroke(); } }
-        if(this.lastMove && (k===this.lastMove.from||k===this.lastMove.over)){ ctx.fillStyle='#ffd70022'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.fill(); }
+        if(this.board.has(k)){
+          let cx=CELL/2+c*CELL, cy=CELL/2+r*CELL;
+          if(anim && k===anim.to){ const [fr,fc]=anim.from.split(',').map(Number), [tr,tc]=anim.to.split(',').map(Number); cx=CELL/2+((fc+(tc-fc)*t)*CELL); cy=CELL/2+((fr+(tr-fr)*t)*CELL); }
+          if(!anim || k!==anim.to || t<1){ pegAt(cx,cy,this.selected===k && !anim); }
+        }
+        if(!anim && this.lastMove && (k===this.lastMove.from||k===this.lastMove.over)){ ctx.fillStyle='#ffd70022'; this.rrect(x+3,y+3,CELL-6,CELL-6,8); ctx.fill(); }
       }
-      if(this.selected) for(const m of movesOf(this.board)) if(m.from===this.selected){ const [tr,tc]=m.to.split(',').map(Number); ctx.fillStyle='#4dff9155'; ctx.beginPath(); ctx.arc(tc*CELL+CELL/2,tr*CELL+CELL/2,CELL*0.12,0,7); ctx.fill(); }
+      if(anim){ // 被吃掉的子淡出
+        const [or,oc]=anim.over.split(',').map(Number); ctx.save(); ctx.globalAlpha=1-t; const ox=CELL/2+oc*CELL, oy=CELL/2+or*CELL; ctx.shadowColor='#b06bff'; ctx.shadowBlur=10; ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.arc(ox,oy,CELL*0.3,0,7); ctx.fill(); ctx.restore();
+      }
+      if(this.selected && !anim) for(const m of movesOf(this.board)) if(m.from===this.selected){ const [tr,tc]=m.to.split(',').map(Number); ctx.fillStyle='#4dff9155'; ctx.beginPath(); ctx.arc(tc*CELL+CELL/2,tr*CELL+CELL/2,CELL*0.12,0,7); ctx.fill(); }
       document.getElementById('score').textContent=this.board.size; document.getElementById('best').textContent=this.best; document.getElementById('peg-stat').textContent='Pegs: '+this.board.size; document.getElementById('move-stat').textContent='Moves: '+this.moves;
-      if(this.autoPlay&&!this.over) document.getElementById('ai-status').textContent='AI: '+this.board.size+' pegs · planning best jump';
+      if(this.autoPlay&&!this.over) document.getElementById('ai-status').textContent='AI: '+this.board.size+' pegs · solving';
     }
     rrect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
   }
