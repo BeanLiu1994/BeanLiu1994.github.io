@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PX ⇄ REM/EM 换算 · px rem converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:620px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:15px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .results{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:.12s}
+  .stat:hover{border-color:var(--accent)}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--ok);word-break:break-all}
+  table{width:100%;border-collapse:collapse;margin-top:6px;font-size:14px}
+  th,td{border:1px solid var(--border);padding:7px 10px;text-align:right}
+  th{color:var(--muted);font-weight:500;background:var(--bg)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>📏 PX ⇄ REM/EM 换算</h1><div class="sub">CSS 单位互转 · 点击结果复制</div></div>
+</header>
+<main>
+  <div class="card">
+    <div class="row">
+      <div><label>根字号 base (px)</label><input id="base" type="number" value="16" min="1" step="0.5"></div>
+      <div><label>数值</label><input id="val" type="number" value="24" step="0.5"></div>
+    </div>
+    <label style="margin-top:12px">输入单位</label>
+    <div class="row" style="grid-template-columns:1fr 1fr 1fr">
+      <span class="stat" data-u="px" id="uPx">px</span>
+      <span class="stat" data-u="rem" id="uRem">rem</span>
+      <span class="stat" data-u="em" id="uEm">em</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="results">
+      <div class="stat" data-copy="px"><div class="k">PX</div><div class="v" id="rPx">—</div></div>
+      <div class="stat" data-copy="rem"><div class="k">REM</div><div class="v" id="rRem">—</div></div>
+      <div class="stat" data-copy="em"><div class="k">EM</div><div class="v" id="rEm">—</div></div>
+      <div class="stat" data-copy="pt"><div class="k">PT (72dpi)</div><div class="v" id="rPt">—</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <label>常用 px → rem 对照表</label>
+    <table><thead><tr><th>px</th><th>rem</th></tr></thead><tbody id="tbl"></tbody></table>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let unit='px';
+  function n(v){return Math.round(v*100000)/100000;}
+  function calc(){
+    const base=Math.max(0.0001,parseFloat($('base').value)||16);
+    const v=parseFloat($('val').value)||0;
+    let px;
+    if(unit==='px')px=v; else px=v*base; // rem & em both relative to base here
+    $('rPx').textContent=n(px)+'px';
+    $('rRem').textContent=n(px/base)+'rem';
+    $('rEm').textContent=n(px/base)+'em';
+    $('rPt').textContent=n(px*72/96)+'pt';
+    const t=$('tbl');t.innerHTML='';
+    [8,10,12,14,16,18,20,24,28,32,40,48,64].forEach(p=>{
+      t.insertAdjacentHTML('beforeend',`<tr><td>${p}px</td><td>${n(p/base)}rem</td></tr>`);
+    });
+    $('st').textContent='✓ 已换算';$('st').style.color='var(--ok)';
+  }
+  document.querySelectorAll('[data-u]').forEach(s=>s.addEventListener('click',()=>{
+    unit=s.dataset.u;
+    document.querySelectorAll('[data-u]').forEach(x=>x.style.borderColor='var(--border)');
+    s.style.borderColor='var(--accent)';calc();
+  }));
+  $('uPx').style.borderColor='var(--accent)';
+  document.querySelectorAll('[data-copy]').forEach(s=>s.addEventListener('click',()=>{
+    const map={px:'rPx',rem:'rRem',em:'rEm',pt:'rPt'};
+    const txt=$(map[s.dataset.copy]).textContent;
+    navigator.clipboard&&navigator.clipboard.writeText(txt);
+    $('st').textContent='✓ 已复制 '+txt;$('st').style.color='var(--ok)';
+  }));
+  ['base','val'].forEach(id=>$(id).addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

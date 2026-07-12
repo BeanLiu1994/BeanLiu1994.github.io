@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三角形求解器 · Triangle Solver</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:640px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:15px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .results{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:20px;font-weight:700;margin-top:4px;color:var(--ok);font-variant-numeric:tabular-nums}
+  .stat.full{grid-column:1/3}
+  svg{display:block;margin:0 auto}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.err{color:var(--err)} .status.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>📐 三角形求解器</h1><div class="sub">已知三边 → 角度 / 面积 / 类型 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <label>三条边长 a / b / c</label>
+    <div class="row">
+      <input id="a" type="number" value="3" min="0" step="any">
+      <input id="b" type="number" value="4" min="0" step="any">
+      <input id="c" type="number" value="5" min="0" step="any">
+    </div>
+  </div>
+  <div class="card">
+    <svg id="fig" width="260" height="180" viewBox="0 0 260 180"></svg>
+    <div class="results">
+      <div class="stat"><div class="k">角 A (对边 a)</div><div class="v" id="A">—</div></div>
+      <div class="stat"><div class="k">角 B (对边 b)</div><div class="v" id="B">—</div></div>
+      <div class="stat"><div class="k">角 C (对边 c)</div><div class="v" id="C">—</div></div>
+      <div class="stat"><div class="k">周长</div><div class="v" id="peri">—</div></div>
+      <div class="stat"><div class="k">面积 (海伦公式)</div><div class="v" id="area">—</div></div>
+      <div class="stat"><div class="k">外接圆半径 R</div><div class="v" id="R">—</div></div>
+      <div class="stat full"><div class="k">类型</div><div class="v" id="type">—</div></div>
+    </div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function r(x){return Math.round(x*1000)/1000;}
+  function deg(x){return Math.round(x*180/Math.PI*100)/100;}
+  function calc(){
+    const a=parseFloat($('a').value)||0,b=parseFloat($('b').value)||0,c=parseFloat($('c').value)||0;
+    if(a<=0||b<=0||c<=0){err('边长须为正数');clr();return;}
+    if(a+b<=c||a+c<=b||b+c<=a){err('不满足三角形不等式（任意两边之和 > 第三边）');clr();return;}
+    const A=Math.acos((b*b+c*c-a*a)/(2*b*c));
+    const B=Math.acos((a*a+c*c-b*b)/(2*a*c));
+    const C=Math.PI-A-B;
+    const s=(a+b+c)/2;const area=Math.sqrt(s*(s-a)*(s-b)*(s-c));
+    const R=a/(2*Math.sin(A));
+    $('A').textContent=deg(A)+'°';$('B').textContent=deg(B)+'°';$('C').textContent=deg(C)+'°';
+    $('peri').textContent=r(a+b+c);$('area').textContent=r(area);$('R').textContent=r(R);
+    const maxA=Math.max(deg(A),deg(B),deg(C));
+    let angT=Math.abs(maxA-90)<0.01?'直角':(maxA>90?'钝角':'锐角');
+    let sideT=(a===b&&b===c)?'等边':((a===b||b===c||a===c)?'等腰':'不等边');
+    $('type').textContent=sideT+'三角形 · '+angT;
+    drawFig(a,b,c,A);
+    ok('✓ 已求解');
+  }
+  function drawFig(a,b,c,A){
+    // place vertex B at origin, C along x-axis at distance a; A computed
+    // sides: a=BC, b=CA, c=AB ; angle at A between b,c... use law: place C=(0,0),B=(a,0), A found
+    const C0={x:0,y:0},B0={x:a,y:0};
+    const angC=Math.acos((a*a+b*b-c*c)/(2*a*b));
+    const A0={x:b*Math.cos(angC),y:b*Math.sin(angC)};
+    const pts=[A0,B0,C0];
+    const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+    const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+    const w=maxx-minx||1,h=maxy-miny||1;const scale=Math.min(200/w,140/h);
+    const ox=30-minx*scale, oy=150+miny*scale;
+    const T=p=>[(p.x*scale+ox).toFixed(1),(oy-(p.y-miny)*scale-(- (0)) ).toFixed(1)];
+    const tp=p=>[(p.x-minx)*scale+30, 155-(p.y-miny)*scale];
+    const P=pts.map(tp);
+    const poly=P.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    $('fig').innerHTML=`<polygon points="${poly}" fill="rgba(79,156,255,.15)" stroke="#4f9cff" stroke-width="2"/>`+
+      P.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#3ecf8e"/><text x="${p[0]}" y="${p[1]-8}" fill="#e6e6e6" font-size="12" text-anchor="middle">${['A','B','C'][i]}</text>`).join('');
+  }
+  function clr(){['A','B','C','peri','area','R','type'].forEach(i=>$(i).textContent='—');$('fig').innerHTML='';}
+  function ok(m){$('st').textContent=m;$('st').className='status ok';}
+  function err(m){$('st').textContent='✗ '+m;$('st').className='status err';}
+  ['a','b','c'].forEach(id=>$(id).addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

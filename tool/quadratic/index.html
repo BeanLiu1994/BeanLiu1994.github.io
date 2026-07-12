@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>一元二次方程求解 · Quadratic Solver</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:620px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:15px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .eq{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-size:16px}
+  .eq input{width:80px;text-align:center}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:10px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:20px;font-weight:700;margin-top:4px;color:var(--ok);word-break:break-all}
+  .steps{color:var(--muted);font-size:13px;line-height:1.7;margin-top:8px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🧮 一元二次方程求解</h1><div class="sub">ax² + bx + c = 0 · 含步骤 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <div class="eq">
+      <input id="a" type="number" value="1" step="any"> x² +
+      <input id="b" type="number" value="-3" step="any"> x +
+      <input id="c" type="number" value="2" step="any"> = 0
+    </div>
+  </div>
+  <div class="card">
+    <div class="stat"><div class="k">判别式 Δ = b² − 4ac</div><div class="v" id="disc">—</div></div>
+    <div class="stat"><div class="k">根</div><div class="v" id="roots">—</div></div>
+    <div class="stat"><div class="k">顶点 (对称轴, 极值)</div><div class="v" id="vertex">—</div></div>
+    <div class="steps" id="steps"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function r(x){return Math.abs(x)<1e-12?0:Math.round(x*1e6)/1e6;}
+  function calc(){
+    const a=parseFloat($('a').value)||0,b=parseFloat($('b').value)||0,c=parseFloat($('c').value)||0;
+    const S=$('steps');S.innerHTML='';
+    if(a===0){
+      $('disc').textContent='—';$('vertex').textContent='—';
+      if(b===0){$('roots').textContent=c===0?'任意实数':'无解';}
+      else{$('roots').textContent='x = '+r(-c/b)+'（一次方程）';}
+      $('st').textContent='a=0，非二次方程';$('st').style.color='var(--muted)';return;
+    }
+    const d=b*b-4*a*c;
+    $('disc').textContent=r(d);
+    const vx=-b/(2*a),vy=(4*a*c-b*b)/(4*a);
+    $('vertex').textContent='('+r(vx)+', '+r(vy)+')';
+    let rootTxt;
+    if(d>0){const s=Math.sqrt(d);rootTxt='x₁ = '+r((-b+s)/(2*a))+' ,  x₂ = '+r((-b-s)/(2*a));}
+    else if(d===0){rootTxt='x₁ = x₂ = '+r(-b/(2*a))+'（重根）';}
+    else{const s=Math.sqrt(-d)/(2*a),re=r(-b/(2*a));rootTxt='x = '+re+' ± '+r(Math.abs(s))+' i（共轭复根）';}
+    $('roots').textContent=rootTxt;
+    S.innerHTML=[
+      'Δ = ('+b+')² − 4·('+a+')·('+c+') = '+r(d),
+      'x = ( −b ± √Δ ) / 2a',
+      'x = ( '+(-b)+' ± √'+r(d)+' ) / '+(2*a)
+    ].join('<br>');
+    $('st').textContent='✓ 已求解';$('st').style.color='var(--ok)';
+  }
+  ['a','b','c'].forEach(id=>$(id).addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

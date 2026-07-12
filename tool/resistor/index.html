@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电阻色环计算器 · Resistor Color Code</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:720px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-size:14px;outline:none}
+  select:focus{border-color:var(--accent)}
+  .bands{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;color:var(--text);transition:.12s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.on{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .resistor{display:flex;align-items:center;justify-content:center;margin:18px 0}
+  .body{position:relative;width:300px;height:70px;background:linear-gradient(#d8c69a,#c2ac78);border-radius:14px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:inset 0 -6px 10px rgba(0,0,0,.25)}
+  .body::before,.body::after{content:"";position:absolute;top:32px;width:60px;height:6px;background:#9aa4b2}
+  .body::before{left:-60px} .body::after{right:-60px}
+  .band{width:14px;height:70px;border-radius:2px}
+  .out{font-size:26px;font-weight:700;color:var(--ok);text-align:center;margin-top:8px;font-variant-numeric:tabular-nums}
+  .detail{color:var(--muted);font-size:13px;text-align:center;margin-top:4px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>⚡ 电阻色环计算器</h1><div class="sub">4 / 5 色环 → 阻值 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <div class="toolbar" id="modeBar">
+      <span class="btn on" data-m="4">4 色环</span>
+      <span class="btn" data-m="5">5 色环</span>
+    </div>
+    <div class="bands" id="bands"></div>
+  </div>
+  <div class="card">
+    <div class="resistor"><div class="body" id="rbody"></div></div>
+    <div class="out" id="out">—</div>
+    <div class="detail" id="detail"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const colors=[
+    ['黑','#000',0,1],['棕','#7a4a1e',1,10],['红','#e02b2b',2,100],['橙','#ff8c1a',3,1e3],
+    ['黄','#ffd21a',4,1e4],['绿','#2ecc71',5,1e5],['蓝','#3498db',6,1e6],['紫','#9b59b6',7,1e7],
+    ['灰','#95a5a6',8,1e8],['白','#ecf0f1',9,1e9]
+  ];
+  const mult=[['黑','#000',1],['棕','#7a4a1e',10],['红','#e02b2b',100],['橙','#ff8c1a',1e3],['黄','#ffd21a',1e4],['绿','#2ecc71',1e5],['蓝','#3498db',1e6],['金','#c9a227',0.1],['银','#bdc3c7',0.01]];
+  const tol=[['棕','#7a4a1e','±1%'],['红','#e02b2b','±2%'],['金','#c9a227','±5%'],['银','#bdc3c7','±10%'],['无','#444','±20%']];
+  let mode=4;
+  function optHtml(arr,fmt){return arr.map((c,i)=>`<option value="${i}">${fmt(c)}</option>`).join('');}
+  function build(){
+    const b=$('bands'); b.innerHTML='';
+    const digits = mode===4?2:3;
+    for(let i=0;i<digits;i++){
+      b.insertAdjacentHTML('beforeend',`<div><label>第${i+1}位数字</label><select id="d${i}">${optHtml(colors,c=>c[0]+' '+c[2])}</select></div>`);
+    }
+    b.insertAdjacentHTML('beforeend',`<div><label>倍率</label><select id="mul">${optHtml(mult,c=>c[0]+' ×'+c[2])}</select></div>`);
+    b.insertAdjacentHTML('beforeend',`<div><label>误差</label><select id="tol">${tol.map((c,i)=>`<option value="${i}">${c[0]} ${c[2]}</option>`).join('')}</select></div>`);
+    // sensible defaults: brown black red gold -> 1k 5%
+    if(mode===4){$('d0').value=1;$('d1').value=0;$('mul').value=2;$('tol').value=2;}
+    else{$('d0').value=1;$('d1').value=0;$('d2').value=0;$('mul').value=1;$('tol').value=0;}
+    b.querySelectorAll('select').forEach(s=>s.addEventListener('change',calc));
+    calc();
+  }
+  function fmt(v){
+    if(v>=1e9)return (v/1e9)+' GΩ';
+    if(v>=1e6)return (v/1e6)+' MΩ';
+    if(v>=1e3)return (v/1e3)+' kΩ';
+    return v+' Ω';
+  }
+  function calc(){
+    const digits=mode===4?2:3;
+    let num=0;const cols=[];
+    for(let i=0;i<digits;i++){const v=+$('d'+i).value;num=num*10+colors[v][2];cols.push(colors[v][1]);}
+    const m=+$('mul').value;const t=+$('tol').value;
+    const val=num*mult[m][2];
+    cols.push(mult[m][1]);cols.push(tol[t][1]);
+    $('rbody').innerHTML=cols.map(c=>`<span class="band" style="background:${c}"></span>`).join('');
+    $('out').textContent=fmt(val);
+    $('detail').textContent='误差 '+tol[t][2]+' · 有效值 '+num+' × '+mult[m][2];
+    $('st').textContent='✓ 已计算';$('st').style.color='var(--ok)';
+  }
+  $('modeBar').addEventListener('click',e=>{
+    const c=e.target.closest('.btn');if(!c)return;
+    document.querySelectorAll('#modeBar .btn').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');mode=+c.dataset.m;build();
+  });
+  build();
+})();
+</script>
+</body>
+</html>

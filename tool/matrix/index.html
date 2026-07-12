@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>矩阵计算器 · Matrix Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  select,input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;outline:none}
+  select:focus,input:focus{border-color:var(--accent)}
+  .mgrid{display:inline-grid;gap:6px;margin-top:6px}
+  .mgrid input{width:60px;text-align:center;font-variant-numeric:tabular-nums}
+  .mwrap{display:flex;gap:24px;flex-wrap:wrap}
+  .dims{display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:13px;color:var(--muted)}
+  .dims input{width:52px;text-align:center}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;color:var(--text);transition:.12s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.on{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .out{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;white-space:pre;overflow:auto;color:var(--ok)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.err{color:var(--err)} .status.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🔢 矩阵计算器</h1><div class="sub">加减乘 / 转置 / 行列式 / 逆矩阵 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <div class="mwrap">
+      <div>
+        <div class="dims">矩阵 A <input id="ar" type="number" value="2" min="1" max="6">×<input id="ac" type="number" value="2" min="1" max="6"></div>
+        <div class="mgrid" id="gA"></div>
+      </div>
+      <div>
+        <div class="dims">矩阵 B <input id="br" type="number" value="2" min="1" max="6">×<input id="bc" type="number" value="2" min="1" max="6"></div>
+        <div class="mgrid" id="gB"></div>
+      </div>
+    </div>
+    <div class="toolbar" id="ops">
+      <span class="btn" data-op="add">A + B</span>
+      <span class="btn" data-op="sub">A − B</span>
+      <span class="btn" data-op="mul">A × B</span>
+      <span class="btn" data-op="tA">Aᵀ 转置</span>
+      <span class="btn" data-op="detA">det(A)</span>
+      <span class="btn" data-op="invA">A⁻¹ 逆</span>
+    </div>
+  </div>
+  <div class="card">
+    <label>结果</label>
+    <div class="out" id="out">选择上方运算</div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function buildGrid(gid,rId,cId){
+    const r=Math.max(1,Math.min(6,parseInt($(rId).value)||1));
+    const c=Math.max(1,Math.min(6,parseInt($(cId).value)||1));
+    const g=$(gid);g.style.gridTemplateColumns='repeat('+c+',auto)';
+    const old={};g.querySelectorAll('input').forEach(inp=>old[inp.dataset.k]=inp.value);
+    g.innerHTML='';
+    for(let i=0;i<r;i++)for(let j=0;j<c;j++){
+      const k=i+'_'+j;const val=old[k]!==undefined?old[k]:(gid==='gA'?(i===j?'1':'0'):(i===j?'1':'0'));
+      g.insertAdjacentHTML('beforeend',`<input data-k="${k}" value="${val}">`);
+    }
+  }
+  function read(gid,rId,cId){
+    const r=Math.max(1,Math.min(6,parseInt($(rId).value)||1));
+    const c=Math.max(1,Math.min(6,parseInt($(cId).value)||1));
+    const m=[];const g=$(gid);
+    for(let i=0;i<r;i++){m[i]=[];for(let j=0;j<c;j++){const inp=g.querySelector(`[data-k="${i}_${j}"]`);m[i][j]=parseFloat(inp.value)||0;}}
+    return m;
+  }
+  function fmt(m){
+    const rs=m.map(row=>row.map(x=>{const v=Math.round(x*1e6)/1e6;return String(v);}));
+    const w=Math.max(...rs.flat().map(s=>s.length));
+    return rs.map(row=>'│ '+row.map(s=>s.padStart(w)).join('  ')+' │').join('\n');
+  }
+  function det(m){
+    const n=m.length;if(n!==m[0].length)throw'行列式要求方阵';
+    if(n===1)return m[0][0];
+    if(n===2)return m[0][0]*m[1][1]-m[0][1]*m[1][0];
+    let d=0;
+    for(let j=0;j<n;j++){
+      const sub=m.slice(1).map(row=>row.filter((_,k)=>k!==j));
+      d+=((j%2?-1:1))*m[0][j]*det(sub);
+    }
+    return d;
+  }
+  function inv(m){
+    const n=m.length;if(n!==m[0].length)throw'逆矩阵要求方阵';
+    const A=m.map((row,i)=>row.concat(Array.from({length:n},(_,j)=>i===j?1:0)));
+    for(let i=0;i<n;i++){
+      let p=i;while(p<n&&Math.abs(A[p][i])<1e-12)p++;
+      if(p===n)throw'矩阵不可逆（行列式为 0）';
+      [A[i],A[p]]=[A[p],A[i]];
+      const pv=A[i][i];for(let j=0;j<2*n;j++)A[i][j]/=pv;
+      for(let k=0;k<n;k++){if(k===i)continue;const f=A[k][i];for(let j=0;j<2*n;j++)A[k][j]-=f*A[i][j];}
+    }
+    return A.map(row=>row.slice(n));
+  }
+  function run(op){
+    try{
+      const A=read('gA','ar','ac'),B=read('gB','br','bc');
+      let res,txt;
+      if(op==='add'||op==='sub'){
+        if(A.length!==B.length||A[0].length!==B[0].length)throw'加减法要求 A、B 同型';
+        res=A.map((row,i)=>row.map((x,j)=>op==='add'?x+B[i][j]:x-B[i][j]));txt=fmt(res);
+      }else if(op==='mul'){
+        if(A[0].length!==B.length)throw'A 的列数须等于 B 的行数';
+        res=A.map(row=>B[0].map((_,j)=>row.reduce((s,_,k)=>s+A[A.indexOf(row)][k]*B[k][j],0)));
+        // safer recompute
+        res=A.map(row=>B[0].map((_,j)=>row.reduce((s,v,k)=>s+v*B[k][j],0)));txt=fmt(res);
+      }else if(op==='tA'){
+        res=A[0].map((_,j)=>A.map(row=>row[j]));txt=fmt(res);
+      }else if(op==='detA'){
+        const d=det(A);txt='det(A) = '+(Math.round(d*1e6)/1e6);
+      }else if(op==='invA'){
+        res=inv(A);txt=fmt(res);
+      }
+      $('out').textContent=txt;$('st').textContent='✓ 计算完成';$('st').className='status ok';
+    }catch(e){$('out').textContent='—';$('st').textContent='✗ '+e;$('st').className='status err';}
+  }
+  ['ar','ac'].forEach(id=>$(id).addEventListener('input',()=>buildGrid('gA','ar','ac')));
+  ['br','bc'].forEach(id=>$(id).addEventListener('input',()=>buildGrid('gB','br','bc')));
+  $('ops').addEventListener('click',e=>{const c=e.target.closest('.btn');if(!c)return;
+    document.querySelectorAll('#ops .btn').forEach(x=>x.classList.remove('on'));c.classList.add('on');run(c.dataset.op);});
+  buildGrid('gA','ar','ac');buildGrid('gB','br','bc');
+})();
+</script>
+</body>
+</html>

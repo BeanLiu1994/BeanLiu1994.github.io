@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML 表格生成器 · HTML Table Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:820px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input,select,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  textarea{font-family:ui-monospace,Menlo,Consolas,monospace;min-height:120px;resize:vertical}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;color:var(--text);transition:.12s}
+  .btn:hover{border-color:var(--accent)}
+  .chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+  .chk input{width:auto}
+  .preview{background:#fff;color:#222;border-radius:10px;padding:14px;overflow:auto;margin-top:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>📋 HTML 表格生成器</h1><div class="sub">粘贴数据 → 生成带样式 HTML · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <label>数据（每行一条，单元格用 Tab 或逗号分隔；第一行作表头）</label>
+    <textarea id="data">姓名,年龄,城市
+张三,28,北京
+李四,32,上海
+王五,25,广州</textarea>
+    <div class="row" style="margin-top:12px">
+      <div><label>分隔符</label><select id="sep"><option value="auto">自动检测</option><option value=",">逗号 ,</option><option value="\t">Tab</option><option value="|">竖线 |</option></select></div>
+      <div><label>样式风格</label><select id="style"><option value="clean">简洁</option><option value="striped">斑马纹</option><option value="bordered">全边框</option><option value="minimal">极简</option></select></div>
+    </div>
+    <div class="toolbar">
+      <span class="chk"><input type="checkbox" id="thead" checked>首行为表头</span>
+      <span class="chk"><input type="checkbox" id="inline" checked>内联样式(style)</span>
+      <span class="btn" id="copy">📋 复制 HTML</span>
+    </div>
+  </div>
+  <div class="card">
+    <label>HTML 代码</label>
+    <textarea id="out" readonly style="min-height:160px"></textarea>
+    <label style="margin-top:12px">预览</label>
+    <div class="preview" id="prev"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function detectSep(line){
+    if(line.includes('\t'))return '\t';
+    if(line.includes('|'))return '|';
+    return ',';
+  }
+  function styleCss(kind){
+    const B={
+      clean:{t:'border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px',th:'background:#f2f4f7;padding:8px 12px;text-align:left;border-bottom:2px solid #ddd',td:'padding:8px 12px;border-bottom:1px solid #eee'},
+      striped:{t:'border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px',th:'background:#4f9cff;color:#fff;padding:8px 12px;text-align:left',td:'padding:8px 12px;border-bottom:1px solid #eee'},
+      bordered:{t:'border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px',th:'background:#f2f4f7;padding:8px 12px;text-align:left;border:1px solid #ccc',td:'padding:8px 12px;border:1px solid #ddd'},
+      minimal:{t:'border-collapse:collapse;width:100%;font-family:sans-serif;font-size:14px',th:'padding:6px 10px;text-align:left;border-bottom:2px solid #333',td:'padding:6px 10px'}
+    };
+    return B[kind];
+  }
+  function gen(){
+    const raw=$('data').value.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
+    if(!raw.length){$('out').value='';$('prev').innerHTML='';$('st').textContent='无数据';$('st').className='status';return;}
+    let sep=$('sep').value;
+    if(sep==='auto')sep=detectSep(raw[0]);
+    if(sep==='\\t')sep='\t';
+    const rows=raw.map(l=>l.split(sep).map(c=>c.trim()));
+    const useHead=$('thead').checked;
+    const inline=$('inline').checked;
+    const striped=$('style').value==='striped';
+    const S=styleCss($('style').value);
+    const at=(css)=>inline&&css?` style="${css}"`:'';
+    let html='<table'+at(S.t)+'>\n';
+    let start=0;
+    if(useHead){
+      html+='  <thead>\n    <tr>'+rows[0].map(c=>'<th'+at(S.th)+'>'+esc(c)+'</th>').join('')+'</tr>\n  </thead>\n';
+      start=1;
+    }
+    html+='  <tbody>\n';
+    for(let i=start;i<rows.length;i++){
+      const bg=(striped&&inline&&(i-start)%2===1)?';background:#f7f9fc':'';
+      html+='    <tr>'+rows[i].map(c=>'<td'+at(S.td+bg)+'>'+esc(c)+'</td>').join('')+'</tr>\n';
+    }
+    html+='  </tbody>\n</table>';
+    $('out').value=html;
+    $('prev').innerHTML=html;
+    $('st').textContent='✓ 已生成 '+rows.length+' 行';$('st').className='status ok';
+  }
+  $('copy').addEventListener('click',()=>{
+    navigator.clipboard&&navigator.clipboard.writeText($('out').value);
+    $('st').textContent='✓ 已复制 HTML';$('st').className='status ok';
+  });
+  ['data','sep','style','thead','inline'].forEach(id=>$(id).addEventListener('input',gen));
+  gen();
+})();
+</script>
+</body>
+</html>

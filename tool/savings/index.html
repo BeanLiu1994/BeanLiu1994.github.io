@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>定投 / 储蓄目标计算器 · Savings Planner</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; --up:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:640px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:15px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .results{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:20px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;word-break:break-all}
+  .stat .v.ok{color:var(--ok)} .stat .v.up{color:var(--up)}
+  .stat.full{grid-column:1/3}
+  .bar{height:12px;border-radius:6px;background:var(--bg);overflow:hidden;margin-top:8px;display:flex}
+  .bar .principal{background:#4f9cff} .bar .interest{background:var(--up)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>💰 定投 / 储蓄目标计算器</h1><div class="sub">每月定投 + 复利增长 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <label>初始本金 (¥)</label>
+    <input id="init" type="number" value="10000" min="0" step="100">
+    <div class="row">
+      <div><label>每月定投 (¥)</label><input id="monthly" type="number" value="2000" min="0" step="100"></div>
+      <div><label>年化收益率 (%)</label><input id="rate" type="number" value="6" step="0.1"></div>
+    </div>
+    <div class="row">
+      <div><label>投资年限 (年)</label><input id="years" type="number" value="10" min="1" step="1"></div>
+      <div><label>目标金额 (¥, 选填)</label><input id="goal" type="number" placeholder="例如 500000" step="1000"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="results">
+      <div class="stat"><div class="k">到期总资产</div><div class="v ok" id="rTotal">—</div></div>
+      <div class="stat"><div class="k">累计本金</div><div class="v" id="rPrin">—</div></div>
+      <div class="stat"><div class="k">累计收益</div><div class="v up" id="rInt">—</div></div>
+      <div class="stat"><div class="k">收益占比</div><div class="v" id="rPct">—</div></div>
+      <div class="stat full"><div class="k">本金 / 收益构成</div>
+        <div class="bar"><div class="principal" id="barP"></div><div class="interest" id="barI"></div></div>
+      </div>
+      <div class="stat full"><div class="k">目标达成</div><div class="v" id="rGoal">—</div></div>
+    </div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function money(n){return '¥'+Math.round(n).toLocaleString('zh-CN');}
+  function calc(){
+    const init=Math.max(0,parseFloat($('init').value)||0);
+    const m=Math.max(0,parseFloat($('monthly').value)||0);
+    const rate=(parseFloat($('rate').value)||0)/100;
+    const years=Math.max(0,parseInt($('years').value)||0);
+    const goal=parseFloat($('goal').value)||0;
+    const n=years*12;const r=rate/12;
+    let total;
+    if(r===0)total=init+m*n;
+    else total=init*Math.pow(1+r,n)+m*(Math.pow(1+r,n)-1)/r;
+    const principal=init+m*n;
+    const interest=total-principal;
+    $('rTotal').textContent=money(total);
+    $('rPrin').textContent=money(principal);
+    $('rInt').textContent=money(interest);
+    const pct=total>0?Math.round(interest/total*100):0;
+    $('rPct').textContent=pct+'%';
+    $('barP').style.width=(100-pct)+'%';$('barI').style.width=pct+'%';
+    if(goal>0){
+      // find month goal reached
+      let bal=init,reached=-1;
+      for(let i=1;i<=n;i++){bal=bal*(1+r)+m;if(bal>=goal){reached=i;break;}}
+      if(bal>=goal||total>=goal){
+        if(reached>0)$('rGoal').textContent='✓ 第 '+reached+' 个月（约 '+(reached/12).toFixed(1)+' 年）达成 '+money(goal);
+        else $('rGoal').textContent='✓ 到期达成 '+money(goal);
+        $('rGoal').style.color='var(--ok)';
+      }else{
+        $('rGoal').textContent='✗ 到期未达成，缺口 '+money(goal-total);
+        $('rGoal').style.color='var(--err)';
+      }
+    }else{$('rGoal').textContent='—';$('rGoal').style.color='';}
+    $('st').textContent='✓ 已计算';$('st').style.color='var(--ok)';
+  }
+  ['init','monthly','rate','years','goal'].forEach(id=>$(id).addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>
