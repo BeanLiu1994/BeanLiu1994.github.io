@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹拉霸 · Neon Slots</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#ffd54a; --accent-glow:#ffd54a55; --gold:#ffd54a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 50% 0%, #2a2038 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #102a2a 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ffd54a,#ff9b4d); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#2a2000; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#2a2000; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹拉霸</h1><div class="sub">N E O N &nbsp; S L O T S</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Credits</div><div class="value" id="cred">100</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">100</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="300"></canvas></div>
+  <div class="controls">
+    <button class="btn primary" id="btn-spin" onclick="game.spin()">SPIN</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">下注 10，三连中奖，双连小奖。点 SPIN 开转</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const SYM=[{e:'🍋',v:2,c:'#ffd54a'},{e:'🍒',v:3,c:'#ff5d6a'},{e:'🔔',v:5,c:'#ffd54a'},{e:'⭐',v:8,c:'#4dff91'},{e:'💎',v:12,c:'#4dfff0'},{e:'7',v:20,c:'#ff9b4d'}];
+  const BET=10;
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const credEl=document.getElementById('cred'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const spinBtn=document.getElementById('btn-spin');
+
+  class Slots {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('slotsBest')||'100'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(rect.width||420,420)); const dpr=window.devicePixelRatio||1;
+      this.W=w; this.H=w*300/420; canvas.width=w*dpr; canvas.height=this.H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); this.rw=this.W/3; }
+    restart(){ this.credits=100; this.reels=[0,0,0]; this.pos=[0,0,0]; this.target=[0,0,0]; this.spinning=false; this.t=0; this.win=0; credEl.textContent=this.credits; this.updateUI(); }
+    spin(){
+      if(this.spinning||this.over) return;
+      if(this.autoPlay) return;
+      if(this.credits<BET){ this.credits=100; }
+      this.credits-=BET; credEl.textContent=this.credits;
+      this.startSpin();
+    }
+    startSpin(){ this.spinning=true; this.t=0; this.win=0;
+      for(let i=0;i<3;i++){ this.target[i]=Math.floor(Math.random()*SYM.length); }
+      this.dur=[0.9,1.25,1.6];
+      statusEl.textContent='转动中…';
+    }
+    endSpin(){
+      this.spinning=false; this.reels=[this.target[0],this.target[1],this.target[2]];
+      const a=SYM[this.reels[0]], b=SYM[this.reels[1]], c=SYM[this.reels[2]];
+      let win=0;
+      if(this.reels[0]===this.reels[1]&&this.reels[1]===this.reels[2]){ win=a.v*BET; this.flash='JACKPOT'; }
+      else if(this.reels[0]===this.reels[1]||this.reels[1]===this.reels[2]||this.reels[0]===this.reels[2]){ const m=Math.max(a.v,b.v,c.v); win=m; this.flash='WIN'; }
+      this.win=win; this.credits+=win; if(this.credits>this.best){ this.best=this.credits; localStorage.setItem('slotsBest',String(this.best)); bestEl.textContent=this.best; }
+      credEl.textContent=this.credits;
+      statusEl.textContent = win>0 ? ('🎉 '+(this.flash==='JACKPOT'?'大奖！':'中奖')+' +'+win+' 分') : '没中，再试一次';
+    }
+    updateUI(){ if(!this.spinning) spinBtn.textContent='SPIN'; }
+    // ---- auto ----
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoStep(){ if(!this.autoPlay) return; if(this.over){ this._autoNext(); return; }
+      if(!this.spinning){ if(this.credits<BET) this.credits=100; this.credits-=BET; credEl.textContent=this.credits; this.startSpin(); this._autoProgress++; }
+      this.autoTimer=setTimeout(()=>this.autoStep(), 200);
+    }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    // ---- render ----
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
+    draw(dt){
+      const W=this.W,H=this.H,rw=this.rw; ctx.clearRect(0,0,W,H);
+      if(this.spinning){ this.t+=dt; for(let i=0;i<3;i++){ const sp=22+ i*4; this.pos[i]=(this.pos[i]+sp*dt)%SYM.length; if(this.t>=this.dur[i]){ this.pos[i]=this.target[i]; } }
+        if(this.t>=this.dur[2]) this.endSpin();
+      }
+      // reels
+      for(let i=0;i<3;i++){ const x=i*rw; ctx.fillStyle='#0a0e1e'; this.rr(x+4,0,rw-8,H,10); ctx.fill();
+        const cyc=this.pos[i]; const idx=Math.floor(cyc)%SYM.length; const frac=cyc-Math.floor(cyc);
+        // draw 3 symbols centered
+        for(let k=-1;k<=1;k++){ const sy=H/2 + (k-frac)*(rw*0.7); const si=((idx+k)%SYM.length+SYM.length)%SYM.length; const s=SYM[si];
+          ctx.save(); ctx.globalAlpha = (sy>H-20||sy<20)?0.15:1; ctx.shadowColor=s.c; ctx.shadowBlur=12; ctx.fillStyle=s.c; ctx.font=(rw*0.42)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(s.e, x+rw/2, sy); ctx.restore(); }
+        // border
+        ctx.strokeStyle='#ffffff18'; ctx.lineWidth=2; this.rr(x+4,0,rw-8,H,10); ctx.stroke();
+      }
+      // payline
+      ctx.strokeStyle='#ffd54a55'; ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke(); ctx.setLineDash([]);
+      if(this.win>0 && !this.spinning){ ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=20; ctx.fillStyle='#ffd54a'; ctx.font='bold '+(rw*0.3)+'px Segoe UI'; ctx.textAlign='center'; ctx.fillText('+'+this.win, W/2, H-10); ctx.restore(); }
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new Slots();
+})();
+</script>
+</body>
+</html>

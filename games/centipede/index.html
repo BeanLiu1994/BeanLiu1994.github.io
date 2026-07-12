@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹蜈蚣 · Neon Centipede</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#4dff91; --accent-glow:#4dff9166; --gold:#ffd54a; --red:#ff5d6a; --cyan:#4dfff0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 50% 0%, #102a2a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #2a1240 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4dff91,#4dfff0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:48px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-panel .lives .value { color:var(--red); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06120a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06120a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹蜈蚣</h1><div class="sub">N E O N &nbsp; C E N T I P E D E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card lives"><div class="label">Lives</div><div class="value" id="lives">3</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="416" height="448"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">New Game</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">移动瞄准、点按射击，消灭整条蜈蚣进入下一波</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=13, ROWS=14;
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), livesEl=document.getElementById('lives'), statusEl=document.getElementById('status');
+  const key=(c,r)=>c+','+r;
+
+  class Cent {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('centBest')||'0');
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onDown(e); });
+      window.addEventListener('keydown',(e)=>{ if(this.autoPlay||this.over) return; if(e.key==='ArrowLeft') this.moveTarget=-1; else if(e.key==='ArrowRight') this.moveTarget=1; else if(e.key===' '){ e.preventDefault(); this.shoot(); } });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(rect.width||416,416)); const dpr=window.devicePixelRatio||1;
+      this.W=w; this.cell=w/COLS; this.H=this.cell*ROWS; canvas.width=w*dpr; canvas.height=this.H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; this.lives=3; this.wave=1; this.mush={}; this.bullets=[]; this.player={x:this.W/2, y:this.H-this.cell*0.7, tx:this.W/2}; this.moveTarget=0; this.fireCd=0; this.stepT=0; this.stepInt=0.16; this.scoreEl=scoreEl; this.spawnMush(); this.spawnCent(); scoreEl.textContent=0; livesEl.textContent=this.lives; }
+    spawnMush(){ const n=16+this.wave*2; let placed=0, guard=0; while(placed<n && guard++<400){ const c=Math.floor(Math.random()*COLS), r=Math.floor(Math.random()*(ROWS*0.7)); if(r<1) continue; if(this.mush[key(c,r)]) continue; this.mush[key(c,r)]={hp:1}; placed++; } }
+    spawnCent(){ const len=8+this.wave*2; const head={col:Math.floor(COLS/2), row:0, dx:1, vdir:1}; const segs=[{col:head.col,row:0,dx:1,vdir:1}]; for(let i=1;i<len;i++) segs.push({col:head.col-i,row:0,dx:1,vdir:1}); this.chains=[segs]; }
+    totalSegs(){ let n=0; for(const ch of this.chains) n+=ch.length; return n; }
+    step(){
+      const inten=Math.max(0.06, this.stepInt - this.wave*0.008);
+      for(const ch of this.chains){
+        if(!ch.length) continue;
+        const head=ch[0];
+        let nc=head.col+head.dx, nr=head.row;
+        const blocked = nc<0||nc>=COLS||this.mush[key(nc,head.row)];
+        if(blocked){ head.dx=-head.dx; nr=head.row+head.vdir; if(nr>=ROWS-1) head.vdir=-1; else if(nr<=1) head.vdir=1; nc=head.col; }
+        const prev=[]; for(const s of ch) prev.push({col:s.col,row:s.row});
+        head.col=nc; head.row=nr;
+        for(let i=1;i<ch.length;i++){ ch[i].col=prev[i-1].col; ch[i].row=prev[i-1].row; ch[i].dx=ch[i-1].dx; ch[i].vdir=ch[i-1].vdir; }
+      }
+      // player collision: any seg in player's cell row/col
+      const pc=Math.floor(this.player.x/this.cell);
+      for(const ch of this.chains) for(const s of ch){ if(s.row>=ROWS-2 && Math.abs(s.col-pc)<=0 && s.row===ROWS-1){ this.loseLife(); return; } if(s.row===ROWS-1 && Math.abs(s.col-pc)<=0){ this.loseLife(); return; } }
+    }
+    loseLife(){ this.lives--; livesEl.textContent=this.lives; if(this.lives<=0){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('centBest',String(this.best)); } statusEl.textContent='💥 游戏结束，得分 '+this.score; if(this.autoPlay) this._autoNext(); } else { // push centipede up a bit
+        for(const ch of this.chains) for(const s of ch) s.row=Math.max(1,s.row-2); statusEl.textContent='被击中！剩余 '+this.lives+' 条命'; } }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    shoot(){ if(this.over) return; this.bullets.push({x:this.player.x, y:this.player.y-10}); }
+    onDown(e){ if(this.autoPlay||this.over) return; const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(this.W/rect.width); this.player.tx=x; this.shoot(); }
+    update(dt){
+      if(this.over) return;
+      // player move
+      const sp=this.W*2.4*dt;
+      if(this.autoPlay) this.autoControl(dt);
+      else { if(this.moveTarget!==0){ this.player.tx += this.moveTarget*sp; this.moveTarget=0; } }
+      if(this.player.tx<this.cell*0.4) this.player.tx=this.cell*0.4; if(this.player.tx>this.W-this.cell*0.4) this.player.tx=this.W-this.cell*0.4;
+      this.player.x += (this.player.tx-this.player.x)*Math.min(1,dt*14);
+      // bullets
+      this.fireCd-=dt;
+      for(const b of this.bullets){ b.y-=this.W*1.4*dt; }
+      this.bullets=this.bullets.filter(b=>b.y>0);
+      // bullet collisions
+      for(const b of this.bullets){ const c=Math.floor(b.x/this.cell), r=Math.floor(b.y/this.cell);
+        if(this.mush[key(c,r)]){ delete this.mush[key(c,r)]; b.dead=true; this.score+=1; scoreEl.textContent=this.score; continue; }
+        for(const ch of this.chains){ const idx=ch.findIndex(s=>s.col===c&&s.row===r); if(idx>=0){ ch.splice(idx,1); b.dead=true; this.score+=10; this._autoProgress++; scoreEl.textContent=this.score; if(ch.length===0) this.chains=this.chains.filter(x=>x.length>0); break; } }
+      }
+      this.bullets=this.bullets.filter(b=>!b.dead);
+      if(this.totalSegs()===0){ this.wave++; this.spawnMush(); this.spawnCent(); this.stepInt=Math.max(0.06,0.16-this.wave*0.01); statusEl.textContent='🎉 第 '+this.wave+' 波！'; }
+      // centipede step
+      this.stepT-=dt; if(this.stepT<=0){ this.stepT=Math.max(0.06,this.stepInt-this.wave*0.008); this.step(); }
+    }
+    autoControl(dt){
+      const pc=Math.floor(this.player.x/this.cell);
+      // threat in same column near bottom
+      let threat=null, dodgeDir=0;
+      for(const ch of this.chains) for(const s of ch){ if(s.col===pc && s.row>=ROWS-4){ if(!threat||s.row>threat.row) threat=s; } }
+      if(threat){ dodgeDir = (pc>COLS/2)?-1:1; }
+      else {
+        // align under lowest segment
+        let low=null; for(const ch of this.chains) for(const s of ch){ if(!low||s.row>low.row) low=s; }
+        if(low){ const tc=low.col*this.cell+this.cell/2; if(Math.abs(tc-this.player.tx)<this.cell*0.4) dodgeDir=0; else dodgeDir=(tc>this.player.tx)?1:-1; }
+      }
+      this.player.tx += dodgeDir*this.W*1.6*dt;
+      if(this.fireCd<=0){ this.shoot(); this.fireCd=0.18; }
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.score; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    draw(){ const W=this.W,H=this.H,cell=this.cell; ctx.clearRect(0,0,W,H);
+      // mushrooms
+      for(const k in this.mush){ const [c,r]=k.split(',').map(Number); const x=c*cell,y=r*cell; ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=8; ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.arc(x+cell/2,y+cell/2,cell*0.34,0,7); ctx.fill(); ctx.restore(); }
+      // chains
+      for(const ch of this.chains){ for(let i=0;i<ch.length;i++){ const s=ch[i]; const x=s.col*cell,y=s.row*cell; const isHead=i===0; ctx.save(); ctx.shadowColor=isHead?'#4dfff0':'#ff9b4d'; ctx.shadowBlur=isHead?14:8; ctx.fillStyle=isHead?'#4dfff0':'#ff9b4d'; this.rr(x+cell*0.12,y+cell*0.12,cell*0.76,cell*0.76,6); ctx.fill(); ctx.restore(); } }
+      // bullets
+      for(const b of this.bullets){ ctx.save(); ctx.shadowColor='#4dff91'; ctx.shadowBlur=10; ctx.fillStyle='#4dff91'; ctx.fillRect(b.x-2,b.y-10,4,12); ctx.restore(); }
+      // player
+      const px=this.player.x, py=this.player.y; ctx.save(); ctx.shadowColor='#4dff91'; ctx.shadowBlur=16; ctx.fillStyle='#4dff91'; ctx.beginPath(); ctx.moveTo(px,py-14); ctx.lineTo(px-12,py+10); ctx.lineTo(px+12,py+10); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new Cent();
+})();
+</script>
+</body>
+</html>
