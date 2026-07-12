@@ -116,9 +116,10 @@ class G{
     this.canvas=document.getElementById('game');
     this.ctx=this.canvas.getContext('2d');
     this.autoPlay=false;
-    this.w=0; this.cell=0;
+    this.w=0; this.cell=0; this._cssW=0;
     this._last=undefined;
     this._tick=this.tick.bind(this);
+    this._tickErr=null;
 
     try{ this.best=parseInt(localStorage.getItem('best_ludo')||'0',10)||0; }catch(e){ this.best=0; }
 
@@ -137,12 +138,17 @@ class G{
   }
 
   fitCanvas(){
-    const w=(this.canvas.clientWidth||this.canvas.width||440);
-    const dpr=window.devicePixelRatio||1;
-    this.canvas.width=Math.max(1,Math.round(w*dpr));
-    this.canvas.height=Math.max(1,Math.round(w*dpr));
+    const rect = (this.canvas.getBoundingClientRect && this.canvas.getBoundingClientRect()) || {width:0};
+    const w = (rect.width && isFinite(rect.width) && rect.width>0)
+            ? rect.width
+            : (this.canvas.clientWidth || this.canvas.width || 440);
+    this._cssW = w;
+    const dpr = window.devicePixelRatio || 1;
+    const px = Math.max(1, Math.round(w*dpr));
+    this.canvas.width = px;
+    this.canvas.height = px;
     this.ctx.setTransform(dpr,0,0,dpr,0,0);
-    this.cell=w/15;
+    this.cell = w/15;
     return w;
   }
 
@@ -450,8 +456,22 @@ class G{
     if(!(dt>0)) dt=0.016;
     dt=Math.min(0.05,dt);
     this._last=ts;
-    this.update(dt);
-    this.render();
+    // 持续量算画布尺寸：构造时若布局尚未 flush，clientWidth 可能为 0 且此后不再触发
+    // resize 事件，画布会永远停在 0 尺寸→整盘空白、点击/自动都"看起来没反应"。这里每帧用
+    // 真实 CSS 宽度比对，尺寸一旦变化立即重算（开销可忽略），杜绝该冻结。
+    if(this.canvas&&this.canvas.getBoundingClientRect){
+      const rw=(this.canvas.getBoundingClientRect().width)||0;
+      if(rw>0 && rw!==this._cssW){ this._cssW=rw; const w=this.fitCanvas(); if(w) this.w=w; }
+    }
+    try {
+      this.update(dt);
+      this.render();
+    } catch(err){
+      // 单帧异常绝不中断主循环，否则画面会冻结、自动/点击全部失效。
+      if(this._tickErr!==err){ this._tickErr=err; try{ console.error('ludo tick error:', err); }catch(e){} }
+      // 若宽度可疑（0 或非法），立即尝试重新量算，下一次即可恢复。
+      const w=this.fitCanvas(); if(w&&w!==this.w) this.w=w;
+    }
     requestAnimationFrame(this._tick);
   }
 }
