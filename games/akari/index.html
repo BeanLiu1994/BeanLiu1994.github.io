@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>霓虹点灯 · Akari</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6ecff;
+    --muted:#8a92b2; --accent:#4f9cff; --accent-glow:rgba(79,156,255,.55);
+    --gold:#ffec96; --red:#ff5d6c; --green:#3ecf8e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:560px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#ffec96,#4f9cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#1b3a6b,#2a5cff);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(92vw,520px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(79,156,255,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,26,.72);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(79,156,255,.25)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>霓虹点灯 · Akari</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">点击白格放置 / 移除灯泡，照亮所有格子，且灯泡之间不能互相照射。带数字格表示其上下左右相邻的灯泡数量。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">已点亮！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">再来一局</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function rrect(ctx,x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+class Akari {
+  constructor(){
+    this.N = 7;
+    this.WALL_P = 0.16;
+    this.canvas = document.getElementById('c');
+    this.ctx = this.canvas.getContext('2d');
+    this.autoPlay = false;
+    this._autoProgress = 0;
+    this.autoTimer = null;
+    this._flash = [];
+    this._cssW = 0;
+    this._last = null;
+    this.best = parseFloat(localStorage.getItem('akariBest')||'0')||0;
+    this.fit();
+    this.restart();
+    this._bind();
+    this._raf = requestAnimationFrame(this.loop.bind(this));
+  }
+
+  fit(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = rect.width || 360, h = rect.height || 360;
+    this.W = w; this.H = h;
+    this.canvas.width = Math.round(w*dpr);
+    this.canvas.height = Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.cell = Math.min(w,h)/this.N;
+    this.ox = (w - this.cell*this.N)/2;
+    this.oy = (h - this.cell*this.N)/2;
+    this._cssW = rect.width;
+  }
+
+  /* ---------- generation (guaranteed solvable) ---------- */
+  solve(walls){
+    const N = this.N;
+    const bulbs = Array.from({length:N},()=>new Array(N).fill(false));
+    let lit = Array.from({length:N},()=>new Array(N).fill(false));
+    const lightRay = (r,c)=>{
+      lit[r][c]=true;
+      for(let cc=c-1;cc>=0;cc--){ if(walls[r][cc]!==0) break; lit[r][cc]=true; }
+      for(let cc=c+1;cc<N;cc++){ if(walls[r][cc]!==0) break; lit[r][cc]=true; }
+      for(let rr=r-1;rr>=0;rr--){ if(walls[rr][c]!==0) break; lit[rr][c]=true; }
+      for(let rr=r+1;rr<N;rr++){ if(walls[rr][c]!==0) break; lit[rr][c]=true; }
+    };
+    const recompute = ()=>{ lit = Array.from({length:N},()=>new Array(N).fill(false));
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(bulbs[r][c]) lightRay(r,c); };
+    const clearBetweenRow = (r,a,b)=>{ for(let k=a+1;k<b;k++) if(walls[r][k]!==0) return false; return true; };
+    const clearBetweenCol = (c,a,b)=>{ for(let k=a+1;k<b;k++) if(walls[k][c]!==0) return false; return true; };
+    const canPlace = (r,c)=>{
+      if(walls[r][c]!==0) return false;
+      for(let cc=0;cc<N;cc++){ if(cc===c) continue;
+        if(bulbs[r][cc] && clearBetweenRow(r,Math.min(c,cc),Math.max(c,cc))) return false; }
+      for(let rr=0;rr<N;rr++){ if(rr===r) continue;
+        if(bulbs[rr][c] && clearBetweenCol(c,Math.min(r,rr),Math.max(r,rr))) return false; }
+      return true;
+    };
+    const canPlaceLight = (r,c,fr,fc)=>{
+      if(!canPlace(r,c)) return false;
+      if(r===fr) return clearBetweenRow(fr,Math.min(c,fc),Math.max(c,fc));
+      if(c===fc) return clearBetweenCol(fc,Math.min(r,fr),Math.max(r,fr));
+      return false;
+    };
+    const rec = ()=>{
+      let target=null;
+      for(let r=0;r<N;r++){ for(let c=0;c<N;c++){
+        if(walls[r][c]===0 && !lit[r][c]){ target=[r,c]; break; } }
+        if(target) break; }
+      if(!target) return true;
+      const [fr,fc]=target;
+      const cands=[];
+      for(let cc=0;cc<N;cc++) if(canPlaceLight(fr,cc,fr,fc)) cands.push([fr,cc]);
+      for(let rr=0;rr<N;rr++) if(rr!==fr && canPlaceLight(rr,fc,fr,fc)) cands.push([rr,fc]);
+      shuffle(cands);
+      for(const [pr,pc] of cands){
+        if(!canPlace(pr,pc)) continue;
+        bulbs[pr][pc]=true; recompute();
+        if(rec()) return true;
+        bulbs[pr][pc]=false; recompute();
+      }
+      return false;
+    };
+    return rec() ? bulbs : null;
+  }
+
+  gen(){
+    const N=this.N;
+    for(let attempt=0; attempt<300; attempt++){
+      const walls = Array.from({length:N},()=>new Array(N).fill(0));
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++)
+        if(Math.random()<this.WALL_P) walls[r][c] = -2;
+      const sol = this.solve(walls);
+      if(sol){
+        for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+          if(walls[r][c]===-2){
+            let n=0;
+            for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+              const nr=r+dr,nc=c+dc;
+              if(nr>=0&&nr<N&&nc>=0&&nc<N&&sol[nr][nc]) n++;
+            }
+            walls[r][c]=n;
+          }
+        }
+        this.walls=walls; this.sol=sol;
+        this.bulbs=Array.from({length:N},()=>new Array(N).fill(false));
+        this.solved=false; this.startTime=PNOW();
+        this._genOrder();
+        return;
+      }
+    }
+    // fallback: no walls, permutation solution
+    const walls = Array.from({length:N},()=>new Array(N).fill(0));
+    const sol = Array.from({length:N},()=>new Array(N).fill(false));
+    const perm=[...Array(N).keys()]; shuffle(perm);
+    for(let i=0;i<N;i++) sol[i][perm[i]]=true;
+    this.walls=walls; this.sol=sol;
+    this.bulbs=Array.from({length:N},()=>new Array(N).fill(false));
+    this.solved=false; this.startTime=PNOW();
+    this._genOrder();
+  }
+
+  _genOrder(){
+    const N=this.N, ord=[];
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(this.sol[r][c]) ord.push([r,c]);
+    ord.sort((a,b)=>(a[0]*N+a[1])-(b[0]*N+b[1]));
+    this._order=ord; this.autoIdx=0;
+  }
+
+  /* ---------- lighting / win ---------- */
+  computeLit(){
+    const N=this.N;
+    const lit = Array.from({length:N},()=>new Array(N).fill(false));
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(!this.bulbs[r][c]) continue;
+      lit[r][c]=true;
+      for(let cc=c-1;cc>=0;cc--){ if(this.walls[r][cc]!==0) break; lit[r][cc]=true; }
+      for(let cc=c+1;cc<N;cc++){ if(this.walls[r][cc]!==0) break; lit[r][cc]=true; }
+      for(let rr=r-1;rr>=0;rr--){ if(this.walls[rr][c]!==0) break; lit[rr][c]=true; }
+      for(let rr=r+1;rr<N;rr++){ if(this.walls[rr][c]!==0) break; lit[rr][c]=true; }
+    }
+    this.lit=lit;
+  }
+  hasConflict(r,c){
+    if(!this.bulbs[r][c]) return false;
+    const N=this.N;
+    for(let cc=0;cc<N;cc++){ if(cc===c) continue;
+      if(this.bulbs[r][cc]){ let ok=true; for(let k=Math.min(c,cc)+1;k<Math.max(c,cc);k++) if(this.walls[r][k]!==0){ok=false;break;} if(ok) return true; } }
+    for(let rr=0;rr<N;rr++){ if(rr===r) continue;
+      if(this.bulbs[rr][c]){ let ok=true; for(let k=Math.min(r,rr)+1;k<Math.max(r,rr);k++) if(this.walls[k][c]!==0){ok=false;break;} if(ok) return true; } }
+    return false;
+  }
+  isSolved(){
+    this.computeLit();
+    const N=this.N;
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(this.walls[r][c]===0 && !this.lit[r][c]) return false;
+      if(this.bulbs[r][c] && this.hasConflict(r,c)) return false;
+    }
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(this.walls[r][c]>0){
+        let n=0;
+        for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nr=r+dr,nc=c+dc;
+          if(nr>=0&&nr<N&&nc>=0&&nc<N&&this.bulbs[nr][nc]) n++;
+        }
+        if(n!==this.walls[r][c]) return false;
+      }
+    }
+    return true;
+  }
+
+  /* ---------- auto ---------- */
+  toggleAuto(){ this.autoPlay ? this.stopAuto() : this.startAuto(); }
+  startAuto(){
+    this.autoPlay=true; this._autoProgress=0; this._genOrder(); this.autoIdx=0;
+    this.solved=false; this._hideBanner();
+    document.getElementById('autoBtn').classList.add('on');
+    document.getElementById('autoBtn').textContent='停止';
+    this.autoStep();
+  }
+  stopAuto(){
+    this.autoPlay=false;
+    if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; }
+    document.getElementById('autoBtn').classList.remove('on');
+    document.getElementById('autoBtn').textContent='自动';
+  }
+  autoStep(){
+    if(!this.autoPlay) return;
+    if(this.autoIdx>=this._order.length){
+      this.autoTimer=setTimeout(()=>{ if(!this.autoPlay) return;
+        this.gen(); this._genOrder(); this.autoIdx=0; this.autoStep(); }, 650);
+      return;
+    }
+    const [r,c]=this._order[this.autoIdx++];
+    this.bulbs[r][c]=true; this._autoProgress++;
+    this._flash.push({r,c,t:PNOW()});
+    this.autoTimer=setTimeout(()=>this.autoStep(), 240);
+  }
+
+  /* ---------- interaction ---------- */
+  restart(){
+    this.stopAuto();
+    this._autoProgress=0;
+    this.gen();
+    this._hideBanner();
+    this._updateStatus();
+  }
+  toggleCell(r,c){
+    if(this.solved) return;
+    if(r<0||r>=this.N||c<0||c>=this.N) return;
+    if(this.walls[r][c]!==0) return;
+    this.bulbs[r][c]=!this.bulbs[r][c];
+    if(this.bulbs[r][c]) this._flash.push({r,c,t:PNOW()});
+    if(this.isSolved()) this._onSolve();
+    this._updateStatus();
+  }
+  _onSolve(){
+    this.solved=true;
+    const t=(PNOW()-this.startTime)/1000;
+    let msg=`用时 ${t.toFixed(1)}s`;
+    if(this.best===0 || t<this.best){ this.best=t; localStorage.setItem('akariBest',t.toFixed(2));
+      msg+=` · 新纪录！`; }
+    else msg+=` · 最佳 ${this.best.toFixed(1)}s`;
+    this._showBanner('已点亮！', msg);
+  }
+  _bind(){
+    const cv=this.canvas;
+    cv.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      if(this.autoPlay||this.solved) return;
+      const rect=cv.getBoundingClientRect();
+      const x=(e.clientX-rect.left)*(this.W/rect.width);
+      const y=(e.clientY-rect.top)*(this.H/rect.height);
+      const c=Math.floor((x-this.ox)/this.cell);
+      const r=Math.floor((y-this.oy)/this.cell);
+      this.toggleCell(r,c);
+    });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>this.restart();
+  }
+  /* ---------- loop / render ---------- */
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.tick(dt);
+    this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  tick(dt){
+    const now=PNOW();
+    this._flash=this._flash.filter(f=>now-f.t<500);
+  }
+  render(){
+    const ctx=this.ctx,N=this.N;
+    ctx.clearRect(0,0,this.W,this.H);
+    rrect(ctx,this.ox-6,this.oy-6,this.cell*N+12,this.cell*N+12,12);
+    ctx.fillStyle='#0e1226'; ctx.fill();
+    this.computeLit();
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const x=this.ox+c*this.cell, y=this.oy+r*this.cell, w=this.walls[r][c];
+      if(w!==0){
+        ctx.fillStyle='#1b2030';
+        rrect(ctx,x+2,y+2,this.cell-4,this.cell-4,6); ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1;
+        rrect(ctx,x+2,y+2,this.cell-4,this.cell-4,6); ctx.stroke();
+        if(w>0){
+          ctx.fillStyle = '#e6ecff';
+          ctx.font=`bold ${Math.floor(this.cell*0.5)}px system-ui`;
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillText(String(w), x+this.cell/2, y+this.cell/2+1);
+        }
+      } else {
+        ctx.fillStyle = this.lit[r][c] ? 'rgba(79,156,255,.16)' : 'rgba(255,255,255,.05)';
+        ctx.fillRect(x+1,y+1,this.cell-2,this.cell-2);
+        if(this.bulbs[r][c]){
+          const cx=x+this.cell/2, cy=y+this.cell/2;
+          const grd=ctx.createRadialGradient(cx,cy,2,cx,cy,this.cell*0.72);
+          grd.addColorStop(0,'rgba(255,236,150,.85)');
+          grd.addColorStop(1,'rgba(255,236,150,0)');
+          ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(cx,cy,this.cell*0.72,0,7); ctx.fill();
+          ctx.fillStyle='#fff3b0'; ctx.beginPath(); ctx.arc(cx,cy,this.cell*0.15,0,7); ctx.fill();
+          if(this.hasConflict(r,c)){
+            ctx.strokeStyle='#ff5d6c'; ctx.lineWidth=3;
+            ctx.beginPath(); ctx.arc(cx,cy,this.cell*0.3,0,7); ctx.stroke();
+          }
+        }
+      }
+    }
+    ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1;
+    for(let i=0;i<=N;i++){
+      ctx.beginPath(); ctx.moveTo(this.ox+i*this.cell,this.oy); ctx.lineTo(this.ox+i*this.cell,this.oy+N*this.cell); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.ox,this.oy+i*this.cell); ctx.lineTo(this.ox+N*this.cell,this.oy+i*this.cell); ctx.stroke();
+    }
+    const now=PNOW();
+    for(const f of this._flash){
+      const a=1-(now-f.t)/500;
+      const x=this.ox+f.c*this.cell, y=this.oy+f.r*this.cell;
+      ctx.strokeStyle=`rgba(255,236,150,${a*0.85})`; ctx.lineWidth=2;
+      rrect(ctx,x+2,y+2,this.cell-4,this.cell-4,6); ctx.stroke();
+    }
+  }
+  /* ---------- banner / status ---------- */
+  _showBanner(title,msg){
+    document.getElementById('bannerTitle').textContent=title;
+    document.getElementById('bannerMsg').textContent=msg;
+    document.getElementById('banner').classList.add('show');
+  }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    this.computeLit();
+    let litCount=0,total=0;
+    for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++){
+      if(this.walls[r][c]===0){ total++; if(this.lit[r][c]) litCount++; }
+    }
+    const best = this.best>0 ? ` · 最佳 ${this.best.toFixed(1)}s` : '';
+    document.getElementById('status').textContent=`已照亮 ${litCount} / ${total}${best}`;
+  }
+}
+window.game = new Akari();
+</script>
+</body>
+</html>

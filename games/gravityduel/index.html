@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Gravity Duel · 引力对决</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#9b6bff; --accent-glow:#9b6bff66; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 50% 50%, #2a1840 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #103a40 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#9b6bff,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0a2a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0a2a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Gravity Duel</h1><div class="sub">O R B I T A L &nbsp; W A R</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">You</div><div class="value" id="you-s">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best-s">0</div></div>
+      <div class="score-card"><div class="label">CPU</div><div class="value" id="cpu-s">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="540"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">New Game</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">拖动瞄准、按住推进、点击开火；避开中央恒星引力</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const youSEl=document.getElementById('you-s'), bestEl=document.getElementById('best-s'), cpuSEl=document.getElementById('cpu-s'), statusEl=document.getElementById('status');
+  const W=440, H=540, STAR={x:W/2,y:H/2,r:24}, SR=9, BR=2.6;
+  const TAU=Math.PI*2;
+  function angDiff(a,b){ let d=(a-b)%TAU; if(d>Math.PI)d-=TAU; if(d<-Math.PI)d+=TAU; return d; }
+  function easeAng(a,t,step){ const d=angDiff(t,a); return a+Math.max(-step,Math.min(step,d)); }
+
+  class GravityDuel {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._clock=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('gdBest')||'0'); this.fit();
+      window.addEventListener('resize',()=>this.fit());
+      const toC=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)*(this.W/r.width), y:(e.clientY-r.top)*(this.W/r.width)}; };
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); const p=toC(e); this.aimX=p.x; this.aimY=p.y; this.pDown=true; if(!this.autoPlay&&!this.ships[0].dead) this.fire(this.ships[0]); });
+      canvas.addEventListener('pointermove',(e)=>{ const p=toC(e); this.aimX=p.x; this.aimY=p.y; });
+      canvas.addEventListener('pointerup',()=>{ this.pDown=false; });
+      canvas.addEventListener('pointercancel',()=>{ this.pDown=false; });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(rect.width||W,W)); const dpr=window.devicePixelRatio||1;
+      this.W=w; canvas.width=w*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    restart(){ if(!this.autoPlay) this.stopAuto(); this.ships=[]; this.bullets=[]; this.over=false; this.respawnT=0; this.aimX=0; this.aimY=0; this.pDown=false;
+      this.resetPositions(); this.updateUI(); }
+    resetPositions(){ const mk=(x,y,vx,vy,c)=>({x,y,vx,vy,ang:Math.atan2(-vy,-vx)+Math.PI/2,thrust:false,cool:0,dead:false,seed:Math.random()*10,c});
+      this.ships=[ mk(W/2-150,H/2,0,-95,'#4dd0ff'), mk(W/2+150,H/2,0,95,'#ff7eb6') ];
+      this.bullets=[]; this.s0=this.s0||0; this.s1=this.s1||0; this._clock=0;
+    }
+    updateUI(){ youSEl.textContent=this.s0; bestEl.textContent=this.best; cpuSEl.textContent=this.s1; statusEl.textContent=this.autoPlay?'自动演示中…':'拖动瞄准·按住推进·点击开火'; }
+    fire(s){ if(s.cool>0||s.dead) return; s.cool=0.42; const nx=s.x+Math.cos(s.ang)*SR, ny=s.y+Math.sin(s.ang)*SR;
+      this.bullets.push({x:nx,y:ny,vx:s.vx+Math.cos(s.ang)*340,vy:s.vy+Math.sin(s.ang)*340,owner:s,life:1.6}); }
+    step(dt){
+      this._clock+=dt;
+      if(this.ships[0].dead||this.ships[1].dead){ if(!this.respawnT) this.respawnT=this._clock+1.1; else if(this._clock>=this.respawnT){ this.resetPositions(); this.respawnT=0; } return; }
+      for(let i=0;i<2;i++){ const s=this.ships[i], o=this.ships[1-i];
+        if(this.autoPlay) this.ai(s,o,dt); else if(i===0) this.manual(s,dt);
+        s.cool=Math.max(0,s.cool-dt);
+        // gravity
+        const dx=STAR.x-s.x, dy=STAR.y-s.y, d=Math.hypot(dx,dy)||1; const g=Math.min(420,9000/d);
+        s.vx+=g*dx/d*dt; s.vy+=g*dy/d*dt;
+        if(s.thrust){ s.vx+=Math.cos(s.ang)*240*dt; s.vy+=Math.sin(s.ang)*240*dt; }
+        s.x+=s.vx*dt; s.y+=s.vy*dt;
+        // wrap
+        if(s.x<0)s.x+=W; if(s.x>W)s.x-=W; if(s.y<0)s.y+=H; if(s.y>H)s.y-=H;
+        // star collision
+        if(d<STAR.r+SR){ s.dead=true; const w=1-i; if(w===0)this.s0++; else this.s1++; this._autoProgress=this.s0; if(this.s0>this.best){this.best=this.s0;localStorage.setItem('gdBest',String(this.best));} this.updateUI(); }
+      }
+      for(let i=this.bullets.length-1;i>=0;i--){ const b=this.bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
+        if(b.x<0||b.x>W||b.y<0||b.y>H||b.life<=0){ this.bullets.splice(i,1); continue; }
+        const t=b.owner===this.ships[0]?this.ships[1]:this.ships[0];
+        if(!t.dead && Math.hypot(b.x-t.x,b.y-t.y)<SR+BR){ t.dead=true; const w=t===this.ships[0]?0:1; if(w===0)this.s0++; else this.s1++; this._autoProgress=this.s0; if(this.s0>this.best){this.best=this.s0;localStorage.setItem('gdBest',String(this.best));} this.bullets.splice(i,1); this.updateUI(); }
+      }
+    }
+    manual(s,dt){ if(this.aimX!==undefined){ const ta=Math.atan2(this.aimY-s.y,this.aimX-s.x); s.ang=easeAng(s.ang,ta,dt*4); } s.thrust=this.pDown; if(this.pDown&&s.cool<=0) this.fire(s); }
+    ai(s,o,dt){ const toO=Math.atan2(o.y-s.y,o.x-s.x), dO=Math.hypot(o.x-s.x,o.y-s.y);
+      const toS=Math.atan2(STAR.y-s.y,STAR.x-s.x), dS=Math.hypot(STAR.x-s.x,STAR.y-s.y);
+      const rot=dt*3.2; s.thrust=false;
+      if(dS<140){ s.ang=easeAng(s.ang,toS+Math.PI,rot*1.6); s.thrust=true; }
+      else if(dO>230){ s.ang=easeAng(s.ang,toO,rot); s.thrust=true; }
+      else { s.ang=easeAng(s.ang,toO,rot); s.thrust=Math.sin(this._clock*2+s.seed)>0.1; }
+      if(Math.abs(angDiff(s.ang,toO))<0.16 && s.cool<=0) this.fire(s);
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoStep(){}
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.step(dt); this.draw(dt); }catch(err){ console.error(err); } }
+    draw(){
+      const W=this.W; ctx.clearRect(0,0,W,H);
+      const sx=STAR.x*W/440, sy=STAR.y;
+      ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=30; ctx.fillStyle='#ffd54a'; ctx.beginPath(); ctx.arc(sx,sy,STAR.r,0,7); ctx.fill(); ctx.restore();
+      ctx.strokeStyle='#ffd54a33'; ctx.lineWidth=1; for(let r=STAR.r+18;r<200;r+=26){ ctx.beginPath(); ctx.arc(sx,sy,r,0,7); ctx.stroke(); }
+      for(const b of this.bullets){ ctx.save(); ctx.shadowColor=b.owner.c; ctx.shadowBlur=10; ctx.fillStyle=b.owner.c; ctx.beginPath(); ctx.arc(b.x*W/440,b.y,BR,0,7); ctx.fill(); ctx.restore(); }
+      for(const s of this.ships){ if(s.dead) continue; const x=s.x*W/440; ctx.save(); ctx.translate(x,s.y); ctx.rotate(s.ang);
+        if(s.thrust){ ctx.fillStyle='#ff9f43'; ctx.beginPath(); ctx.moveTo(-SR*0.6,-SR*0.5); ctx.lineTo(-SR*1.8,0); ctx.lineTo(-SR*0.6,SR*0.5); ctx.fill(); }
+        ctx.shadowColor=s.c; ctx.shadowBlur=12; ctx.fillStyle=s.c; ctx.beginPath(); ctx.moveTo(SR,0); ctx.lineTo(-SR*0.8,-SR*0.8); ctx.lineTo(-SR*0.4,0); ctx.lineTo(-SR*0.8,SR*0.8); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    }
+  }
+  window.game=new GravityDuel();
+})();
+</script>
+</body>
+</html>

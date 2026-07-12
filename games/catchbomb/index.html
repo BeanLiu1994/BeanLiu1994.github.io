@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Bomb Catcher · 接弹专家</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#ff9f43; --accent-glow:#ff9f4366; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 50% 0%, #302a10 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #103a30 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ff9f43,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#2a1606; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#2a1606; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Bomb Catcher</h1><div class="sub">C A T C H &nbsp; T H E &nbsp; B O M B S</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">Lives</div><div class="value" id="lives">3</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="540"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">New Game</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">移动篮子接住下落的炸弹，漏接扣一条命</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), livesEl=document.getElementById('lives'), statusEl=document.getElementById('status');
+  const H=540;
+
+  class BombCatcher {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('bcBest')||'0'); this.fit();
+      window.addEventListener('resize',()=>this.fit());
+      const move=(e)=>{ if(this.autoPlay) return; const rect=canvas.getBoundingClientRect(); this.bx=Math.max(this.bw/2,Math.min(this.W-this.bw/2,(e.clientX-rect.left)*(this.W/rect.width))); };
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); move(e); });
+      canvas.addEventListener('pointermove',(e)=>{ if(e.pressure!==0||e.buttons!==undefined){ move(e); } });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(rect.width||440,440)); const dpr=window.devicePixelRatio||1;
+      this.W=w; canvas.width=w*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+      if(this.bx===undefined) this.bx=w/2; this.bw=Math.max(60,Math.min(90,w*0.2)); }
+    restart(){ if(!this.autoPlay) this.stopAuto(); this.over=false; this.bombs=[]; this.particles=[]; this.score=0; this.lives=3;
+      this.spawnT=0; this.bx=this.W/2; this.updateUI(); }
+    updateUI(){ scoreEl.textContent=this.score; bestEl.textContent=this.best; livesEl.textContent=this.lives; statusEl.textContent=this.over?'游戏结束，点 New Game 重来':(this.autoPlay?'自动演示中…':'移动篮子接住炸弹'); }
+    spawn(){ const r=14; this.bombs.push({ x:r+Math.random()*(this.W-2*r), y:-r, vy:150+this.score*4+Math.random()*60, r, caught:false, missed:false }); }
+    update(dt){
+      if(this.over) return;
+      this.spawnT-=dt;
+      const every=Math.max(0.42, 0.95-this.score*0.012);
+      if(this.spawnT<=0){ this.spawn(); this.spawnT=every; }
+      const by=H-56;
+      if(this.autoPlay){ let tgt=this.bx, best=-1; for(const b of this.bombs){ if(b.caught) continue; if(b.y>best){ best=b.y; tgt=b.x; } }
+        const sp=600*dt; const d=tgt-this.bx; this.bx+=Math.abs(d)<=sp?d:Math.sign(d)*sp; this.bx=Math.max(this.bw/2,Math.min(this.W-this.bw/2,this.bx)); }
+      for(let i=this.bombs.length-1;i>=0;i--){ const b=this.bombs[i]; b.y+=b.vy*dt;
+        if(!b.caught&&!b.missed&&b.y>=by){ if(Math.abs(b.x-this.bx)<=this.bw/2+b.r*0.4){ b.caught=true; this.score++; this._autoProgress=this.score; this.burst(b.x,by); this.bombs.splice(i,1); continue; } else { b.missed=true; } }
+        if(b.y>H+24){ if(b.missed&&!b.caught){ this.lives--; this.shake=8; } this.bombs.splice(i,1); } }
+      for(let i=this.particles.length-1;i>=0;i--){ const p=this.particles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=300*dt; p.life-=dt; if(p.life<=0) this.particles.splice(i,1); }
+      if(this.lives<=0){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('bcBest',String(this.best)); } this.updateUI(); if(this.autoPlay){ this.autoTimer=setTimeout(()=>this._autoNext(),1200); } }
+    }
+    burst(x,y){ for(let i=0;i<12;i++){ const a=Math.random()*Math.PI*2, s=60+Math.random()*160; this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-60,life:0.5+Math.random()*0.3,c:'#ff9f43'}); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoStep(){}
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(dt); }catch(err){ console.error(err); } }
+    draw(){
+      const W=this.W; ctx.clearRect(0,0,W,H);
+      if(this.shake>0) this.shake-=1;
+      ctx.save(); if(this.shake>0){ ctx.translate((Math.random()-0.5)*this.shake,(Math.random()-0.5)*this.shake); }
+      for(const b of this.bombs){ ctx.save(); ctx.shadowColor='#ff9f43'; ctx.shadowBlur=16; ctx.fillStyle='#ff7a3c'; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fill(); ctx.restore();
+        ctx.strokeStyle='#fff2cc'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(b.x,b.y-b.r); ctx.lineTo(b.x+4,b.y-b.r-7); ctx.stroke(); }
+      for(const p of this.particles){ ctx.globalAlpha=Math.max(0,p.life*2); ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,7); ctx.fill(); ctx.globalAlpha=1; }
+      // basket
+      const by=H-56, bw=this.bw; ctx.save(); ctx.shadowColor='#4dff91'; ctx.shadowBlur=18; ctx.strokeStyle='#4dff91'; ctx.lineWidth=5; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(this.bx-bw/2,by); ctx.lineTo(this.bx-bw/2+10,by+30); ctx.lineTo(this.bx+bw/2-10,by+30); ctx.lineTo(this.bx+bw/2,by); ctx.stroke(); ctx.restore();
+      if(this.over){ ctx.fillStyle='#ff5d6a'; ctx.font='bold 34px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('GAME OVER',W/2,H/2); ctx.fillStyle='#c8c8e8'; ctx.font='16px Segoe UI'; ctx.fillText('得分 '+this.score,W/2,H/2+30); }
+      ctx.restore();
+    }
+  }
+  window.game=new BombCatcher();
+})();
+</script>
+</body>
+</html>

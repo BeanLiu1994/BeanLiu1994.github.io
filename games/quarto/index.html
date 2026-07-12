@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Quad · 四元连珠</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#b388ff; --accent-glow:#b388ff66; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 18% 12%, #241040 0%, transparent 55%), radial-gradient(ellipse at 82% 88%, #103040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#b388ff,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0a2a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0a2a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Quad</h1><div class="sub">F O U R &nbsp; I N &nbsp; A &nbsp; R O W</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">You</div><div class="value" id="you-w">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">CPU</div><div class="value" id="cpu-w">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="504"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">New Game</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">轮到你时，把待放棋子放到任意空格；任一行/列/对角线四子共一属性即胜</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const youWEl=document.getElementById('you-w'), bestEl=document.getElementById('best'), cpuWEl=document.getElementById('cpu-w'), statusEl=document.getElementById('status');
+  const COLS=4, ROWS=4, TRAY=64;
+  const LINES=[]; for(let r=0;r<4;r++) LINES.push([[r,0],[r,1],[r,2],[r,3]]);
+  for(let c=0;c<4;c++) LINES.push([[0,c],[1,c],[2,c],[3,c]]);
+  LINES.push([[0,0],[1,1],[2,2],[3,3]]); LINES.push([[0,3],[1,2],[2,1],[3,0]]);
+  const attr=(p,i)=>(p>>i)&1;
+
+  class Quad {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('qdBest')||'0'); this.fit();
+      window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onDown(e); });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(rect.width||440,440)); const dpr=window.devicePixelRatio||1;
+      this.W=w; this.cell=w/COLS; canvas.width=w*dpr; canvas.height=(this.cell*ROWS+TRAY)*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    restart(){ if(!this.autoPlay) this.stopAuto(); this.over=false; this.winner=null; this.turn=0; this.moves=0;
+      this.board=[]; for(let r=0;r<ROWS;r++){ this.board[r]=new Array(COLS).fill(-1); }
+      this.avail=[]; for(let p=0;p<16;p++) this.avail.push(p);
+      this.pending=this.avail.splice(Math.floor(Math.random()*16),1)[0];
+      this.wins0=this.wins0||0; this.wins1=this.wins1||0; this.updateUI(); }
+    updateUI(){ youWEl.textContent=this.wins0; bestEl.textContent=this.best; cpuWEl.textContent=this.wins1;
+      statusEl.textContent=this.over?(this.winner===0?'你赢了！':this.winner===1?'CPU 赢了':'平局'):(this.autoPlay?'自动演示中…':(this.turn===0?'你的回合：放棋子':'CPU 思考中…')); }
+    filled(line){ let a=[]; for(const [r,c] of line){ const v=this.board[r][c]; if(v!==-1) a.push(v); } return a; }
+    shareAttr(cells){ if(cells.length<2) return false; for(let a=0;a<4;a++){ const val=attr(cells[0],a); if(cells.every(p=>attr(p,a)===val)) return true; } return false; }
+    isWin(){ for(const line of LINES){ const f=this.filled(line); if(f.length===4 && this.shareAttr(f)) return true; } return false; }
+    wouldWin(r,c,piece,player){ const old=this.board[r][c]; this.board[r][c]=piece; const w=this.isWin(); this.board[r][c]=old; return w; }
+    evalLines(player){ let s=0; for(const line of LINES){ const f=this.filled(line); if(f.length<2) continue; for(let a=0;a<4;a++){ const val=attr(f[0],a); if(f.every(pp=>attr(pp,a)===val)){ s += f.length>=4?1000:(f.length-1)*3 + (4-f.length); break; } } } return s; }
+    oppCanWinNow(){ for(const p of this.avail){ for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ if(this.board[r][c]!==-1) continue; if(this.wouldWin(r,c,p,1-this.turn)) return true; } } return false; }
+    aiPlaceCell(){ const player=this.turn; for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ if(this.board[r][c]===-1 && this.wouldWin(r,c,this.pending,player)) return [r,c]; }
+      let best=null,bs=-1e9; for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ if(this.board[r][c]!==-1) continue;
+        this.board[r][c]=this.pending; let sc=this.evalLines(player); if(this.oppCanWinNow()) sc-=500; sc-=0.5*this.evalLines(1-player); this.board[r][c]=-1;
+        if(sc>bs){ bs=sc; best=[r,c]; } }
+      return best||this.firstEmpty(); }
+    firstEmpty(){ for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++) if(this.board[r][c]===-1) return [r,c]; return [0,0]; }
+    aiChooseNext(){ let best=null,bs=1e9; for(const p of this.avail){ let mx=0; for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ if(this.board[r][c]!==-1) continue; this.board[r][c]=p; mx=Math.max(mx,this.evalLines(1-this.turn)); this.board[r][c]=-1; }
+        if(mx<bs){ bs=mx; best=p; } } return best===null?this.avail[0]:best; }
+    doPlace(r,c){ if(this.over||this.board[r][c]!==-1) return; const player=this.turn; this.board[r][c]=this.pending;
+      this.avail=this.avail.filter(p=>p!==this.pending); this.moves++; this._autoProgress=this.moves;
+      if(this.isWin()){ this.over=true; this.winner=player; if(player===0)this.wins0++; else this.wins1++; if(this.wins0>this.best){this.best=this.wins0;localStorage.setItem('qdBest',String(this.best));} this.updateUI(); this.afterPlace(); return; }
+      if(this.avail.length===0){ this.over=true; this.winner=null; this.updateUI(); this.afterPlace(); return; }
+      this.pending=this.aiChooseNext(); this.turn=1-this.turn; this.updateUI(); this.afterPlace(); }
+    afterPlace(){ if(this.over){ if(this.autoPlay) this._autoNext(); return; }
+      if(this.autoPlay){ this.autoTimer=setTimeout(()=>this.autoMove(),500); }
+      else if(this.turn===1){ this.autoTimer=setTimeout(()=>this.cpuAct(),600); } }
+    autoMove(){ if(this.over||!this.autoPlay) return; const [r,c]=this.aiPlaceCell(); this.doPlace(r,c); }
+    cpuAct(){ if(this.over||this.autoPlay||this.turn!==1) return; const [r,c]=this.aiPlaceCell(); this.doPlace(r,c); }
+    onDown(e){ if(this.autoPlay||this.over||this.turn!==0) return; const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(this.W/rect.width), y=(e.clientY-rect.top)*(this.W/rect.width);
+      const c=Math.floor(x/this.cell), r=Math.floor((y-TRAY)/this.cell); if(r<0||r>=ROWS||c<0||c>=COLS) return; if(this.board[r][c]!==-1) return; this.doPlace(r,c); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.updateUI(); this.autoMove(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoStep(){}
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
+    drawPiece(x,y,s,p,alpha){ ctx.save(); ctx.globalAlpha=alpha===undefined?1:alpha; const a=[attr(p,0),attr(p,1),attr(p,2),attr(p,3)];
+      ctx.fillStyle='#16163a'; this.rr(x+2,y+2,s-4,s-4,8); ctx.fill();
+      const col=a[0]?'#5b5b8f':'#e8e8ff'; const cx=x+s/2, cy=y+s/2, R=s*0.30;
+      ctx.fillStyle=col; ctx.strokeStyle=col; ctx.lineWidth=s*0.12;
+      if(a[2]===0){ ctx.beginPath(); ctx.arc(cx,cy,a[1]?R*1.05:R*0.78,0,7); if(a[3]) ctx.stroke(); else ctx.fill(); }
+      else { const w=a[1]?R*1.9:R*1.35, h=a[1]?R*1.9:R*1.35; if(a[3]){ this.rr(cx-w/2,cy-h/2,w,h,5); ctx.stroke(); } else { this.rr(cx-w/2,cy-h/2,w,h,5); ctx.fill(); } }
+      ctx.restore(); }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    draw(){ const W=this.W, cl=this.cell; ctx.clearRect(0,0,W,this.cell*ROWS+TRAY);
+      // tray
+      ctx.fillStyle='#8a8ab0'; ctx.font='bold 13px Segoe UI'; ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText(this.over?(this.winner===0?'你胜':this.winner===1?'CPU 胜':'平局'):(this.turn===0?'你的回合':'CPU 回合'),12,TRAY/2);
+      if(!this.over){ this.drawPiece(W/2-22,TRAY/2-22,44,this.pending,1); }
+      // board
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ const x=c*cl, y=TRAY+r*cl; ctx.fillStyle='#0e1226'; ctx.fillRect(x+3,y+3,cl-6,cl-6);
+        const v=this.board[r][c]; if(v!==-1) this.drawPiece(x,y,cl,v,1); }
+      ctx.strokeStyle='#ffffff14'; ctx.lineWidth=1; for(let i=0;i<=COLS;i++){ ctx.beginPath(); ctx.moveTo(i*cl,TRAY); ctx.lineTo(i*cl,TRAY+cl*ROWS); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,TRAY+i*cl); ctx.lineTo(W,TRAY+i*cl); ctx.stroke(); }
+    }
+  }
+  window.game=new Quad();
+})();
+</script>
+</body>
+</html>

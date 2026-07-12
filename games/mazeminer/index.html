@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Maze Miner · 迷宫矿工</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#ffc14d; --accent-glow:#ffc14d66; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 18% 12%, #2a2410 0%, transparent 55%), radial-gradient(ellipse at 82% 88%, #103040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ffc14d,#ff7eb6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#2a1c06; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#2a1c06; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Maze Miner</h1><div class="sub">D I G &nbsp; F O R &nbsp; G O L D</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Gold</div><div class="value" id="gold-n">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best-n">0</div></div>
+      <div class="score-card"><div class="label">Lives</div><div class="value" id="lives-n">3</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="440"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">New Game</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点地图朝某方向走一步，挖开泥土、收集金子，集齐后走到出口</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const goldEl=document.getElementById('gold-n'), bestEl=document.getElementById('best-n'), livesEl=document.getElementById('lives-n'), statusEl=document.getElementById('status');
+  const WALL=2, DIRT=1, EMPTY=0, GOLD=3, EXIT=4;
+  const COLS=13, ROWS=13;
+
+  class MazeMiner {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0; this.moveCool=0; this.holdDir=null;
+      this.best=parseInt(localStorage.getItem('mmBest')||'0'); this.fit();
+      window.addEventListener('resize',()=>this.fit());
+      const toC=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)*(this.W/r.width), y:(e.clientY-r.top)*(this.W/r.width)}; };
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); const p=toC(e); this.holdDir=this.dirFrom(p.x,p.y); });
+      canvas.addEventListener('pointermove',(e)=>{ if(this.pDown||e.buttons){ const p=toC(e); this.holdDir=this.dirFrom(p.x,p.y); } });
+      canvas.addEventListener('pointerup',()=>{ this.holdDir=null; });
+      canvas.addEventListener('pointercancel',()=>{ this.holdDir=null; });
+      canvas.addEventListener('pointerdown',()=>{ this.pDown=true; });
+      canvas.addEventListener('pointerup',()=>{ this.pDown=false; });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(rect.width||440,440)); const dpr=window.devicePixelRatio||1;
+      this.W=w; this.cell=w/COLS; canvas.width=w*dpr; canvas.height=this.cell*ROWS*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    dirFrom(x,y){ const cx=(this.px+0.5)*this.cell, cy=(this.py+0.5)*this.cell; const dx=x-cx, dy=y-cy;
+      if(Math.abs(dx)>Math.abs(dy)) return [Math.sign(dx),0]; return [0,Math.sign(dy)]; }
+    restart(){ if(!this.autoPlay) this.stopAuto(); this.gen(); this.lives=3; this.win=false; this.over=false; this.holdDir=null; this.moveCool=0; this.updateUI(); }
+    gen(){
+      const g=[]; for(let y=0;y<ROWS;y++){ g[y]=[]; for(let x=0;x<COLS;x++){ g[y][x]=(x===0||y===0||x===COLS-1||y===ROWS-1)?WALL:DIRT; } }
+      // carve start pocket
+      this.px=1; this.py=1; for(let y=0;y<3;y++) for(let x=0;x<3;x++) g[y][x]=EMPTY;
+      // internal walls
+      for(let i=0;i<10;i++){ const x=2+Math.floor(Math.random()*(COLS-4)), y=2+Math.floor(Math.random()*(ROWS-4)); if(g[y][x]===DIRT) g[y][x]=WALL; }
+      // gold
+      this.gold=0; let placed=0; while(placed<9){ const x=1+Math.floor(Math.random()*(COLS-2)), y=1+Math.floor(Math.random()*(ROWS-2));
+        if(g[y][x]===DIRT){ g[y][x]=GOLD; placed++; } }
+      // exit pocket
+      g[ROWS-2][COLS-2]=EXIT; g[ROWS-2][COLS-3]=EMPTY; g[ROWS-3][COLS-2]=EMPTY;
+      this.grid=g; this.goldTotal=placed;
+      // enemies on open cells
+      this.enemies=[]; let ep=0, tries=0; while(ep<3&&tries<200){ tries++; const x=2+Math.floor(Math.random()*(COLS-4)), y=2+Math.floor(Math.random()*(ROWS-4));
+        if(g[y][x]===EMPTY && (Math.abs(x-this.px)+Math.abs(y-this.py))>4){ this.enemies.push({x,y}); ep++; } }
+      this.eSpawn=this.enemies.map(e=>({x:e.x,y:e.y}));
+    }
+    updateUI(){ goldEl.textContent=this.gold; bestEl.textContent=this.best; livesEl.textContent=this.lives; statusEl.textContent=this.over?(this.win?'通关！点 New Game':'游戏结束'):(this.autoPlay?'自动演示中…':'挖泥土·收金子·到出口'); }
+    passP(c){ return c!==WALL; }
+    passE(c){ return c===EMPTY||c===GOLD; }
+    bfs(sx,sy,goalFn,passFn){ const q=[[sx,sy]]; const prev={}; prev[sx+','+sy]=null; let head=0;
+      while(head<q.length){ const [x,y]=q[head++];
+        if(goalFn(x,y) && !(x===sx&&y===sy)){ let cur=[x,y], step=null;
+          while(true){ const pkey=cur[0]+','+cur[1]; const p=prev[pkey]; if(p===null) break; if(p[0]===sx&&p[1]===sy){ step=[cur[0]-p[0],cur[1]-p[1]]; break; } cur=p; }
+          return step; }
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+          if(nx<0||ny<0||nx>=COLS||ny>=ROWS) continue; if(!passFn(this.grid[ny][nx])) continue;
+          const k=nx+','+ny; if(k in prev) continue; prev[k]=[x,y]; q.push([nx,ny]); } }
+      return null; }
+    enemyNear(x,y){ let m=99; for(const e of this.enemies){ const d=Math.abs(e.x-x)+Math.abs(e.y-y); if(d<m)m=d; } return m; }
+    move(dx,dy){ if(this.over) return; const nx=this.px+dx, ny=this.py+dy; if(nx<0||ny<0||nx>=COLS||ny>=ROWS) return; const c=this.grid[ny][nx];
+      if(c===WALL) return;
+      if(c===DIRT){ this.grid[ny][nx]=EMPTY; }
+      else if(c===GOLD){ this.grid[ny][nx]=EMPTY; this.gold++; this._autoProgress=this.gold; }
+      else if(c===EXIT){ if(this.gold>=this.goldTotal){ this.win=true; this.over=true; if(++this.wins>this.best){this.best=this.wins;localStorage.setItem('mmBest',String(this.best));} this.updateUI(); if(this.autoPlay) this.autoTimer=setTimeout(()=>this._autoNext(),900); return; } else { this.msg='先集齐所有金子'; this.updateUI(); return; } }
+      this.px=nx; this.py=ny; this.hitCheck(); }
+    hitCheck(){ for(const e of this.enemies){ if(e.x===this.px&&e.y===this.py){ this.lives--; if(this.lives<=0){ this.over=true; this.updateUI(); if(this.autoPlay) this.autoTimer=setTimeout(()=>this._autoNext(),900); } else { this.px=1; this.py=1; this.enemies=this.eSpawn.map(s=>({x:s.x,y:s.y})); this.updateUI(); } return; } } }
+    enemyStep(){ for(const e of this.enemies){ const step=this.bfs(e.x,e.y,(x,y)=>x===this.px&&y===this.py,this.passE.bind(this));
+        let nx=e.x, ny=e.y; if(step){ nx=e.x+step[0]; ny=e.y+step[1]; } else { const opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>{ const ax=e.x+dx,ay=e.y+dy; return ax>=0&&ay>=0&&ax<COLS&&ay<ROWS&&this.passE(this.grid[ay][ax]); }); if(opts.length){ const o=opts[Math.floor(Math.random()*opts.length)]; nx=e.x+o[0]; ny=e.y+o[1]; } }
+        e.x=nx; e.y=ny; } this.hitCheck(); }
+    autoMove(){ if(this.over) return; const goalFn=(x,y)=> this.grid[y][x]===GOLD || (this.gold>=this.goldTotal && this.grid[y][x]===EXIT);
+      let step=this.bfs(this.px,this.py,goalFn,this.passP.bind(this));
+      if(!step){ this.autoTimer=setTimeout(()=>this.autoMove(),200); return; }
+      let [dx,dy]=step;
+      for(const e of this.enemies){ if(e.x===this.px+dx&&e.y===this.py+dy){ // avoid enemy: pick safer neighbor
+          const nb=[[1,0],[-1,0],[0,1],[0,-1]].filter(([ax,ay])=>{ const cx=this.px+ax,cy=this.py+ay; return cx>=0&&cy>=0&&cx<COLS&&cy<ROWS&&this.passP(this.grid[cy][cx])&&!this.enemies.some(z=>z.x===cx&&z.y===cy); });
+          if(nb.length){ const best=nb.reduce((a,b)=> this.enemyNear(this.px+b[0],this.py+b[1])>this.enemyNear(this.px+a[0],this.py+a[1])?b:a); dx=best[0]; dy=best[1]; } break; } }
+      this.move(dx,dy); if(this.over) return; this.autoTimer=setTimeout(()=>this.autoMove(),200); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.wins=this.wins||0; this.updateUI(); this.autoMove(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoStep(){}
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+      if(!this.autoPlay){ this.moveCool-=dt; if(this.holdDir&&this.moveCool<=0){ this.move(this.holdDir[0],this.holdDir[1]); this.moveCool=0.12; } }
+      else { // enemies roam in auto at slower cadence
+        this._eT=(this._eT||0)-dt; if(this._eT<=0){ this.enemyStep(); this._eT=0.32; } }
+      this.draw(dt); }catch(err){ console.error(err); } }
+    draw(){
+      const c=this.cell; ctx.clearRect(0,0,this.W,this.cell*ROWS);
+      for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){ const v=this.grid[y][x]; const px=x*c, py=y*c;
+        if(v===WALL){ ctx.fillStyle='#2a2a4a'; ctx.fillRect(px,py,c,c); }
+        else if(v===DIRT){ ctx.fillStyle='#3a2e1e'; ctx.fillRect(px+1,py+1,c-2,c-2); }
+        else if(v===EMPTY){ ctx.fillStyle='#12122e'; ctx.fillRect(px,py,c,c); }
+        else if(v===GOLD){ ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=12; ctx.fillStyle='#ffd54a'; ctx.beginPath(); ctx.arc(px+c/2,py+c/2,c*0.3,0,7); ctx.fill(); ctx.restore(); }
+        else if(v===EXIT){ ctx.save(); ctx.shadowColor='#4dff91'; ctx.shadowBlur=14; ctx.fillStyle='#4dff91'; this.rr(px+2,py+2,c-4,c-4,5); ctx.fill(); ctx.restore(); }
+      }
+      for(const e of this.enemies){ const ex=e.x*c+c/2, ey=e.y*c+c/2; ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=10; ctx.fillStyle='#ff5d6a'; ctx.beginPath(); ctx.moveTo(ex,ey-c*0.32); ctx.lineTo(ex+c*0.3,ey); ctx.lineTo(ex,ey+c*0.32); ctx.lineTo(ex-c*0.3,ey); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      const cx=this.px*c+c/2, cy=this.py*c+c/2; ctx.save(); ctx.shadowColor='#4dd0ff'; ctx.shadowBlur=16; ctx.fillStyle='#4dd0ff'; ctx.beginPath(); ctx.arc(cx,cy,c*0.32,0,7); ctx.fill(); ctx.restore();
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new MazeMiner();
+})();
+</script>
+</body>
+</html>

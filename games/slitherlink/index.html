@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>Loop Link · 数回迷阵</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#4dffb0; --accent-glow:#4dffb066; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 18% 12%, #103028 0%, transparent 55%), radial-gradient(ellipse at 82% 88%, #241040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4dffb0,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06281a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06281a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Loop Link</h1><div class="sub">S L I T H E R L I N K</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">Edges</div><div class="value" id="edges">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="470"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">New Puzzle</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点两条线之间的边来画闭环；每个数字表示四周有几段线</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const solvedEl=document.getElementById('solved'), bestEl=document.getElementById('best'), edgesEl=document.getElementById('edges'), statusEl=document.getElementById('status');
+  const TRAY=30;
+
+  class LoopLink {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0; this.N=8;
+      this.best=parseInt(localStorage.getItem('slBest')||'0'); this.fit();
+      window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onDown(e); });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(rect.width||440,440)); const dpr=window.devicePixelRatio||1;
+      this.W=w; this.cell=w/this.N; canvas.width=w*dpr; canvas.height=(this.cell*this.N+TRAY)*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    genR(){ const N=this.N; const inR=Array.from({length:N},()=>new Array(N).fill(false));
+      inR[Math.floor(Math.random()*N)][Math.floor(Math.random()*N)]=true; let count=1;
+      const target=Math.floor(N*N*0.5)+Math.floor(Math.random()*N*N*0.18);
+      let guard=0; while(count<target&&guard++<4000){ const fr=[]; for(let y=0;y<N;y++)for(let x=0;x<N;x++){ if(!inR[y][x]) continue; for(const [dy,dx] of [[1,0],[-1,0],[0,1],[0,-1]]){ const ny=y+dy,nx=x+dx; if(ny>=0&&nx>=0&&ny<N&&nx<N&&!inR[ny][nx]) fr.push([ny,nx]); } }
+        if(!fr.length) break; const [ny,nx]=fr[Math.floor(Math.random()*fr.length)]; if(!inR[ny][nx]){ inR[ny][nx]=true; count++; } }
+      // fill holes (cells not reachable from outside via non-R)
+      const seen=Array.from({length:N},()=>new Array(N).fill(false)); const q=[];
+      for(let i=0;i<N;i++){ if(!inR[0][i]){seen[0][i]=true;q.push([0,i]);} if(!inR[N-1][i]){seen[N-1][i]=true;q.push([N-1,i]);} if(!inR[i][0]){seen[i][0]=true;q.push([i,0]);} if(!inR[i][N-1]){seen[i][N-1]=true;q.push([i,N-1]);} }
+      while(q.length){ const [y,x]=q.pop(); for(const [dy,dx] of [[1,0],[-1,0],[0,1],[0,-1]]){ const ny=y+dy,nx=x+dx; if(ny>=0&&nx>=0&&ny<N&&nx<N&&!inR[ny][nx]&&!seen[ny][nx]){ seen[ny][nx]=true; q.push([ny,nx]); } } }
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(!inR[y][x]&&!seen[y][x]) inR[y][x]=true;
+      return inR; }
+    restart(){ if(!this.autoPlay) this.stopAuto(); this.over=false; this.solved=false; this.edges=new Set(); this.inR=this.genR();
+      const N=this.N; this.clues=Array.from({length:N},()=>new Array(N).fill(0)); this.sol=new Set();
+      const get=(y,x)=> (y<0||x<0||y>=N||x>=N)?false:this.inR[y][x];
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){ let n=0;
+        if(get(y,x)!==get(y-1,x)){ n++; this.sol.add('h'+(y)+'_'+(x)); }
+        if(get(y,x)!==get(y+1,x)){ n++; this.sol.add('h'+(y+1)+'_'+(x)); }
+        if(get(y,x)!==get(y,x-1)){ n++; this.sol.add('v'+(y)+'_'+(x)); }
+        if(get(y,x)!==get(y,x+1)){ n++; this.sol.add('v'+(y)+'_'+(x+1)); }
+        this.clues[y][x]=n; }
+      this.solList=[...this.sol]; this.updateUI(); }
+    updateUI(){ solvedEl.textContent=this.solved?parseInt(solvedEl.textContent)+1:this.solvedCount||0; bestEl.textContent=this.best; edgesEl.textContent=this.edges.size;
+      statusEl.textContent=this.over?'解开啦！':(this.autoPlay?'自动演示中…':'点边画闭环，数字=四周线段数'); }
+    geom(key){ const t=key[0]; const [r,c]=key.slice(1).split('_').map(Number); const cl=this.cell;
+      if(t==='h') return {x1:c*cl,y1:TRAY+r*cl,x2:(c+1)*cl,y2:TRAY+r*cl};
+      return {x1:c*cl,y1:TRAY+r*cl,x2:c*cl,y2:TRAY+(r+1)*cl}; }
+    allEdges(){ const N=this.N, out=[]; for(let r=0;r<=N;r++)for(let c=0;c<N;c++) out.push('h'+r+'_'+c); for(let r=0;r<N;r++)for(let c=0;c<=N;c++) out.push('v'+r+'_'+c); return out; }
+    nearest(x,y){ let best=null,bd=1e9; for(const k of this.allEdges()){ const g=this.geom(k); const d=this.segDist(x,y,g); if(d<bd){ bd=d; best=k; } } return {k:best,d:bd}; }
+    segDist(px,py,g){ const dx=g.x2-g.x1, dy=g.y2-g.y1; const l2=dx*dx+dy*dy||1; let t=((px-g.x1)*dx+(py-g.y1)*dy)/l2; t=Math.max(0,Math.min(1,t)); const cx=g.x1+t*dx, cy=g.y1+t*dy; return Math.hypot(px-cx,py-cy); }
+    checkComplete(){ if(this.edges.size===0) return false; const N=this.N; const deg=Array.from({length:N+1},()=>new Array(N+1).fill(0));
+      for(const k of this.edges){ const t=k[0]; const [r,c]=k.slice(1).split('_').map(Number); if(t==='h'){ deg[r][c]++; deg[r][c+1]++; } else { deg[r][c]++; deg[r+1][c]++; } }
+      for(let r=0;r<=N;r++)for(let c=0;c<=N;c++) if(deg[r][c]!==0&&deg[r][c]!==2) return false;
+      // clue check
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){ let n=0; if(this.edges.has('h'+y+'_'+x))n++; if(this.edges.has('h'+(y+1)+'_'+x))n++; if(this.edges.has('v'+y+'_'+x))n++; if(this.edges.has('v'+y+'_'+(x+1)))n++; if(n!==this.clues[y][x]) return false; }
+      // single cycle
+      let start=null; for(const k of this.edges){ start=k; break; } let t=start[0]; let [r,c]=start.slice(1).split('_').map(Number);
+      let pr,tc2,rc2; if(t==='h'){ pr=r; tc2=c; } else { pr=r; tc2=c; }
+      let cur=[r,c], prev=null, visited=new Set(), count=0;
+      while(true){ const key=(t==='h')?('h'+cur[0]+'_'+cur[1]):('v'+cur[0]+'_'+cur[1]); if(visited.has(key)) break; visited.add(key); count++;
+        // find other endpoint
+        let a,b; if(t==='h'){ a=[cur[0],cur[1]]; b=[cur[0],cur[1]+1]; } else { a=[cur[0],cur[1]]; b=[cur[0]+1,cur[1]]; }
+        const next = (prev && prev[0]===a[0]&&prev[1]===a[1])? b : a;
+        prev=cur; cur=next;
+        // need to find the edge containing 'cur' as endpoint and not the one we came from
+        const e1=(t==='h')?('h'+cur[0]+'_'+cur[1]):('v'+cur[0]+'_'+cur[1]);
+        const e2=(t==='h')?('h'+cur[0]+'_'+(cur[1]-1)):('v'+(cur[0]-1)+'_'+cur[1]);
+        if(this.edges.has(e1)){ t=e1[0]; rc2=e1.slice(1); }
+        else if(this.edges.has(e2)){ t=e2[0]; rc2=e2.slice(1); }
+        else break;
+        const parts=rc2.split('_'); r=+parts[0]; c=+parts[1];
+        if(visited.has((t==='h'?('h'+r+'_'+c):('v'+r+'_'+c)))) break;
+      }
+      return count===this.edges.size; }
+    onDown(e){ if(this.autoPlay||this.over) return; const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(this.W/rect.width), y=(e.clientY-rect.top)*(this.W/rect.height);
+      const {k,d}=this.nearest(x,y); if(d<this.cell*0.3){ if(this.edges.has(k)) this.edges.delete(k); else this.edges.add(k); if(this.checkComplete()){ this.over=true; this.solved=true; this.solvedCount=(this.solvedCount||0)+1; if(this.solvedCount>this.best){this.best=this.solvedCount;localStorage.setItem('slBest',String(this.best));} this.updateUI(); } else this.updateUI(); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoStep(){ if(!this.autoPlay) return; if(this.over){ this._autoNext(); return; }
+      if(this.edges.size<this.sol.size){ const k=this.solList[this.edges.size]; this.edges.add(k); this._autoProgress=this.edges.size; this.updateUI(); this.autoTimer=setTimeout(()=>this.autoStep(),60); }
+      else { if(this.checkComplete()){ this.over=true; this.solved=true; this.solvedCount=(this.solvedCount||0)+1; if(this.solvedCount>this.best){this.best=this.solvedCount;localStorage.setItem('slBest',String(this.best));} this.updateUI(); } else { this.over=true; this.updateUI(); } } }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
+    draw(){ const N=this.N, cl=this.cell; ctx.clearRect(0,0,this.W,this.cell*N+TRAY);
+      // clues
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){ const v=this.clues[y][x]; const cx=(x+0.5)*cl, cy=TRAY+(y+0.5)*cl;
+        ctx.fillStyle=v===0?'#444466':(v===1?'#7fe0c0':(v===2?'#4dffb0':'#ffd54a')); ctx.font='bold '+(cl*0.34)+'px Segoe UI'; ctx.fillText(v, cx, cy); }
+      // edges
+      ctx.lineCap='round'; for(const k of this.edges){ const g=this.geom(k); ctx.save(); ctx.shadowColor='#4dffb0'; ctx.shadowBlur=10; ctx.strokeStyle='#4dffb0'; ctx.lineWidth=cl*0.14; ctx.beginPath(); ctx.moveTo(g.x1,g.y1); ctx.lineTo(g.x2,g.y2); ctx.stroke(); ctx.restore(); }
+      // vertices
+      ctx.fillStyle='#5a5a7a'; for(let r=0;r<=N;r++)for(let c=0;c<=N;c++){ ctx.beginPath(); ctx.arc(c*cl,TRAY+r*cl,1.5,0,7); ctx.fill(); }
+    }
+  }
+  window.game=new LoopLink();
+})();
+</script>
+</body>
+</html>
