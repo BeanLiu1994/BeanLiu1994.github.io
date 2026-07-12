@@ -146,18 +146,23 @@
           if(this.autoPlay){ const mid=this.W/2; let left=0,right=0; for(const br of this.bricks){ if(br.alive){ if((br.x+br.w/2)<mid) left++; else right++; } } let dh=0; if(left+right>0){ const imb=(left-right)/(left+right); dh=Math.max(-0.8,Math.min(0.8,-imb*1.2)); if(Math.abs(dh)<0.4) dh=dh>=0?0.4:-0.4; } this.onBounce(dh); }
           if(navigator.vibrate) navigator.vibrate(8);
         }
-        // bricks
+        // bricks — resolve ALL bricks the ball overlaps in this sub-step (not just
+        // the first). At a shared brick corner the ball can overlap two+ bricks;
+        // destroying only one left the second alive for a frame and, once the ball
+        // bounced away, that brick was escaped entirely ("poke-through").
+        let flipX=false, flipY=false;
         for(const br of this.bricks){ if(!br.alive) continue;
           if(b.x+this.ballR>br.x && b.x-this.ballR<br.x+br.w && b.y+this.ballR>br.y && b.y-this.ballR<br.y+br.h){
             br.alive=false; this.bricksLeft--; this.score+=10;
             const fromLeft=Math.abs(b.x-(br.x)); const fromRight=Math.abs(b.x-(br.x+br.w));
             const fromTop=Math.abs(b.y-br.y); const fromBot=Math.abs(b.y-(br.y+br.h));
             const m=Math.min(fromLeft,fromRight,fromTop,fromBot);
-            if(m===fromLeft||m===fromRight) b.vx*=-1; else b.vy*=-1;
+            if(m===fromLeft||m===fromRight) flipX=true; else flipY=true;
             if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestBreak',this.best); }
-            break;
           }
         }
+        if(flipX) b.vx*=-1;
+        if(flipY) b.vy*=-1;
       }
       if(b.y-this.ballR>this.H){ this.lives--; if(this.lives<=0){ this.gameOver(); } else { this.resetBall(); } }
       if(this.bricksLeft===0){ this.won=true; if(this.autoPlay) this.stopAuto(); document.getElementById('overlay-win').classList.add('active'); }
