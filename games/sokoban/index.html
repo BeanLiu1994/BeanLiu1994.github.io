@@ -74,9 +74,34 @@
 (function(){
   'use strict';
   const LEVELS=[
+    // 1 — 入门：单箱一推
+    ['#######','#     #','#  @  #','#  $  #','#  .  #','#     #','#######'],
+    // 2 — 双箱对称，依旧简单
     ['#######','#  .  #','# #$# #','#  @  #','# #$# #','#  .  #','#######'],
-    ['#######','#.@   #','#  $  #','#  #  #','#  $  #','#   . #','#######'],
-    ['#######','#.    #','# $   #','#  @  #','#   $ #','#    .#','#######']
+    // 3 — 双箱左右分推
+    ['########','#      #','# .$ $.#','#  @   #','#      #','########'],
+    // 4 — 双箱贴角，注意别推进死角
+    ['#######','#. #  #','#  $  #','#  @  #','#  $  #','#. #  #','#######'],
+    // 5 — 双箱呈对角，需绕行
+    ['#######','#     #','# .$@ #','# $ . #','#     #','#######'],
+    // 6 — 双箱长推
+    ['#######','#  .  #','# $   #','#  @  #','#   $ #','#  .  #','#######'],
+    // 7 — 双箱靠墙，讲究走位
+    ['########','#      #','# .##  #','#  $   #','#  #@  #','#  $ . #','#      #','########'],
+    // 8 — 三箱横列
+    ['########','#      #','#  .   #','# $$$  #','#  .@  #','#  .   #','#      #','########'],
+    // 9 — 三箱居中
+    ['########','#      #','#  @   #','# $$$  #','# . .  #','#  .   #','#      #','########'],
+    // 10 — 三箱带拐角
+    ['########','#      #','#  $.  #','#  .   #','#@ $$  #','#  .   #','#      #','########'],
+    // 11 — 四箱对称，中局挑战
+    ['#########','#       #','#  $ $  #','# .   . #','#   @   #','#  $ $  #','# .   . #','#       #','#########'],
+    // 12 — 双箱长程（最难的一推）
+    ['#######','#   ###','#  $  #','## ## #','#  $ .#','#@   .#','#######'],
+    // 13 — 四箱四角
+    ['#######','#.   .#','# $  $ #','#  @  #','# $  $ #','#.   .#','#######'],
+    // 14 — 四箱大对称，终极关
+    ['#########','#       #','#  $ $  #','# .   . #','#   @   #','#  $ $  #','# .   . #','#       #','#########']
   ];
   let CW=7,CH=7,CELL=46,W=322,H=322;
   const canvas=document.getElementById('game');
@@ -114,20 +139,28 @@
 
   class Sokoban{
     constructor(){ this.best=parseInt(localStorage.getItem('bestSok')||'0'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this.bindInput(); this.loadLevel(0); }
-    loadLevel(i){ this.stopAuto(); this.lvl=i; const rows=LEVELS[i]; CH=rows.length; CW=Math.max(...rows.map(r=>r.length)); CELL=Math.min(46,Math.floor(430/CW)); W=CW*CELL; H=CH*CELL; ctx=fit();
-      const p=parse(rows); this.walls=p.walls; this.goals=p.goals; this.boxes=p.boxes; this.player=p.player; this.over=false; this.solution=null; this.solIdx=0;
+    loadLevel(i,keepAuto){ if(!keepAuto) this.stopAuto(); this.lvl=i; const rows=LEVELS[i]; CH=rows.length; CW=Math.max(...rows.map(r=>r.length)); CELL=Math.min(46,Math.floor(430/CW)); W=CW*CELL; H=CH*CELL; ctx=fit();
+      const p=parse(rows); this.walls=p.walls; this.goals=p.goals; this.boxes=p.boxes; this.player=p.player; this.boxes.forEach(b=>{b.fromR=b.r;b.fromC=b.c;}); this.player.fromR=this.player.r; this.player.fromC=this.player.c; this.over=false; this.solution=null; this.solIdx=0;
       document.getElementById('overlay-win').classList.remove('active'); this.tween=1; this.startLoop(); this.draw(); }
     restart(){ this.stopAuto(); this.loadLevel(0); }
     onGoal(){ return this.boxes.filter(b=>this.goals.has(b.r+','+b.c)).length; }
-    win(){ this.over=true; this.stopAuto(); const cleared=this.lvl+1; if(cleared>this.best){ this.best=cleared; localStorage.setItem('bestSok',this.best); } if(this.lvl>=LEVELS.length-1){ document.getElementById('win-msg').textContent='All levels cleared!'; document.getElementById('overlay-win').classList.add('active'); } else { this.loadLevel(this.lvl+1); } }
+    win(){ this.over=true; const cleared=this.lvl+1; if(cleared>this.best){ this.best=cleared; localStorage.setItem('bestSok',this.best); }
+      if(this.autoPlay){ // 自动模式：过关后保持自动，继续下一关
+        if(this.lvl>=LEVELS.length-1){ this.stopAuto(); document.getElementById('win-msg').textContent='All levels cleared!'; document.getElementById('overlay-win').classList.add('active'); }
+        else { this.loadLevel(this.lvl+1,true); this._autoSolveIfNeeded(); }
+      } else { // 手动模式
+        if(this.lvl>=LEVELS.length-1){ document.getElementById('win-msg').textContent='All levels cleared!'; document.getElementById('overlay-win').classList.add('active'); }
+        else { this.loadLevel(this.lvl+1); }
+      } }
+    _autoSolveIfNeeded(){ if(!this.autoPlay) return; this.solution=solve(LEVELS[this.lvl]); this.solIdx=0; if(!this.solution){ document.getElementById('ai-status').textContent='AI: no solution, skipping'; setTimeout(()=>{ if(this.lvl<LEVELS.length-1) this.loadLevel(this.lvl+1,true); else this.loadLevel(0,true); },700); return; } this.autoStep(); }
     move(dr,dc){ if(this.over||this.autoPlay) return; const nr=this.player.r+dr,nc=this.player.c+dc; if(this.walls.has(nr+','+nc)) return; const bi=this.boxes.findIndex(b=>b.r===nr&&b.c===nc);
-      if(bi>=0){ const br=nr+dr,bc=nc+dc; if(this.walls.has(br+','+bc)||this.boxes.some(b=>b.r===br&&b.c===bc)) return; this.boxes[bi]={r:br,c:bc}; }
-      this.player={r:nr,c:nc}; this.tween=0; this.tweenStart=performance.now(); this.draw(); if(this.onGoal()===this.boxes.length) this.win(); }
+      if(bi>=0){ const br=nr+dr,bc=nc+dc; if(this.walls.has(br+','+bc)||this.boxes.some(b=>b.r===br&&b.c===bc)) return; this.boxes[bi].fromR=this.boxes[bi].r; this.boxes[bi].fromC=this.boxes[bi].c; this.boxes[bi]={r:br,c:bc,fromR:this.boxes[bi].fromR,fromC:this.boxes[bi].fromC}; }
+      this.player.fromR=this.player.r; this.player.fromC=this.player.c; this.player={r:nr,c:nc,fromR:this.player.fromR,fromC:this.player.fromC}; this.tween=0; this.tweenStart=performance.now(); this.draw(); if(this.onGoal()===this.boxes.length) this.win(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over){ this.loadLevel(0); } this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.solution=solve(LEVELS[this.lvl]); this.solIdx=0; if(!this.solution){ document.getElementById('ai-status').textContent='AI: no solution, skipping'; setTimeout(()=>{ if(this.lvl<LEVELS.length-1) this.loadLevel(this.lvl+1); else this.loadLevel(0); },700); return; } this.autoStep(); }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this._autoSolveIfNeeded(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this.win(); return; }
-      const mv=this.solution[this.solIdx++]; this.player={r:mv.from.r,c:mv.from.c}; const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c); if(bi>=0) this.boxes[bi]={r:mv.to.r,c:mv.to.c};
+      const mv=this.solution[this.solIdx++]; this.player.fromR=this.player.r; this.player.fromC=this.player.c; this.player={r:mv.from.r,c:mv.from.c,fromR:this.player.fromR,fromC:this.player.fromC}; const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c); if(bi>=0){ this.boxes[bi].fromR=this.boxes[bi].r; this.boxes[bi].fromC=this.boxes[bi].c; this.boxes[bi]={r:mv.to.r,c:mv.to.c,fromR:this.boxes[bi].fromR,fromC:this.boxes[bi].fromC}; }
       this.tween=0; this.tweenStart=performance.now(); this.draw();
       if(this.solIdx>=this.solution.length){ this.win(); return; }
       this.autoTimer=setTimeout(()=>this.autoStep(),460); }
@@ -143,8 +176,10 @@
     draw(){ ctx.clearRect(0,0,W,H); const tf=this.tween<1?Math.min(1,(performance.now()-this.tweenStart)/260):1; this.tween=tf;
       // draw cells
       for(let r=0;r<CH;r++) for(let c=0;c<CW;c++){ const x=c*CELL,y=r*CELL; if(this.walls.has(r+','+c)){ ctx.fillStyle='#2a2150'; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); } else { ctx.fillStyle='#10162e'; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); if(this.goals.has(r+','+c)){ ctx.strokeStyle='#4dffc4'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,CELL*0.18,0,7); ctx.stroke(); } } }
-      for(const b of this.boxes){ const onG=this.goals.has(b.r+','+b.c); const px=b.c*CELL+CELL/2, py=b.r*CELL+CELL/2; ctx.save(); ctx.shadowColor=onG?'#4dffc4':'#ffb14d'; ctx.shadowBlur=10; ctx.fillStyle=onG?'#4dffc4':'#ffb14d'; this.rrect(px-CELL*0.32,py-CELL*0.32,CELL*0.64,CELL*0.64,6); ctx.fill(); ctx.restore(); ctx.fillStyle='#0a0e1c'; ctx.fillRect(px-CELL*0.18,py-2,CELL*0.36,4); ctx.fillRect(px-2,py-CELL*0.18,4,CELL*0.36); }
-      const px=this.player.c*CELL+CELL/2, py=this.player.r*CELL+CELL/2; ctx.save(); ctx.shadowColor='#ff5d8f'; ctx.shadowBlur=12; ctx.fillStyle='#ff5d8f'; ctx.beginPath(); ctx.arc(px,py,CELL*0.3,0,7); ctx.fill(); ctx.restore(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px-CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.arc(px+CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.fill();
+      const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+      const k=ease(this.tween<1?this.tween:1);
+      for(const b of this.boxes){ const onG=this.goals.has(b.r+','+b.c); const fr=b.fromR!==undefined?b.fromR:b.r, fc=b.fromC!==undefined?b.fromC:b.c; const rr=fr+(b.r-fr)*k, cc=fc+(b.c-fc)*k; const px=cc*CELL+CELL/2, py=rr*CELL+CELL/2; ctx.save(); ctx.shadowColor=onG?'#4dffc4':'#ffb14d'; ctx.shadowBlur=10; ctx.fillStyle=onG?'#4dffc4':'#ffb14d'; this.rrect(px-CELL*0.32,py-CELL*0.32,CELL*0.64,CELL*0.64,6); ctx.fill(); ctx.restore(); ctx.fillStyle='#0a0e1c'; ctx.fillRect(px-CELL*0.18,py-2,CELL*0.36,4); ctx.fillRect(px-2,py-CELL*0.18,4,CELL*0.36); }
+      const pfr=this.player.fromR!==undefined?this.player.fromR:this.player.r, pfc=this.player.fromC!==undefined?this.player.fromC:this.player.c; const prr=pfr+(this.player.r-pfr)*k, pcc=pfc+(this.player.c-pfc)*k; const px=pcc*CELL+CELL/2, py=prr*CELL+CELL/2; ctx.save(); ctx.shadowColor='#ff5d8f'; ctx.shadowBlur=12; ctx.fillStyle='#ff5d8f'; ctx.beginPath(); ctx.arc(px,py,CELL*0.3,0,7); ctx.fill(); ctx.restore(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px-CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.arc(px+CELL*0.1,py-CELL*0.05,2.4,0,7); ctx.fill();
       document.getElementById('score').textContent=this.lvl+1; document.getElementById('best').textContent=this.best; document.getElementById('box-stat').textContent='Boxes: '+this.boxes.length; document.getElementById('done-stat').textContent='On goal: '+this.onGoal(); document.getElementById('lvl-stat').textContent='Lv: '+(this.lvl+1)+'/'+LEVELS.length;
       if(this.autoPlay&&!this.over) document.getElementById('ai-status').textContent='AI: solving Lv '+(this.lvl+1)+' · '+(this.solution?this.solIdx+'/'+this.solution.length:'-');
     }
