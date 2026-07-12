@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>纸牌大战 · Card War</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#ff5d6a; --accent-glow:#ff5d6a66; --gold:#ffd54a; --ok:#3ecf8e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 50% 0%, #2a1020 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #102a24 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ff5d6a,#ffb86b); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0608; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0608; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>纸牌大战</h1><div class="sub">C A R D &nbsp; W A R</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">你</div><div class="value" id="youc">26</div></div>
+      <div class="score-card best"><div class="label">胜局</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">对手</div><div class="value" id="aic">26</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="300"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">重新发牌</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点屏幕出一张牌，比大小，大的收走两堆。相同则开战（各押暗牌+明牌）。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const youEl=document.getElementById('youc'), aiEl=document.getElementById('aic'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const SUITS=['♠','♥','♦','♣']; const RED={1:1,2:1}; const RANKS=['','2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  function buildDeck(){ const d=[]; for(let s=0;s<4;s++) for(let r=1;r<=13;r++) d.push({r,s}); return d; }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  class War {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0; this.animT=1;
+      this.best=parseInt(localStorage.getItem('warBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(!this.autoPlay&&!this.over) this.play(); });
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(rect.width||440,440)); const dpr=window.devicePixelRatio||1; this.W=w; this.H=w*300/440; canvas.width=w*dpr; canvas.height=this.H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+    restart(){ this.stopAuto(); this.over=false; this.winner=null; const d=shuffle(buildDeck()); this.you=d.slice(0,26); this.ai=d.slice(26); this.battle=null; this.animT=1; this.update(); this.status('点屏幕出牌，或开 Auto 自动对战。'); }
+    status(t){ statusEl.textContent=t; }
+    update(){ youEl.textContent=this.you.length; aiEl.textContent=this.ai.length; }
+    cmp(a,b){ return a.r-b.r; }
+    give(pile,w){ const arr=w==='you'?this.you:this.ai; for(const c of pile) arr.push(c); }
+    play(){
+      if(this.over) return;
+      if(this.you.length===0||this.ai.length===0){ this.finish(); return; }
+      const pile=[]; const a=this.you.shift(), b=this.ai.shift(); pile.push(a,b);
+      let res=this.cmp(a,b), warN=0, upA=a, upB=b;
+      while(res===0){
+        warN++;
+        if(this.you.length<2||this.ai.length<2){ const w=this.you.length<2?'ai':'you'; this.give(pile,w); this.over=true; this.winner=w; this.battle={a:upA,b:upB,war:warN,result:w}; this.finish(); return; }
+        pile.push(this.you.shift()); pile.push(this.ai.shift());
+        upA=this.you.shift(); upB=this.ai.shift(); pile.push(upA,upB); res=this.cmp(upA,upB);
+      }
+      const w=res>0?'you':'ai'; this.give(pile,w); this._autoProgress++;
+      this.battle={a:upA,b:upB,war:warN,result:w}; this.animT=0; this.update();
+      if(this.you.length===0||this.ai.length===0){ this.over=true; this.winner=w; this.finish(); return; }
+      if(this.autoPlay){ this.autoTimer=setTimeout(()=>this.play(),700); }
+    }
+    finish(){ this.update(); if(this.winner==='you'){ this.best++; localStorage.setItem('warBest',String(this.best)); bestEl.textContent=this.best; } this.status(this.over?(this.winner==='you'?'🏆 你赢下整副牌！':'💀 对手收走全部牌'):'比大小中…'); if(this.over&&this.autoPlay) this.autoNext(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.play(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
+    card(x,y,w,h,cd,faceUp){ ctx.save(); ctx.shadowColor='#00000066'; ctx.shadowBlur=10; ctx.fillStyle=faceUp?'#f7f7ff':'#3a2d6b'; this.rr(x,y,w,h,8); ctx.fill(); ctx.shadowBlur=0; ctx.strokeStyle='#ffffff22'; ctx.lineWidth=1.5; this.rr(x,y,w,h,8); ctx.stroke(); if(faceUp){ const red=RED[cd.s]; ctx.fillStyle=red?'#ff5d6a':'#1a1a2e'; ctx.font=`bold ${h*0.32}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(RANKS[cd.r],x+w*0.1,y+h*0.08); ctx.font=`${h*0.4}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(SUITS[cd.s],x+w/2,y+h*0.56); } else { ctx.strokeStyle='#7c5cff'; ctx.lineWidth=2; this.rr(x+w*0.18,y+h*0.18,w*0.64,h*0.64,6); ctx.stroke(); } ctx.restore(); }
+    draw(dt){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      this.animT=Math.min(1,this.animT+dt/0.4);
+      const cw=W*0.22, ch=cw*1.4, gap=W*0.06;
+      const cx=W/2;
+      // stacks
+      this.card(cx-cw/2-gap-cw, H*0.08, cw, ch, {r:0,s:0}, false);
+      this.card(cx-cw/2+gap, H*0.08, cw, ch, {r:0,s:0}, false);
+      const t=this.animT;
+      if(this.battle){ const slide=(1-t)*W*0.3;
+        if(this.battle.a) this.card(cx-cw/2-gap+slide*(this.battle.result==='you'?-1:1)*0, H*0.42, cw, ch, this.battle.a, true);
+        if(this.battle.b) this.card(cx-cw/2+gap, H*0.42, cw, ch, this.battle.b, true);
+        ctx.fillStyle='#ffffff'; ctx.font=`bold ${W*0.05}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const label=this.battle.war>0?('⚔ 开战 ×'+this.battle.war):(this.battle.result==='you'?'你赢这一堆':'对手赢这一堆');
+        ctx.fillText(label, cx, H*0.4);
+      } else { ctx.fillStyle='#8a8ab0'; ctx.font=`${W*0.045}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('— VS —', cx, H*0.5); }
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new War();
+})();
+</script>
+</body>
+</html>

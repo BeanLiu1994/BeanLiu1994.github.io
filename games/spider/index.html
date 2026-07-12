@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>蜘蛛纸牌 · Spider Solitaire</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0; --accent:#3ecf8e; --accent2:#ff5db4; --gold:#ffd54a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image: radial-gradient(ellipse at 18% 12%, #0f2a22 0%, transparent 55%), radial-gradient(ellipse at 82% 88%, #2a1038 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:560px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; gap:10px; }
+  .title-block h1 { font-size:1.45rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#3ecf8e,#ff5db4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.5rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000040, 0 0 60px #3ecf8e44; }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:8px; }
+  .btn { flex:1; min-width:80px; padding:9px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#062018; }
+  .btn.auto-on { background:var(--accent2); border-color:var(--accent2); color:#1f0414; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px #ff5db466;} 50%{box-shadow:0 0 18px #ff5db4aa,0 0 34px #ff5db466;} }
+  .status { margin-top:6px; font-size:0.72rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>蜘蛛纸牌</h1><div class="sub">S P I D E R &nbsp; S O L I T A I R E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">完成</div><div class="value" id="progress">0/8</div></div>
+      <div class="score-card best"><div class="label">最高</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="540" height="600"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.dealStock()">发牌堆</button>
+    <button class="btn" onclick="game.restart()">新局</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点一列选牌，再点另一列移动（同花色 K→A 连成即收走）。集满 8 组即胜。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const RANK=' A23456789TJQK'; const SUITSYM=['♠','♥'];
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const progEl=document.getElementById('progress'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  class Spider {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0; this.selCol=null; this.over=false; this.win=false;
+      this.best=parseInt(localStorage.getItem('spiderBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.autoPlay||this.over) return; const c=this.colAt(e); if(c<0) return;
+        if(this.selCol===null){ if(this.faceUpRun(c)>=0){ this.selCol=c; this.status('已选第 '+(c+1)+' 列，点目标列落子'); } }
+        else if(c===this.selCol){ this.selCol=null; }
+        else { const st=this.faceUpRun(this.selCol); if(st>=0 && this.canMove(this.selCol,st,c)){ this.applyMove(this.selCol,st,c); this.selCol=null; } else if(this.faceUpRun(c)>=0){ this.selCol=c; } else { this.selCol=null; } }
+      });
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(rect.width||540,540)); const dpr=window.devicePixelRatio||1; this.W=w; this.H=w*600/540; canvas.width=w*dpr; canvas.height=this.H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); this.cw=this.W/10; }
+    shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+    restart(){ this.stopAuto(); this.over=false; this.win=false; this._autoProgress=0; this.selCol=null; this.complete=0;
+      const deck=[]; for(let s=0;s<2;s++) for(let d=0;d<4;d++) for(let r=1;r<=13;r++) deck.push({s,r,up:false});
+      this.shuffle(deck);
+      this.cols=Array.from({length:10},()=>[]); let k=0;
+      for(let c=0;c<10;c++){ const n=(c<4)?6:5; for(let i=0;i<n;i++){ const card=deck[k++]; if(i===n-1) card.up=true; this.cols[c].push(card); } }
+      this.stock=deck.slice(k); this.updateUI(); this.status('点一列选牌，再点另一列移动。集满 8 组同花色 K→A 即胜。'); }
+    status(t){ statusEl.textContent=t; }
+    updateUI(){ progEl.textContent=this.complete+'/8'; }
+    faceUpRun(c){ const col=this.cols[c]; if(!col.length) return -1; let top=col.length-1; let i=top; while(i>0 && col[i].up && col[i-1].up && col[i-1].s===col[i].s && col[i-1].r===col[i].r+1) i--; return col[i].up?i:-1; }
+    topCard(c){ const col=this.cols[c]; return col.length?col[col.length-1]:null; }
+    canMove(src,start,dest){ if(src===dest) return false; const col=this.cols[src]; const group=col.slice(start); const head=group[0];
+      if(!group.every(card=>card.up)) return false;
+      if(!group.every((card,idx)=> idx===0 || (card.s===group[idx-1].s && card.r===group[idx-1].r+1))) return false;
+      const dt=this.topCard(dest); if(!dt) return true; if(!dt.up) return false; return dt.r===head.r+1; }
+    applyMove(src,start,dest){ const moved=this.cols[src].splice(start); this.cols[dest].push(...moved);
+      const sc=this.cols[src]; if(sc.length && !sc[sc.length-1].up) sc[sc.length-1].up=true; this._autoProgress++; this.checkComplete(); this.updateUI(); }
+    checkComplete(){ for(let c=0;c<10;c++){ const col=this.cols[c]; if(col.length>=13){ const top=col[col.length-1]; if(top.r===13){ let ok=true; for(let k=0;k<13;k++){ const idx=col.length-1-k; if(!col[idx].up||col[idx].s!==top.s||col[idx].r!==13-k){ ok=false; break; } } if(ok){ col.splice(col.length-13,13); this.complete++; if(col.length && !col[col.length-1].up) col[col.length-1].up=true; } } } }
+      if(this.complete>=8) this.winGame(); }
+    dealStock(){ if(this.autoPlay){ if(this.over) return; } if(this.stock.length<10){ this.status('发牌堆已空'); if(!this.autoPlay) return; }
+      if(this.stock.length>=10){ for(let c=0;c<10;c++){ const card=this.stock.pop(); card.up=true; this.cols[c].push(card); } this._autoProgress++; this.checkComplete(); this.updateUI(); if(this.autoPlay&&!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),320); } }
+    autoPick(){ let completeMove=null, best=null, bestScore=-1e9;
+      for(let s=0;s<10;s++){ const st=this.faceUpRun(s); if(st<0) continue; for(let d=0;d<10;d++){ if(!this.canMove(s,st,d)) continue;
+        const group=this.cols[s].slice(st); const head=group[0]; const dt=this.topCard(d);
+        // simulate completion
+        const sim=this.cols[d].concat(group); if(sim.length>=13){ const t=sim[sim.length-1]; if(t.r===13){ let ok=true; for(let kk=0;kk<13;kk++){ const ix=sim.length-1-kk; if(!sim[ix].up||sim[ix].s!==t.s||sim[ix].r!==13-kk){ ok=false; break; } } if(ok) completeMove={src:s,start:st,dest:d}; } }
+        let score=0; if(dt&&dt.up){ if(dt.s===head.s && dt.r===head.r+1) score+=10; else score+=1; } else score+=2;
+        if(st>0) score+=3; if(head.r===13 && (!dt)) score+=5; if(this.cols[s].length-st===group.length && st>0) score+=1;
+        if(score>bestScore){ bestScore=score; best={src:s,start:st,dest:d}; } } }
+      return completeMove||best; }
+    autoStep(){ if(!this.autoPlay||this.over||this.win) return; this.selCol=null; const mv=this.autoPick();
+      if(mv){ this.applyMove(mv.src,mv.start,mv.dest); }
+      else if(this.stock.length>=10){ this.dealStock(); return; }
+      else { this.autoNext(); return; }
+      if(!this.over&&!this.win) this.autoTimer=setTimeout(()=>this.autoStep(),340); }
+    winGame(){ this.over=true; this.win=true; if(this.complete>this.best){ this.best=this.complete; } localStorage.setItem('spiderBest',String(this.best)); bestEl.textContent=this.best; this.status('🏆 完成 '+this.complete+' 组！点“新局”再来。'); if(this.autoPlay) this.autoNext(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over||this.win) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    colAt(e){ const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(this.W/rect.width); return Math.floor(x/this.cw); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
+    draw(dt){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H); const cw=this.cw, cardW=cw*0.86, cardH=cardW*1.4;
+      for(let c=0;c<10;c++){ const col=this.cols[c]; const x=c*cw+(cw-cardW)/2; let y=6;
+        for(let i=0;i<col.length;i++){ const card=col[i]; const isTop=(i===col.length-1); const oy=y+(isTop?0:card.up?cardH*0.26:cardH*0.16);
+          ctx.fillStyle=card.up?'#f4f4fb':'#26304e'; this.rr(x,oy,cardW,cardH,5); ctx.fill();
+          ctx.lineWidth=1; ctx.strokeStyle=this.selCol===c?'#ffd54a':'#00000040'; ctx.stroke();
+          if(card.up){ const col2=card.s===1?'#ff5db4':'#4d9bff'; ctx.fillStyle=col2; ctx.font='bold '+(cardW*0.34)+'px Segoe UI, sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(RANK[card.r], x+cardW*0.10, oy+cardH*0.06); ctx.textAlign='right'; ctx.fillText(SUITSYM[card.s], x+cardW*0.90, oy+cardH*0.06); ctx.textAlign='center'; ctx.font='bold '+(cardW*0.5)+'px Segoe UI, sans-serif'; ctx.fillText(SUITSYM[card.s], x+cardW/2, oy+cardH*0.5); }
+          y=oy; }
+      }
+      // stock pile
+      const sx=8, sy=H-cardH*0.55-2; ctx.fillStyle='#1b2138'; this.rr(sx,sy,cardW*0.7,cardH*0.55,4); ctx.fill(); ctx.strokeStyle='#2c3354'; ctx.stroke(); ctx.fillStyle='#8a8ab0'; ctx.font='bold '+(cardW*0.3)+'px Segoe UI'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('×'+this.stock.length, sx+cardW*0.12, sy+cardH*0.12);
+      // completed markers
+      ctx.fillStyle='#3ecf8e'; ctx.font='bold '+(cardW*0.34)+'px Segoe UI'; ctx.textAlign='right'; ctx.fillText('✓ '+this.complete+'/8', W-8, sy+cardH*0.1);
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  }
+  window.game=new Spider();
+})();
+</script>
+</body>
+</html>
