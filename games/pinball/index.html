@@ -48,6 +48,15 @@
   @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
   .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
   .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  .rules-wrap{margin-top:10px;}
+  .rules-toggle{display:block;width:100%;padding:8px 12px;border:1px solid #ffffff0e;border-radius:8px;background:var(--surface);color:var(--muted);font-size:.72rem;cursor:pointer;text-align:center;transition:all .2s;}
+  .rules-toggle:hover{background:#ffffff08;color:var(--text);}
+  .rules-toggle::after{content:' ▾';font-size:.65rem;}
+  details[open] .rules-toggle::after{content:' ▴';}
+  .rules-body{background:#1a0a20;border:1px solid #ffffff0a;border-radius:8px;padding:12px 14px;margin-top:6px;font-size:.68rem;color:#c0b0c8;line-height:1.7;}
+  .rules-body h3{color:var(--accent);font-size:.75rem;margin:0 0 6px;letter-spacing:.5px;}
+  .rules-body p{margin-bottom:5px;}
+  .rules-body b{color:var(--text);}
 </style>
 </head>
 <body>
@@ -69,6 +78,21 @@
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI playing...</span></div>
+  <div class="rules-wrap">
+    <details id="rules-details"><summary class="rules-toggle">How to Play</summary>
+      <div class="rules-body">
+        <h3>Controls</h3>
+        <p><b>Tap / Click</b> left side of the table = left flipper | right side = right flipper.</p>
+        <p><b>Keyboard:</b> <b>A / Left Arrow</b> = left flipper, <b>D / Right Arrow</b> = right flipper. Release key to drop.</p>
+        <h3>Scoring</h3>
+        <p>Hit <b>bumpers</b> (3 pink circles) → <b>+100</b> pts each.</p>
+        <p>Hit <b>slingshots</b> (pink triangles at funnel) → <b>+60</b> pts each.</p>
+        <h3>Rules</h3>
+        <p>Keep the ball in play with the flippers. If the ball falls through the center gap → lose a life.</p>
+        <p>You have <b>3 lives</b>. Aim for the highest score!</p>
+      </div>
+    </details>
+  </div>
   <div class="stats-bar"><span id="lives-stat">Lives: ♥♥♥</span><span id="bumper-stat">Bumpers: 3</span></div>
 </div>
 <script>
@@ -249,6 +273,17 @@
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none';
       for(const f of this.flip) f.active=false; }
     bind(){
+      const T={left:false,right:false};
+      const pressKey=(k)=>{ if(this.autoPlay||this.over) return; T[k]=true; this.flip[k==='left'?0:1].active=true; };
+      const releaseKey=(k)=>{ T[k]=false; this.flip[k==='left'?0:1].active=false; };
+      window.addEventListener('keydown',(e)=>{
+        if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){ e.preventDefault(); pressKey('left'); }
+        if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){ e.preventDefault(); pressKey('right'); }
+      });
+      window.addEventListener('keyup',(e)=>{
+        if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){ e.preventDefault(); releaseKey('left'); }
+        if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){ e.preventDefault(); releaseKey('right'); }
+      });
       const press=(x)=>{ if(this.autoPlay||this.over) return; const half=x<canvas.getBoundingClientRect().width/2; this.flip[half?0:1].active=true; };
       const release=()=>{ if(this.autoPlay) return; this.flip[0].active=false; this.flip[1].active=false; };
       canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); press(e.clientX - canvas.getBoundingClientRect().left); });
