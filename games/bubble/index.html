@@ -88,7 +88,7 @@
     restart(){ this.stopAuto(); this.stopLoop();
       this.grid=[]; for(let row=0;row<MAXROWS;row++) this.grid.push(new Array(row%2?COLS-1:COLS).fill(null));
       for(let row=0;row<5;row++) for(let col=0;col<this.grid[row].length;col++) this.grid[row][col]=Math.floor(Math.random()*PAL.length);
-      this.current=Math.floor(Math.random()*PAL.length); this.next=Math.floor(Math.random()*PAL.length);
+      this.current=this.pickColor(); this.next=this.pickColor();
       this.proj=null; this.angle=0; this.score=0; this.combo=0; this.over=false; this.autoDelay=0;
       document.getElementById('overlay-win').classList.remove('active'); document.getElementById('overlay-lose').classList.remove('active');
       this.startLoop();
@@ -96,6 +96,8 @@
     neighbors(row,col){ const e=row%2===0; const base=e?[[row,col-1],[row,col+1],[row-1,col-1],[row-1,col],[row+1,col-1],[row+1,col]]:[[row,col-1],[row,col+1],[row-1,col],[row-1,col+1],[row+1,col],[row+1,col+1]];
       return base.filter(([rr,cc])=>rr>=0&&rr<MAXROWS&&cc>=0&&cc<this.grid[rr].length); }
     countBubbles(){ let n=0; for(const row of this.grid) for(const c of row) if(c!=null) n++; return n; }
+    presentColors(){ const s=new Set(); for(const row of this.grid) for(const c of row) if(c!=null) s.add(c); return [...s]; }
+    pickColor(){ const pc=this.presentColors(); return pc.length? pc[Math.floor(Math.random()*pc.length)] : Math.floor(Math.random()*PAL.length); }
     march(angle){ let x=shooterX,y=shooterY,dx=Math.sin(angle),dy=-Math.cos(angle); const step=4;
       for(let i=0;i<500;i++){ x+=dx*step; y+=dy*step; if(x<r){x=r;dx=-dx;} if(x>W-r){x=W-r;dx=-dx;} if(y<=topMargin+r) return {x,y};
         for(let row=0;row<MAXROWS;row++) for(let col=0;col<this.grid[row].length;col++){ if(this.grid[row][col]!=null){ const d=Math.hypot(centerX(row,col)-x,centerY(row)-y); if(d<2*r-3) return {x,y}; } } }
@@ -123,7 +125,10 @@
       this.grid[cell.row][cell.col]=p.color; const cnt=this.cluster(cell.row,cell.col,p.color);
       if(cnt>=3){ this.removeCluster(cell.row,cell.col); this.combo++; this.score+=cnt*10*this.combo; if(this.score>this.best){this.best=this.score;localStorage.setItem('bestBub',this.best);} this.dropFloating(); }
       else this.combo=0;
-      this.current=this.next; this.next=Math.floor(Math.random()*PAL.length);
+      this.current=this.next; this.next=this.pickColor();
+      // Guard against orphan colors: if the promoted current color no longer
+      // exists on the board (its last instance was just cleared), re-pick it.
+      if(this.countBubbles()>0 && !this.presentColors().includes(this.current)) this.current=this.pickColor();
       if(this.countBubbles()===0){ this.win(); return; }
       for(let row=0;row<MAXROWS;row++) for(let col=0;col<this.grid[row].length;col++){ if(this.grid[row][col]!=null && centerY(row)+r>=shooterY-18){ this.lose(); return; } }
     }
