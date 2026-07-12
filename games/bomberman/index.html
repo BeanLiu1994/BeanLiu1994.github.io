@@ -318,13 +318,9 @@
       const units=[this.player,...this.enemies].filter(u=>u.alive);
       for(const u of units){
         if(u.moving){ u.moving.t+=dt; if(u.moving.t>=u.moving.dur) u.moving=null;
-          // A unit already fleeing should still be allowed to chain the next step the instant it
-          // arrives (no cd pause), otherwise it idles inside a blast cell and dies. So fall through
-          // to re-decide only when it just finished a move AND is still in danger.
-          if(!(u===this.player ? this.cellDanger(u.r,u.c) : this.cellDanger(u.r,u.c))) continue;
+          else continue; // 动画未播完：不重新决策，避免每帧打断覆盖导致动画重复/回弹
         }
-        // If this unit is in danger, override the cooldown and act every frame so it can run out
-        // of the blast without pausing inside it.
+        // 单位刚走到新格子：若在危险中免冷却立即决策，否则等 cd
         const urgent = this.cellDanger(u.r,u.c);
         if(!urgent){ u.cd-=dt; if(u.cd>0) continue; u.cd=STEP; }
         if(u===this.player){ if(this.autoPlay) this.aiPlayer(); }
