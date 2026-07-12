@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹算术数独 · MathDoku</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#a06bff; --accent-glow:#a06bff66; --danger:#ff5d8a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #241038 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #102844 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#cdb0ff,#a06bff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.s .value { color:var(--accent); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:pointer; }
+  .controls { display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:48px; padding:10px 6px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.95rem; font-weight:700; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.95); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0c0420; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0c0420; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); flex-wrap:wrap; }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>算术数独</h1><div class="sub">M A T H D O K U</div></div>
+    <div class="score-panel">
+      <div class="score-card s"><div class="label">Solved</div><div class="value" id="score-solved">0</div></div>
+      <div class="score-card"><div class="label">Time</div><div class="value" id="score-time">0s</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="460" height="520"></canvas>
+  </div>
+  <div class="controls" id="digits"></div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.newGame()">New</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI is solving…</span></div>
+  <div class="stats-bar"><span id="best-stat">Best: —</span><span id="hint-stat">Tap a cell, then a number</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=460, H=520, N=6, PAD=14, TOP=70;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+
+  class MathDoku {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null;
+      this.solved=0; this.best=0; this.selected=-1; this.grid=[]; this.sol=[]; this.cages=[]; this.gid=[];
+      this.win=false; this.time=0; this.winTimer=0; this.autoTimer=0; this.autoOrder=[]; this.autoIdx=0; this.pulse=0;
+      this.buildDigits(); this.loop=this.loop.bind(this); this.bind();
+      this.newGame();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{ return parseInt(localStorage.getItem('mathdoku_best')||'0')||0; }catch(e){ return 0; } }
+    saveBest(){ try{ localStorage.setItem('mathdoku_best', String(this.best)); }catch(e){} }
+    buildDigits(){
+      const wrap=document.getElementById('digits'); wrap.innerHTML='';
+      for(let v=1;v<=N;v++){ const b=document.createElement('button'); b.className='btn'; b.textContent=v; b.onclick=()=>this.input(v); wrap.appendChild(b); }
+      const e=document.createElement('button'); e.className='btn'; e.textContent='⌫'; e.onclick=()=>this.input(0); wrap.appendChild(e);
+    }
+    genLatin(){
+      const sym=[]; for(let i=1;i<=N;i++) sym.push(i);
+      for(let i=N-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [sym[i],sym[j]]=[sym[j],sym[i]]; }
+      const colP=[]; for(let i=0;i<N;i++) colP.push(i);
+      for(let i=N-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [colP[i],colP[j]]=[colP[j],colP[i]]; }
+      const g=[];
+      for(let r=0;r<N;r++){ const row=[]; for(let c=0;c<N;c++){ row.push(sym[(r+colP[c])%N]); } g.push(row); }
+      return g;
+    }
+    genPuzzle(){
+      const latin=this.genLatin(); this.sol=[]; for(let r=0;r<N;r++) for(let c=0;c<N;c++) this.sol.push(latin[r][c]);
+      this.grid=new Array(N*N).fill(0);
+      // union-find cages
+      const parent=[]; for(let i=0;i<N*N;i++) parent.push(i);
+      const sz=new Array(N*N).fill(1);
+      const find=(a)=>{ while(parent[a]!==a){ parent[a]=parent[parent[a]]; a=parent[a]; } return a; };
+      const uni=(a,b)=>{ a=find(a); b=find(b); if(a===b) return; if(sz[a]<sz[b]){const t=a;a=b;b=t;} parent[b]=a; sz[a]+=sz[b]; };
+      const nb=(i)=>{ const r=(i/N)|0,c=i%N; const out=[]; if(r>0)out.push(i-N); if(c>0)out.push(i-1); if(r<N-1)out.push(i+N); if(c<N-1)out.push(i+1); return out; };
+      const tries=N*N*2;
+      for(let t=0;t<tries;t++){ const i=(Math.random()*N*N)|0; const nbs=nb(i); const j=nbs[(Math.random()*nbs.length)|0]; if(find(i)!==find(j) && sz[find(i)]+sz[find(j)]<=4 && Math.random()<0.62) uni(i,j); }
+      // build cages
+      this.gid=new Array(N*N).fill(-1); const groups={}; let gc=0;
+      for(let i=0;i<N*N;i++){ const r=find(i); if(groups[r]===undefined){ groups[r]=gc++; } this.gid[i]=groups[r]; }
+      this.cages=[];
+      for(let g=0;g<gc;g++){ const cells=[]; for(let i=0;i<N*N;i++) if(this.gid[i]===g) cells.push(i); this.cages.push(this.makeCage(cells)); }
+    }
+    newGame(){
+      this.stopAuto(); this.win=false; this.selected=-1; this.time=0; this.winTimer=0;
+      this.genPuzzle();
+    }
+    autoNext(){ // soft reset: keep auto engaged, just start a fresh puzzle
+      this.win=false; this.selected=-1; this.time=0; this.winTimer=0;
+      this.autoIdx=0; this.autoOrder=[]; this.autoTimer=10;
+      this.genPuzzle();
+    }
+    makeCage(cells){
+      const vals=cells.map(i=>this.sol[i]);
+      let op='+', target=0;
+      if(cells.length===1){ op=''; target=vals[0]; }
+      else {
+        const roll=Math.random();
+        if(roll<0.45){ op='+'; target=vals.reduce((a,b)=>a+b,0); }
+        else if(roll<0.8){ op='×'; target=vals.reduce((a,b)=>a*b,1); }
+        else if(cells.length===2){
+          if(roll<0.9){ op='-'; target=Math.abs(vals[0]-vals[1]); }
+          else { const a=Math.max(vals[0],vals[1]), b=Math.min(vals[0],vals[1]); if(a%b===0){ op='÷'; target=a/b; } else { op='+'; target=vals[0]+vals[1]; } }
+        } else { op='+'; target=vals.reduce((a,b)=>a+b,0); }
+      }
+      return {cells, op, target};
+    }
+    input(v){
+      if(this.autoPlay||this.win) return;
+      if(this.selected<0) return;
+      this.grid[this.selected]=(v===0)?0:((v>=1&&v<=N)?v:this.grid[this.selected]);
+      this.checkWin();
+    }
+    checkWin(){
+      for(let r=0;r<N;r++){ const seen=new Set(); for(let c=0;c<N;c++){ const v=this.grid[r*N+c]; if(v===0) return false; if(seen.has(v)) return false; seen.add(v); } }
+      for(let c=0;c<N;c++){ const seen=new Set(); for(let r=0;r<N;r++){ const v=this.grid[r*N+c]; if(seen.has(v)) return false; seen.add(v); } }
+      for(const cage of this.cages){ if(!this.cageOk(cage)) return false; }
+      this.win=true; this.winTimer=140; this.solved++;
+      if(this.best===0||this.time<this.best){ this.best=this.time; this.saveBest(); }
+      document.getElementById('score-solved').textContent=this.solved;
+      document.getElementById('best-stat').textContent='Best: '+this.best+'s';
+    }
+    cageOk(cage){
+      const vals=cage.cells.map(i=>this.grid[i]);
+      if(vals.some(v=>v===0)) return false;
+      if(cage.op==='') return vals[0]===cage.target;
+      if(cage.op==='+') return vals.reduce((a,b)=>a+b,0)===cage.target;
+      if(cage.op==='×') return vals.reduce((a,b)=>a*b,1)===cage.target;
+      if(cage.op==='-') return Math.abs(vals[0]-vals[1])===cage.target;
+      if(cage.op==='÷'){ const a=Math.max(vals[0],vals[1]), b=Math.min(vals[0],vals[1]); return b!==0 && a/b===cage.target; }
+      return false;
+    }
+    step(dt){
+      this.pulse+=dt*0.08;
+      if(this.win){ this.winTimer-=dt; if(this.autoPlay && this.winTimer<=0) this.autoNext(); return; }
+      if(!this.autoPlay){ this.time+=dt/60; document.getElementById('score-time').textContent=Math.floor(this.time)+'s'; return; }
+      this.autoTimer-=dt;
+      if(this.autoTimer<=0){
+        if(this.autoIdx===0){ this.autoOrder=[]; for(let i=0;i<N*N;i++) this.autoOrder.push(i); this.autoIdx=0; }
+        if(this.autoIdx<this.autoOrder.length){ const i=this.autoOrder[this.autoIdx++]; this.grid[i]=this.sol[i]; this.checkWin(); }
+        else { this.autoNext(); return; }
+        this.autoTimer=22;
+      }
+    }
+    cellRect(i){ const r=(i/N)|0,c=i%N; const gw=W-PAD*2, cs=gw/N; return {x:PAD+c*cs,y:TOP+r*cs,s:cs}; }
+    loop(now){
+      const dt=Math.max(0.4,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      const gw=W-PAD*2, cs=gw/N;
+      // base cells
+      for(let i=0;i<N*N;i++){ const {x,y,s}=this.cellRect(i); const v=this.grid[i];
+        const sel=this.selected===i; const isSol=this.win;
+        ctx.beginPath();
+        ctx.rect(x+1,y+1,s-2,s-2);
+        if(isSol){ ctx.fillStyle='rgba(160,107,255,0.18)'; ctx.shadowColor='#a06bff'; ctx.shadowBlur=12; }
+        else if(sel){ ctx.fillStyle='rgba(160,107,255,0.28)'; ctx.shadowColor='#a06bff'; ctx.shadowBlur=14; }
+        else if(v>0){ ctx.fillStyle='#161c38'; ctx.shadowBlur=0; }
+        else { ctx.fillStyle='#10162e'; ctx.shadowBlur=0; }
+        ctx.fill(); ctx.shadowBlur=0;
+      }
+      // cage borders
+      ctx.strokeStyle='#a06bff'; ctx.lineWidth=2.5;
+      for(let i=0;i<N*N;i++){ const {x,y,s}=this.cellRect(i); const r=(i/N)|0,c=i%N;
+        if(c===N-1){ ctx.beginPath(); ctx.moveTo(x+s,y); ctx.lineTo(x+s,y+s); ctx.stroke(); }
+        if(r===N-1){ ctx.beginPath(); ctx.moveTo(x,y+s); ctx.lineTo(x+s,y+s); ctx.stroke(); }
+        if(c<N-1 && this.gid[i]!==this.gid[i+1]){ ctx.beginPath(); ctx.moveTo(x+s,y); ctx.lineTo(x+s,y+s); ctx.stroke(); }
+        if(r<N-1 && this.gid[i]!==this.gid[i+N]){ ctx.beginPath(); ctx.moveTo(x,y+s); ctx.lineTo(x+s,y+s); ctx.stroke(); }
+      }
+      // values + labels
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      for(let i=0;i<N*N;i++){ const {x,y,s}=this.cellRect(i); const v=this.grid[i];
+        if(v>0){ ctx.fillStyle=this.win?'#ffd700':'#dfe6ff'; ctx.font='bold '+(cs*0.42)+'px sans-serif'; ctx.fillText(String(v), x+s/2, y+s/2); }
+      }
+      // cage target labels (top-left cell of each cage)
+      for(const cage of this.cages){
+        let tl=cage.cells[0]; for(const i of cage.cells){ if((i/N|0) < (tl/N|0) || ((i/N|0)===(tl/N|0) && i%N < tl%N)) tl=i; }
+        const {x,y,s}=this.cellRect(tl);
+        const label = cage.op==='' ? String(cage.target) : cage.target+cage.op;
+        ctx.fillStyle='#cdb0ff'; ctx.font='bold '+(cs*0.2)+'px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+        ctx.fillText(label, x+5, y+4); ctx.textAlign='center';
+      }
+      if(this.win){ ctx.fillStyle='#ffd700'; ctx.font='bold 30px sans-serif'; ctx.fillText('SOLVED!', W/2, TOP-26); }
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){ this.autoPlay=true; this.autoTimer=10; this.autoIdx=0; this.autoOrder=[];
+      const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      const ind=document.getElementById('ai-indicator'); if(ind) ind.style.display='flex';
+      document.getElementById('ai-status').textContent='AI is solving…'; }
+    stopAuto(){ this.autoPlay=false;
+      const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      const ind=document.getElementById('ai-indicator'); if(ind) ind.style.display='none'; }
+    bind(){
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.win) return; const r=canvas.getBoundingClientRect();
+        const mx=(e.clientX-r.left)/r.width*W, my=(e.clientY-r.top)/r.height*H;
+        for(let i=0;i<N*N;i++){ const {x,y,s}=this.cellRect(i); if(mx>=x&&mx<x+s&&my>=y&&my<y+s){ this.selected=i; break; } } });
+    }
+  }
+  window.game=new MathDoku();
+})();
+</script>
+</body>
+</html>

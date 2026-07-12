@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c0a16" />
+<title>视频扑克 · Video Poker</title>
+<style>
+  :root { --bg:#0c0a16; --surface:#16122a; --board:#100d20; --text:#f3eefc; --muted:#9b90c4;
+    --accent:#a06bff; --accent2:#5ce1ff; --danger:#ff5d6c; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 22%, #2a1a52 0%, transparent 55%), radial-gradient(ellipse at 50% 86%, #1a0e3a 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:640px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#d9b8ff,var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.cr .value { color:var(--accent); }
+  .score-card.bt .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px #a06bff22; }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0c0a16dd; backdrop-filter:blur(3px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:2.1rem; font-weight:800; margin-bottom:4px; }
+  .overlay-content p { color:var(--muted); font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#150a26; }
+  .btn.primary:hover { box-shadow:0 0 20px #a06bff66; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#150a26; animation:pg 2s infinite; --glow:#a06bff66; }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); flex-wrap:wrap; }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  .hint { text-align:center; font-size:0.7rem; color:var(--muted); margin-top:8px; }
+  #result-stat b { color:var(--gold); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>视频扑克</h1><div class="sub">V I D E O &nbsp; P O K E R</div></div>
+    <div class="score-panel">
+      <div class="score-card cr"><div class="label">Credits</div><div class="value" id="cr-val">100</div></div>
+      <div class="score-card bt"><div class="label">Best</div><div class="value" id="bt-val">100</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="640" height="380"></canvas>
+    <div class="overlay" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">WIN!</h2><p id="win-msg"></p></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="btn-deal" onclick="game.action()">Deal</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI is playing…</span></div>
+  <div class="stats-bar"><span id="result-stat">Tap cards to HOLD · press Deal/Draw</span><span id="best-stat">Paytable: Royal 250 · SF 50 · 4K 25 · FH 9 · Flush 6 · Str 4 · 3K 3 · 2P 2 · J+ 1</span></div>
+  <div class="hint">Jacks or Better · tap a card to hold it (cyan frame). Auto plays optimal strategy.</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=640, H=380;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+  const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const SUITS=['♠','♥','♦','♣'];
+  const RED={1:1,2:1}; // hearts, diamonds
+  const CW=104, CH=148, GAP=18, SX=(W-5*CW-4*GAP)/2, CY=96;
+  function cardX(i){ return SX + i*(CW+GAP); }
+  function rv(card){ return (card%13)+2; }      // 2..14
+  function rs(card){ return Math.floor(card/13); }
+
+  // ---- deck / eval ----
+  function makeDeck(){ const d=[]; for(let i=0;i<52;i++) d.push(i); return d; }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function rankVals(cards){ return cards.map(rv); }
+  function isFlush(cards){ const s=rs(cards[0]); return cards.every(c=>rs(c)===s); }
+  function straightInfo(cards){
+    const v=rankVals(cards).slice().sort((a,b)=>a-b);
+    const uniq=[...new Set(v)];
+    if(uniq.length!==5) return false;
+    if(uniq[4]-uniq[0]===4) return {hi:uniq[4]};
+    if(uniq[0]===2&&uniq[1]===3&&uniq[2]===4&&uniq[3]===5&&uniq[4]===14) return {hi:5}; // A-2-3-4-5
+    return false;
+  }
+  function evaluate(cards){
+    const v=rankVals(cards);
+    const cnt={}; v.forEach(x=>cnt[x]=(cnt[x]||0)+1);
+    const groups=Object.values(cnt).sort((a,b)=>b-a);
+    const flush=isFlush(cards); const str=straightInfo(cards);
+    const has=(n)=>groups.includes(n);
+    if(flush && str && str.hi===14) return {name:'ROYAL FLUSH', mult:250};
+    if(flush && str) return {name:'STRAIGHT FLUSH', mult:50};
+    if(has(4)) return {name:'FOUR OF A KIND', mult:25};
+    if(has(3)&&has(2)) return {name:'FULL HOUSE', mult:9};
+    if(flush) return {name:'FLUSH', mult:6};
+    if(str) return {name:'STRAIGHT', mult:4};
+    if(has(3)) return {name:'THREE OF A KIND', mult:3};
+    if(groups.filter(g=>g===2).length===2) return {name:'TWO PAIR', mult:2};
+    // jacks or better
+    for(const x of v){ if((x>=11||x===14) && cnt[x]===2) return {name:'JACKS OR BETTER', mult:1}; }
+    return {name:'', mult:0};
+  }
+
+  // ---- auto hold strategy (Jacks or Better) ----
+  function autoHolds(cards){
+    const res=evaluate(cards);
+    if(res.mult>0) return [true,true,true,true,true];
+    const suits=cards.map(rs), vals=cards.map(rv);
+    const bySuit=[ [],[],[],[] ]; cards.forEach((c,i)=>bySuit[rs(c)].push(i));
+    const byVal={}; cards.forEach((c,i)=>{ (byVal[rv(c)]=byVal[rv(c)]||[]).push(i); });
+    const ROYAL=[10,11,12,13,14];
+    // 4 to a royal
+    for(let s=0;s<4;s++){ if(bySuit[s].length>=4){ const idx=bySuit[s]; const rvset=idx.map(i=>vals[i]); if(rvset.filter(x=>ROYAL.includes(x)).length===4){ const h=[false,false,false,false,false]; idx.forEach(i=>h[i]=true); return h; } } }
+    // 4 to a straight flush
+    for(let s=0;s<4;s++){ if(bySuit[s].length>=4){ const rvset=bySuit[s].map(i=>vals[i]).slice().sort((a,b)=>a-b); const uniq=[...new Set(rvset)]; if(uniq.length===4 && (uniq[3]-uniq[0]===3)){ const h=[false,false,false,false,false]; bySuit[s].forEach(i=>h[i]=true); return h; } } }
+    // three of a kind
+    for(const k in byVal){ if(byVal[k].length===3){ const h=[false,false,false,false,false]; byVal[k].forEach(i=>h[i]=true); return h; } }
+    // 4 to a flush
+    for(let s=0;s<4;s++){ if(bySuit[s].length>=4){ const h=[false,false,false,false,false]; bySuit[s].forEach(i=>h[i]=true); return h; } }
+    // 4 to an outside straight (consecutive 4)
+    { const uniq=[...new Set(vals)].sort((a,b)=>a-b); if(uniq.length===4 && uniq[3]-uniq[0]===3){ const h=[false,false,false,false,false]; cards.forEach((c,i)=>{ if(uniq.includes(vals[i])) h[i]=true; }); return h; } if(uniq.length===4 && uniq[0]===2&&uniq[1]===3&&uniq[2]===4&&uniq[3]===14){ const h=[false,false,false,false,false]; cards.forEach((c,i)=>{ if([2,3,4,14].includes(vals[i])) h[i]=true; }); return h; } }
+    // pairs
+    const pairs=Object.keys(byVal).filter(k=>byVal[k].length===2);
+    if(pairs.length===2){ const h=[false,false,false,false,false]; pairs.forEach(k=>byVal[k].forEach(i=>h[i]=true)); return h; }
+    if(pairs.length===1){ const h=[false,false,false,false,false]; byVal[pairs[0]].forEach(i=>h[i]=true); return h; }
+    // 3 to a royal
+    for(let s=0;s<4;s++){ if(bySuit[s].length>=3){ const idx=bySuit[s].filter(i=>ROYAL.includes(vals[i])); if(idx.length===3){ const h=[false,false,false,false,false]; idx.forEach(i=>h[i]=true); return h; } } }
+    // 2 suited high cards
+    for(let s=0;s<4;s++){ const hi=bySuit[s].filter(i=>(vals[i]>=11||vals[i]===14)); if(hi.length>=2){ const h=[false,false,false,false,false]; hi.forEach(i=>h[i]=true); return h; } }
+    // single high card
+    for(let i=0;i<5;i++){ if(vals[i]>=11||vals[i]===14){ const h=[false,false,false,false,false]; h[i]=true; return h; } }
+    return [false,false,false,false,false];
+  }
+
+  // ---- UI ----
+  class VPoker{
+    constructor(){
+      this.autoPlay=false; this.raf=null;
+      this.credits=this.loadBest(); this.best=this.credits;
+      this.phase='ready'; this.hand=null; this.prevHand=null; this.held=[false,false,false,false,false];
+      this.result=null; this.deck=makeDeck(); this.anim=null;
+      this.loop=this.loop.bind(this);
+      this.bind();
+      this.updateUI();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{return parseInt(localStorage.getItem('vpoker_best')||'100')||100;}catch(e){return 100;} }
+    saveBest(){ try{ if(this.credits>this.best){this.best=this.credits; localStorage.setItem('vpoker_best',String(this.best));}}catch(e){} }
+    el(id){ return document.getElementById(id); }
+    bind(){
+      const bw=this.el('board-wrap');
+      bw.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onPointer(e); });
+    }
+    onPointer(e){
+      if(this.autoPlay||this.phase!=='hold') return;
+      const rect=canvas.getBoundingClientRect();
+      const x=(e.clientX-rect.left)*(W/rect.width);
+      const y=(e.clientY-rect.top)*(H/rect.height);
+      if(y<CY||y>CY+CH) return;
+      for(let i=0;i<5;i++){ const cx=cardX(i); if(x>=cx&&x<=cx+CW){ this.held[i]=!this.held[i]; this.updateUI(); return; } }
+    }
+    action(){
+      if(this.autoPlay) return;
+      if(this.phase==='ready'||this.phase==='result') this.deal();
+      else if(this.phase==='hold') this.draw();
+    }
+    deal(){
+      if(this.credits<1) this.credits=100;
+      this.credits-=1;
+      this.saveBest();
+      this.deck=shuffle(makeDeck());
+      this.hand=this.deck.slice(0,5);
+      this.held=[false,false,false,false,false];
+      this.result=null; this.phase='hold'; this.anim={type:'deal',start:performance.now()};
+      this.hideOverlay('overlay-win');
+      this.updateUI();
+    }
+    draw(){
+      this.prevHand=this.hand.slice();
+      for(let i=0;i<5;i++){ if(!this.held[i]){ this.hand[i]=this.deck[5+i]; } }
+      this.result=evaluate(this.hand);
+      this.credits += this.result.mult;
+      this.saveBest();
+      this.phase='result'; this.anim={type:'draw',start:performance.now()};
+      if(this.result.mult>0){ this.el('win-title').textContent=this.result.name; this.el('win-msg').textContent='+'+(this.result.mult)+' credits'; this.showOverlay('overlay-win'); }
+      this.updateUI();
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){
+      this.autoPlay=true;
+      const b=this.el('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      this.el('ai-indicator').style.display='flex';
+      if(this.phase==='ready'||this.phase==='result') this.deal();
+      this._autoAcc=0;
+    }
+    stopAuto(){
+      this.autoPlay=false;
+      const b=this.el('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      this.el('ai-indicator').style.display='none';
+    }
+    loop(now){
+      try{
+        const dt=Math.min(0.05,(now!==undefined)?((now-(this._last||now))/1000):0.016); this._last=now;
+        this.update(dt); this.render(now);
+      }catch(e){ console.error(e); }
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    update(dt){
+      if(this.anim){
+        const dur = this.anim.type==='deal'? 260+4*70 : 520;
+        if((performance.now()-this.anim.start)/dur>=1) this.anim=null;
+      }
+      if(this.autoPlay && !this.anim){
+        this._autoAcc+=dt;
+        const delay = (this.phase==='hold')?0.6:1.3;
+        if(this._autoAcc>delay){
+          this._autoAcc=0;
+          if(this.phase==='hold'){ this.held=autoHolds(this.hand); this.updateUI(); this.draw(); }
+          else if(this.phase==='result'||this.phase==='ready'){ this.deal(); }
+        }
+      }
+    }
+    render(now){
+      ctx.clearRect(0,0,W,H);
+      for(let i=0;i<5;i++){
+        let x=cardX(i), y=CY, alpha=1, scale=1;
+        const deal=this.anim&&this.anim.type==='deal';
+        const drw=this.anim&&this.anim.type==='draw';
+        if(deal){
+          const t=clamp((now-this.anim.start - i*70)/260,0,1); const e=ease(t);
+          x=lerp(W+60, cardX(i), e); alpha=t;
+        } else if(drw){
+          const held=this.held[i];
+          if(held){
+            const t=clamp((now-this.anim.start)/260,0,1); alpha=t; // fade in new (already held stays)
+          } else {
+            const t=clamp((now-this.anim.start)/520,0,1);
+            if(t<0.4){ const e=ease(t/0.4); y=CY+lerp(0,200,e); alpha=1-e; }
+            else { const e=ease((t-0.4)/0.6); y=lerp(CY-200,CY,e); alpha=e; }
+          }
+        }
+        ctx.save(); ctx.globalAlpha=alpha;
+        if(this.hand) this.drawCard(x,y,i, this.hand[i], this.held[i]&&this.phase==='hold');
+        else this.drawCardBack(x,y);
+        ctx.restore();
+      }
+    }
+    drawCardBack(x,y){
+      ctx.fillStyle='#221a3e'; ctx.strokeStyle='#4a3a72'; ctx.lineWidth=2; this.rr(x,y,CW,CH,12); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#a06bff'; ctx.font='bold 26px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('♦',x+CW/2,y+CH/2);
+    }
+    drawCard(x,y,i,card,held){
+      const red=RED[rs(card)];
+      ctx.save();
+      if(held){ ctx.shadowColor='#5ce1ff'; ctx.shadowBlur=18; }
+      ctx.fillStyle='#fbf8ff'; ctx.strokeStyle=held?'#5ce1ff':'#cfc6e6'; ctx.lineWidth=held?3:2;
+      this.rr(x,y,CW,CH,12); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.fillStyle=red?'#ff4d6a':'#1a1430';
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.font='bold 22px Segoe UI, sans-serif';
+      ctx.fillText(RANKS[card%13], x+10, y+9);
+      ctx.font='20px Segoe UI, sans-serif';
+      ctx.fillText(SUITS[rs(card)], x+10, y+33);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font='bold 54px Segoe UI, sans-serif';
+      ctx.fillText(SUITS[rs(card)], x+CW/2, y+CH/2+6);
+      if(held){
+        ctx.fillStyle='#5ce1ff'; ctx.font='bold 13px Segoe UI, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+        ctx.fillText('HELD', x+CW/2, y+CH-8);
+      }
+      ctx.restore();
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    showOverlay(id){ const o=this.el(id); if(o) o.classList.add('active'); }
+    hideOverlay(id){ const o=this.el(id); if(o) o.classList.remove('active'); }
+    updateUI(){
+      this.el('cr-val').textContent=this.credits;
+      this.el('bt-val').textContent=this.best;
+      this.el('btn-deal').textContent = (this.phase==='hold')?'Draw':'Deal';
+      const rs2=this.el('result-stat');
+      if(this.phase==='result'&&this.result){ rs2.innerHTML = this.result.mult>0? ('<b>'+this.result.name+'  +'+this.result.mult+'</b>') : (this.result.name?('Result: '+this.result.name):'No win — try again');
+      } else if(this.phase==='hold'){ rs2.textContent='Select cards to HOLD, then Draw'; }
+      else { rs2.textContent='Press Deal to start'; }
+    }
+  }
+  window.game=new VPoker();
+})();
+</script>
+</body>
+</html>

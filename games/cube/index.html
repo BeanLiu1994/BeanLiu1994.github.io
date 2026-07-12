@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0612" />
+<title>立方体跳跃 · Cube Hop</title>
+<style>
+  :root { --bg:#0a0612; --surface:#150d24; --board:#100a1c; --text:#f3e9ff; --muted:#9b86c4;
+    --accent:#b15cff; --accent2:#5ce1ff; --danger:#ff5d6c; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 24%, #2a1450 0%, transparent 55%), radial-gradient(ellipse at 50% 86%, #15083a 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:600px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#e0b3ff,var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:50px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.sc .value { color:var(--accent); }
+  .score-card.lv .value { color:var(--accent2); }
+  .score-card.lf .value { color:var(--danger); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px #b15cff33; }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0612ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#150a22; }
+  .btn.primary:hover { box-shadow:0 0 20px #b15cff66; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#150a22; animation:pg 2s infinite; --glow:#b15cff66; }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  .hint { text-align:center; font-size:0.7rem; color:var(--muted); margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>立方体跳跃</h1><div class="sub">C U B E &nbsp; H O P</div></div>
+    <div class="score-panel">
+      <div class="score-card sc"><div class="label">Score</div><div class="value" id="score-val">0</div></div>
+      <div class="score-card lv"><div class="label">Level</div><div class="value" id="level-val">1</div></div>
+      <div class="score-card lf"><div class="label">Lives</div><div class="value" id="lives-val">3</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="600" height="560"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Level Clear!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.nextLevel()">Next Level</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI is planning a path…</span></div>
+  <div class="stats-bar"><span id="best-stat">Best: 0</span><span id="painted-stat">0 / 28 lit</span></div>
+  <div class="hint">Tap a neighbouring cube or use arrow keys / WASD to hop & paint every cube. Avoid the red orb!</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=600, H=560, ROWS=7;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+  const S=64, ROWH=50, TOP=66, CX=W/2;
+  function cubeXY(r,c){ return { x: CX + (c - r/2)*S, y: TOP + r*ROWH }; }
+  function inPyramid(r,c){ return r>=0 && r<ROWS && c>=0 && c<=r; }
+  function neighbors(r,c){
+    const out=[];
+    if(r>0 && c>0) out.push([r-1,c-1]);
+    if(r>0 && c<r) out.push([r-1,c]);
+    if(r+1<ROWS) out.push([r+1,c]);
+    if(r+1<ROWS) out.push([r+1,c+1]);
+    return out;
+  }
+
+  class CubeHop{
+    constructor(){
+      this.autoPlay=false; this.over=false; this.win=false; this.raf=null;
+      this.best=this.loadBest();
+      this.loop=this.loop.bind(this);
+      this.bind();
+      this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{return parseInt(localStorage.getItem('cube_best')||'0')||0;}catch(e){return 0;} }
+    saveBest(){ try{ if(this.score>this.best){this.best=this.score; localStorage.setItem('cube_best',String(this.best));}}catch(e){} }
+    el(id){ return document.getElementById(id); }
+    bind(){
+      const bw=this.el('board-wrap');
+      bw.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onPointer(e); });
+      window.addEventListener('keydown',(e)=>{
+        const k=e.key.toLowerCase();
+        const map={arrowup:'ul',w:'ul',arrowdown:'dr',s:'dr',arrowleft:'ul',a:'ul',arrowright:'dr',d:'dr',q:'ur',e:'dr'};
+        const dirs={ul:[-1,-1],ur:[-1,0],dl:[1,0],dr:[1,1]};
+        if(this.autoPlay) return;
+        let mv=null;
+        if(k==='arrowup'||k==='w') mv='ul';
+        else if(k==='arrowleft'||k==='a') mv='ul';
+        else if(k==='arrowright'||k==='d') mv='dr';
+        else if(k==='arrowdown'||k==='s') mv='dr';
+        else if(k==='q') mv='ur';
+        else if(k==='e') mv='dr';
+        if(mv){ e.preventDefault(); const d=dirs[mv]; this.hop(this.hr+d[0], this.hc+d[1]); }
+      });
+    }
+    onPointer(e){
+      if(this.autoPlay||this.over||this.anim) return;
+      const rect=canvas.getBoundingClientRect();
+      const x=(e.clientX-rect.left)*(W/rect.width);
+      const y=(e.clientY-rect.top)*(H/rect.height);
+      // find nearest neighbour cube to tap
+      let best=null,bd=1e9;
+      for(const [r,c] of neighbors(this.hr,this.hc)){
+        const p=cubeXY(r,c); const d=(p.x-x)*(p.x-x)+(p.y-y)*(p.y-y);
+        if(d<bd){bd=d;best=[r,c];}
+      }
+      if(best && bd< (S*0.7)*(S*0.7)) this.hop(best[0],best[1]);
+    }
+    restart(){
+      this.over=false; this.win=false; this.score=0; this.level=1; this.lives=3;
+      this.initLevel();
+      this.saveBest(); this.updateUI();
+      this.hideOverlay('overlay-win'); this.hideOverlay('overlay-lose');
+      if(this.autoPlay) this.startAuto();
+    }
+    nextLevel(){ this.level++; this.initLevel(); this.hideOverlay('overlay-win'); }
+    initLevel(){
+      this.painted=[]; for(let r=0;r<ROWS;r++){ this.painted[r]=[]; for(let c=0;c<=r;c++) this.painted[r][c]=false; }
+      this.hr=0; this.hc=0; this.painted[0][0]=true;
+      this.anim=null; this.orb=null; this.orbTimer=0; this.orbStep=0;
+      this._autoAcc=0; this._flash=0;
+      this.updateUI();
+    }
+    paintedCount(){ let n=0; for(let r=0;r<ROWS;r++) for(let c=0;c<=r;c++) if(this.painted[r][c]) n++; return n; }
+    totalCubes(){ return ROWS*(ROWS+1)/2; }
+    hop(r,c){
+      if(this.over||this.anim) return;
+      if(!inPyramid(r,c)) return;
+      const ok=neighbors(this.hr,this.hc).some(([nr,nc])=>nr===r&&nc===c);
+      if(!ok) return;
+      const was=!this.painted[r][c];
+      this.anim={fr:this.hr,fc:this.hc,tr:r,tc:c,start:performance.now(),dur:150};
+      this.hr=r; this.hc=c;
+      if(was){ this.painted[r][c]=true; this.score+=10; this._flash=1; }
+      if(this.paintedCount()===this.totalCubes()){ this.levelClear(); }
+      this.updateUI();
+    }
+    levelClear(){
+      this.win=true; this.score+=50*this.level; this.saveBest();
+      this.el('win-msg').textContent='Score '+this.score+' · Best '+this.best;
+      this.showOverlay('overlay-win');
+    }
+    spawnOrb(){
+      // enter at a random top-edge cube
+      const r=0, c=Math.floor(Math.random()*(0+1));
+      this.orb={r:0,c:0,anim:null};
+    }
+    moveOrb(){
+      if(!this.orb) return;
+      const o=this.orb;
+      // exit at bottom
+      if(o.r>=ROWS-1){ this.orb=null; return; }
+      const opts=[];
+      if(inPyramid(o.r+1,o.c)) opts.push([o.r+1,o.c]);
+      if(inPyramid(o.r+1,o.c+1)) opts.push([o.r+1,o.c+1]);
+      if(opts.length===0){ this.orb=null; return; }
+      const [nr,nc]=opts[Math.floor(Math.random()*opts.length)];
+      o.r=nr; o.c=nc;
+      this.checkOrbHit();
+    }
+    checkOrbHit(){
+      if(this.orb && !this.anim && this.orb.r===this.hr && this.orb.c===this.hc){
+        this.loseLife();
+      }
+    }
+    loseLife(){
+      this.lives--; this._flash=1; this._hurt=1;
+      if(this.lives<=0){ this.gameOver(); return; }
+      // respawn hopper at top
+      this.hr=0; this.hc=0; this.anim=null;
+      this.updateUI();
+    }
+    gameOver(){
+      this.over=true; this.saveBest();
+      if(this.autoPlay) this.stopAuto();
+      this.el('lose-msg').textContent='Score '+this.score+' · Best '+this.best;
+      this.showOverlay('overlay-lose');
+    }
+    // ---------- auto ----------
+    toggleAuto(){
+      if(this.autoPlay) this.stopAuto(); else this.startAuto();
+    }
+    startAuto(){
+      this.autoPlay=true; this._autoAcc=0;
+      const b=this.el('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      const ai=this.el('ai-indicator'); ai.style.display='flex';
+      if(this.over){ this.restart(); }
+    }
+    stopAuto(){
+      this.autoPlay=false;
+      const b=this.el('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      const ai=this.el('ai-indicator'); ai.style.display='none';
+    }
+    autoStep(){
+      if(this.over||this.anim) return;
+      if(this.win){ return; }
+      // BFS to nearest unpainted cube avoiding orb
+      const target=this.bfsTarget();
+      if(!target){ // none reachable; idle hop to stay safe
+        return;
+      }
+      const d=neighbors(this.hr,this.hc);
+      // pick neighbour that is on shortest path (greedy by distance to target)
+      let pick=null,bestD=1e9;
+      for(const [r,c] of d){
+        if(this.orb && ((r===this.orb.r&&c===this.orb.c))) continue;
+        const dist=Math.abs(r-target.r)+Math.abs(c-target.c)+Math.abs(r-c - (target.r-target.c))/2;
+        if(dist<bestD){bestD=dist;pick=[r,c];}
+      }
+      if(pick) this.hop(pick[0],pick[1]);
+    }
+    bfsTarget(){
+      const start=[this.hr,this.hc];
+      const q=[start]; const seen=new Set([start[0]+','+start[1]]);
+      let bi=0;
+      while(bi<q.length){
+        const [r,c]=q[bi++];
+        if(!this.painted[r][c]) return {r,c};
+        for(const [nr,nc] of neighbors(r,c)){
+          const key=nr+','+nc;
+          if(seen.has(key)) continue;
+          if(this.orb && nr===this.orb.r && nc===this.orb.c) continue;
+          seen.add(key); q.push([nr,nc]);
+        }
+      }
+      return null;
+    }
+    // ---------- loop ----------
+    loop(now){
+      try{
+        const dt=Math.min(0.05,(now!==undefined)?((now-(this._last||now))/1000):0.016); this._last=now;
+        this.update(dt, now);
+        this.render(now);
+      }catch(e){ console.error(e); }
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    update(dt, now){
+      if(this.anim){
+        const t=clamp((now-this.anim.start)/this.anim.dur,0,1);
+        if(t>=1) this.anim=null;
+      }
+      if(this._flash>0) this._flash=Math.max(0,this._flash-dt*2.5);
+      if(this._hurt>0) this._hurt=Math.max(0,this._hurt-dt*1.5);
+      if(this.over||this.win) return;
+      // orb spawning
+      if(!this.orb){
+        this.orbTimer+=dt;
+        const interval=Math.max(3.2, 6.5-this.level*0.3);
+        if(this.orbTimer>interval){ this.orbTimer=0; this.spawnOrb(); }
+      } else {
+        this.orbStep+=dt;
+        const stepT=Math.max(0.45, 0.85-this.level*0.04);
+        if(this.orbStep>stepT){ this.orbStep=0; this.moveOrb(); }
+      }
+      // auto
+      if(this.autoPlay && !this.anim && !this.over){
+        this._autoAcc+=dt;
+        const delay=0.22;
+        if(this._autoAcc>delay){ this._autoAcc=0; this.autoStep(); }
+      }
+    }
+    // ---------- render ----------
+    render(now){
+      ctx.clearRect(0,0,W,H);
+      // cubes
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<=r;c++){
+          const p=cubeXY(r,c); const lit=this.painted[r][c];
+          this.drawCube(p.x,p.y,lit, now, r, c);
+        }
+      }
+      // hopper
+      let hx,hy;
+      if(this.anim){
+        const t=ease(clamp((now-this.anim.start)/this.anim.dur,0,1));
+        const a=cubeXY(this.anim.fr,this.anim.fc), b=cubeXY(this.anim.tr,this.anim.tc);
+        hx=lerp(a.x,b.x,t); hy=lerp(a.y,b.y,t)-Math.sin(t*Math.PI)*14;
+      } else { const p=cubeXY(this.hr,this.hc); hx=p.x; hy=p.y; }
+      this.drawHopper(hx,hy,now);
+      // orb
+      if(this.orb){
+        const p=cubeXY(this.orb.r,this.orb.c);
+        const pulse=0.5+0.5*Math.sin(now/120);
+        ctx.save();
+        ctx.shadowColor='#ff5d6c'; ctx.shadowBlur=18+pulse*10;
+        ctx.fillStyle='#ff5d6c';
+        ctx.beginPath(); ctx.arc(p.x,p.y,15,0,7); ctx.fill();
+        ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(p.x-4,p.y-4,3,0,7); ctx.fill();
+        ctx.restore();
+      }
+    }
+    drawCube(x,y,lit,now,r,c){
+      const s=27;
+      ctx.save();
+      ctx.translate(x,y);
+      const glow=lit?1:0.25;
+      ctx.shadowColor= lit?'#b15cff':'#3a2a55'; ctx.shadowBlur= lit?16:4;
+      ctx.fillStyle= lit? '#b15cff' : '#241a38';
+      ctx.strokeStyle= lit? '#e9c9ff' : '#4a3a66';
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(0,-s); ctx.lineTo(s,0); ctx.lineTo(0,s); ctx.lineTo(-s,0); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      if(lit){
+        ctx.shadowBlur=0; ctx.fillStyle='#ffffff';
+        ctx.beginPath(); ctx.arc(0,0,5,0,7); ctx.fill();
+      }
+      ctx.restore();
+    }
+    drawHopper(x,y,now){
+      const pulse=0.5+0.5*Math.sin(now/150);
+      ctx.save(); ctx.translate(x,y);
+      ctx.shadowColor='#5ce1ff'; ctx.shadowBlur=16+pulse*8;
+      ctx.fillStyle='#5ce1ff';
+      ctx.beginPath(); ctx.arc(0,-4,12,0,7); ctx.fill();
+      ctx.fillStyle='#0a0612';
+      ctx.beginPath(); ctx.arc(-4,-6,2.2,0,7); ctx.arc(4,-6,2.2,0,7); ctx.fill();
+      ctx.restore();
+      if(this._hurt>0){
+        ctx.save(); ctx.globalAlpha=this._hurt; ctx.strokeStyle='#ff5d6c'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(x,y,22+ (1-this._hurt)*16,0,7); ctx.stroke(); ctx.restore();
+      }
+    }
+    // ---------- ui ----------
+    showOverlay(id){ const o=this.el(id); if(o) o.classList.add('active'); }
+    hideOverlay(id){ const o=this.el(id); if(o) o.classList.remove('active'); }
+    updateUI(){
+      this.el('score-val').textContent=this.score;
+      this.el('level-val').textContent=this.level;
+      this.el('lives-val').textContent=this.lives;
+      this.el('best-stat').textContent='Best: '+this.best;
+      this.el('painted-stat').textContent=this.paintedCount()+' / '+this.totalCubes()+' lit';
+    }
+  }
+  window.game=new CubeHop();
+})();
+</script>
+</body>
+</html>

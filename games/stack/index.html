@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹叠塔 · Tower Stack</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dd0ff; --accent-glow:#4dd0ff66; --danger:#ff5d8a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #103048 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #301040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#a0e8ff,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.4rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.h .value { color:var(--accent); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:pointer; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; color:var(--danger); }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.96); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#021018; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#021018; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); flex-wrap:wrap; }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹叠塔</h1><div class="sub">T O W E R &nbsp; S T A C K</div></div>
+    <div class="score-panel">
+      <div class="score-card h"><div class="label">Height</div><div class="value" id="score-h">1</div></div>
+      <div class="score-card"><div class="label">Best</div><div class="value" id="score-best">1</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="460" height="520"></canvas>
+    <div class="overlay" id="overlay-over"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="over-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI is stacking…</span></div>
+  <div class="stats-bar"><span>Tap / click to drop</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=460, H=520, BLOCK_H=28, TOP_Y=120, MOVER_Y=92;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const clamp=(v,a,b)=> v<a?a:(v>b?b:v);
+
+  class Stack {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null;
+      this.best=1; this.over=false; this.blocks=[]; this.mover=null; this.falling=[];
+      this.shake=0; this.flash=0; this.autoBias=0;
+      this.loop=this.loop.bind(this); this.bind();
+      this.loadBest();
+      this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{ return parseInt(localStorage.getItem('stack_best')||'1')||1; }catch(e){ return 1; } }
+    saveBest(){ try{ localStorage.setItem('stack_best', String(this.best)); }catch(e){} }
+    hue(i){ return (i*41)%360; }
+    restart(){
+      this.stopAuto(); this.over=false; this.falling=[]; this.shake=0; this.flash=0;
+      const w0=120; this.blocks=[{x:W/2-w0/2, w:w0, color:'hsl('+this.hue(0)+',75%,60%)'}];
+      this.spawnMover(w0);
+      document.getElementById('score-h').textContent=this.blocks.length;
+      document.getElementById('score-best').textContent=this.best;
+      document.getElementById('overlay-over').classList.remove('active');
+    }
+    spawnMover(w){
+      this.mover={ x:0, w:w, dir: Math.random()<0.5?1:-1, color:'hsl('+this.hue(this.blocks.length)+',75%,62%)', speed: 1.8+Math.min(this.blocks.length*0.08,2.2) };
+      this.autoBias=(Math.random()*16-8);
+    }
+    drop(){
+      if(this.over || !this.mover) return;
+      const top=this.blocks[this.blocks.length-1];
+      const nx=Math.max(this.mover.x, top.x);
+      const nr=Math.min(this.mover.x+this.mover.w, top.x+top.w);
+      const nw=nr-nx;
+      if(nw<=2){ this.over=true; this.shake=14; this.flash=1; this.onOver(); return; }
+      // overhang
+      if(this.mover.x < top.x){ this.falling.push({x:this.mover.x, w:top.x-this.mover.x, y:MOVER_Y, vy:0, color:this.mover.color}); }
+      if(this.mover.x+this.mover.w > top.x+top.w){ this.falling.push({x:top.x+top.w, w:(this.mover.x+this.mover.w)-(top.x+top.w), y:MOVER_Y, vy:0, color:this.mover.color}); }
+      this.blocks.push({x:nx, w:nw, color:this.mover.color});
+      this.flash=0.6;
+      if(this.blocks.length>this.best){ this.best=this.blocks.length; this.saveBest(); }
+      document.getElementById('score-h').textContent=this.blocks.length;
+      document.getElementById('score-best').textContent=this.best;
+      this.spawnMover(nw);
+    }
+    onOver(){
+      this.stopAuto();
+      document.getElementById('over-msg').textContent='Height reached: '+this.blocks.length;
+      document.getElementById('overlay-over').classList.add('active');
+    }
+    step(dt){
+      if(this.flash>0) this.flash=Math.max(0,this.flash-dt*0.04);
+      if(this.shake>0) this.shake=Math.max(0,this.shake-dt);
+      if(!this.over && this.mover){
+        const m=this.mover;
+        m.x += m.dir*m.speed*dt;
+        if(m.x<=0){ m.x=0; m.dir=1; }
+        if(m.x+m.w>=W){ m.x=W-m.w; m.dir=-1; }
+        if(this.autoPlay){
+          const top=this.blocks[this.blocks.length-1];
+          const target=top.x+top.w/2 - m.w/2 + this.autoBias;
+          if(Math.abs(m.x-target) < 3){ this.drop(); }
+        }
+      }
+      // falling pieces
+      for(const f of this.falling){ f.vy += 0.6*dt; f.y += f.vy*dt; }
+      this.falling=this.falling.filter(f=> f.y < H+40);
+    }
+    loop(now){
+      const dt=Math.max(0.4,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      const sx = this.shake>0 ? (Math.random()*2-1)*this.shake*0.4 : 0;
+      ctx.save(); ctx.translate(sx,0);
+      const topIdx=this.blocks.length-1;
+      // blocks
+      for(let i=0;i<this.blocks.length;i++){ const b=this.blocks[i];
+        const y=TOP_Y + (topIdx-i)*BLOCK_H;
+        this.drawBlock(b.x, y, b.w, b.color, i===topIdx && this.flash>0);
+      }
+      // mover
+      if(this.mover && !this.over){ this.drawBlock(this.mover.x, MOVER_Y, this.mover.w, this.mover.color, false); }
+      // falling
+      for(const f of this.falling){ ctx.globalAlpha=Math.max(0,1-f.y/(H)); this.drawBlock(f.x, f.y, f.w, f.color, false); ctx.globalAlpha=1; }
+      ctx.restore();
+      if(this.flash>0){ ctx.fillStyle='rgba(255,255,255,'+(this.flash*0.12)+')'; ctx.fillRect(0,0,W,H); }
+    }
+    drawBlock(x,y,w,color,glow){
+      const rr=6;
+      ctx.beginPath();
+      ctx.moveTo(x+rr,y); ctx.arcTo(x+w,y,x+w,y+BLOCK_H,rr); ctx.arcTo(x+w,y+BLOCK_H,x,y+BLOCK_H,rr);
+      ctx.arcTo(x,y+BLOCK_H,x,y,rr); ctx.arcTo(x,y,x+w,y,rr); ctx.closePath();
+      ctx.fillStyle=color; if(glow){ ctx.shadowColor=color; ctx.shadowBlur=18; } else { ctx.shadowColor=color; ctx.shadowBlur=6; }
+      ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.fillRect(x+2,y+2,w-4,3);
+      ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){ if(this.over) this.restart(); this.autoPlay=true;
+      const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      const ind=document.getElementById('ai-indicator'); if(ind) ind.style.display='flex';
+      document.getElementById('ai-status').textContent='AI is stacking…'; }
+    stopAuto(){ this.autoPlay=false;
+      const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      const ind=document.getElementById('ai-indicator'); if(ind) ind.style.display='none'; }
+    bind(){ canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; this.drop(); }); }
+  }
+  window.game=new Stack();
+})();
+</script>
+</body>
+</html>
