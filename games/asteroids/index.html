@@ -131,11 +131,11 @@
       }
       return best;
     }
-    fire(){
+    fire(cool){
       if(this.cool>0) return;
       const a=this.ship.angle;
       this.bullets.push({x:this.ship.x+Math.cos(a)*SHIPR, y:this.ship.y+Math.sin(a)*SHIPR, vx:Math.cos(a)*BSPEED, vy:Math.sin(a)*BSPEED, life:60});
-      this.cool=14;
+      this.cool=(cool!==undefined)?cool:14;
     }
     updateUI(){
       g('score').textContent=this.score;
@@ -143,27 +143,70 @@
       g('wave-stat').textContent='Wave: '+this.wave;
       g('lives-stat').textContent='Lives: '+('♥'.repeat(this.lives)||'—');
     }
+    autoControl(){
+      const s=this.ship;
+      let nearest=null, nearD=1e9;
+      for(const a of this.asts){
+        const d=Math.hypot(a.x-s.x, a.y-s.y);
+        if(d<nearD){ nearD=d; nearest=a; }
+      }
+      if(!nearest) return {ta:s.angle, thrust:true, fire:false};
+      // predictive aim: where the rock will be when a bullet arrives
+      const d=Math.hypot(nearest.x-s.x, nearest.y-s.y);
+      const t=d/BSPEED;
+      const px=nearest.x+nearest.vx*t, py=nearest.y+nearest.vy*t;
+      const aim=Math.atan2(py-s.y, px-s.x);
+      // flee vector from any rock that is genuinely close to the ship's CURRENT position
+      let ax=0, ay=0, danger=false;
+      for(const a of this.asts){
+        const cur=Math.hypot(a.x-s.x, a.y-s.y);
+        if(cur<110){
+          danger=true;
+          const w=(110-cur)/110;
+          ax+=(s.x-a.x)/cur*w*w; ay+=(s.y-a.y)/cur*w*w;
+        }
+      }
+      let ta, thrust=false, fire=false;
+      if(danger && Math.hypot(ax,ay)>0.05){
+        // a rock is right on us: break off and thrust away (no shooting while fleeing)
+        ta=Math.atan2(ay,ax);
+        thrust=true;
+      } else {
+        // clear enough: aim at the predicted rock position and shoot it down at range
+        ta=aim;
+        const offAim=Math.abs(norm(aim-s.angle));
+        fire=offAim<0.20;                 // fire only when the shot is actually lined up
+        if(fire){
+          // lined up: hold steady for a clean shot (no strafing while firing)
+        } else if(offAim<0.9){
+          // turning toward the rock: keep a gentle tangential drift so we stay mobile,
+          // but never so much that the ship slides off the firing line.
+          const sp=Math.hypot(s.vx,s.vy);
+          if(sp<0.7) thrust=true;        // only top up speed when nearly stopped
+          ta=aim;                        // keep facing the rock while we turn
+        } else {
+          // badly mis-aimed (just respawned, etc.): turn to the rock and drift slightly
+          const sp=Math.hypot(s.vx,s.vy);
+          if(sp<0.5) thrust=true;
+        }
+      }
+      return {ta, thrust, fire};
+    }
     step(dt){
       if(this.over) return;
       const s=this.ship;
-      let ta;
+      let ta, thrust=false, fire=false;
       if(this.autoPlay){
-        const t=this.nearest();
-        ta = t ? Math.atan2(t.y-s.y, t.x-s.x) : -Math.PI/2;
+        const c=this.autoControl();
+        ta=c.ta; thrust=c.thrust; fire=c.fire;
       } else {
         ta=Math.atan2(this.pdy-s.y, this.pdx-s.x);
-      }
-      const diff=norm(ta-s.angle);
-      const turn=Math.max(-TURN*dt, Math.min(TURN*dt, diff));
-      s.angle+=turn;
-      let thrust=false;
-      if(this.autoPlay){
-        const t=this.nearest();
-        if(t){ const d=Math.hypot(t.x-s.x, t.y-s.y); thrust = d>55 && d<270; }
-        if(s.x<70||s.x>W-70||s.y<70||s.y>H-70) thrust=true;
-      } else {
         thrust=this.pdown;
       }
+      const diff=norm(ta-s.angle);
+      const turnRate=this.autoPlay ? TURN*2.4 : TURN;
+      const turn=Math.max(-turnRate*dt, Math.min(turnRate*dt, diff));
+      s.angle+=turn;
       if(thrust){
         s.vx+=Math.cos(s.angle)*THRUST*dt;
         s.vy+=Math.sin(s.angle)*THRUST*dt;
@@ -177,8 +220,13 @@
       if(s.y<0)s.y+=H; if(s.y>H)s.y-=H;
       if(s.inv>0)s.inv-=dt;
       const aligned=Math.abs(norm(ta-s.angle))<0.3;
+      const fireCool = this.autoPlay ? 9 : 14;
       if(this.cool>0)this.cool-=dt;
-      if(aligned && this.cool<=0) this.fire();
+      if(aligned && this.cool<=0){
+        if(this.autoPlay ? fire : this.pdown){
+          this.fire(fireCool);
+        }
+      }
       // bullets
       for(let i=this.bullets.length-1;i>=0;i--){
         const b=this.bullets[i];
@@ -219,7 +267,7 @@
             this.lives--;
             this.updateUI();
             if(this.lives<=0){ this.over=true; this.gameOver(); }
-            else { s.x=W/2; s.y=H/2; s.vx=0; s.vy=0; s.angle=-Math.PI/2; s.inv=90; }
+            else { s.x=W/2; s.y=H/2; s.vx=0; s.vy=0; s.angle=-Math.PI/2; s.inv=120; }
             break;
           }
         }
