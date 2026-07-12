@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>黄金矿工 · Gold Runner</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6ecff;
+    --muted:#8a92b2; --accent:#ffb454; --accent-glow:rgba(255,180,84,.55);
+    --gold:#ffd84d; --red:#ff5d6c; --green:#3ecf8e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:680px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#ffd84d,#ffb454);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#7a4d12,#ffb454);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,660px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(255,180,84,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,26,.72);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(255,180,84,.25)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>黄金矿工 · Gold Runner</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">滑动 / 方向键移动；靠近守卫时自动向下挖洞困住它。收集全部金子后前往出口 ▣。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">过关！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">继续</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function rrect(ctx,x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+const FLOOR=0, BRICK=1, GOLD=2, HOLE=3;
+class GoldRunner {
+  constructor(){
+    this.COLS=19; this.ROWS=12;
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false; this._autoProgress=0; this.autoTimer=null;
+    this._cssW=0; this._last=null; this.score=0;
+    this.best=parseFloat(localStorage.getItem('grBest')||'0')||0;
+    this.level=1;
+    this.fit();
+    this.restart();
+    this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.cell=Math.min(w,h)/Math.max(this.ROWS*0.62,this.COLS); // keep aspect
+    this.cell=Math.min((w*0.98)/this.COLS,(h*0.98)/this.ROWS);
+    this.ox=(w-this.cell*this.COLS)/2; this.oy=(h-this.cell*this.ROWS)/2;
+    this._cssW=rect.width;
+  }
+  /* ---------- level generation ---------- */
+  passablePlayer(r,c){ return r>=0&&r<this.ROWS&&c>=0&&c<this.COLS&&this.grid[r][c]!==BRICK; }
+  passableGuard(r,c){ return r>=0&&r<this.ROWS&&c>=0&&c<this.COLS&&this.grid[r][c]!==BRICK&&this.grid[r][c]!==HOLE; }
+  gen(){
+    const R=this.ROWS,C=this.COLS;
+    const g=Array.from({length:R},()=>new Array(C).fill(FLOOR));
+    for(let c=0;c<C;c++){ g[0][c]=BRICK; g[R-1][c]=BRICK; }
+    for(let r=0;r<R;r++){ g[r][0]=BRICK; g[r][C-1]=BRICK; }
+    for(let r=2;r<R-2;r++)for(let c=2;c<C-2;c++) if(Math.random()<0.11) g[r][c]=BRICK;
+    // gold
+    let gold=0;
+    for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){ if(g[r][c]===FLOOR && Math.random()<0.13){ g[r][c]=GOLD; gold++; } }
+    if(gold<10){ for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){ if(g[r][c]===FLOOR && gold<14 && Math.random()<0.3){ g[r][c]=GOLD; gold++; } } }
+    const pr=1,pc=1; g[pr][pc]=FLOOR;
+    const er=R-2,ec=C-2; g[er][ec]=FLOOR;
+    this.grid=g; this.goldTotal=gold; this.goldCount=0; this.holes=[]; this.lives=3;
+    // player
+    this.player={r:pr,c:pc,rx:pr,ry:pc,tr:pr,tc:pc,moving:false,trapped:false,trapT:0,dir:{x:1,y:0}};
+    // guards: place on floor far from player
+    this.guards=[];
+    const candidates=[];
+    for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){ if(g[r][c]===FLOOR && (Math.abs(r-pr)+Math.abs(c-pc))>5) candidates.push([r,c]); }
+    shuffle(candidates);
+    for(let i=0;i<3 && i<candidates.length;i++){
+      const [r,c]=candidates[i];
+      this.guards.push({r,c,rx:r,ry:c,tr:r,tc:c,moving:false,trapped:false,trapT:0,stepT:0,dir:{x:0,y:0}});
+    }
+    this.exit={r:er,c:ec};
+    this.over=false;
+    this._pendingDir=null;
+    this._updateStatus();
+  }
+  restart(){
+    this.stopAuto();
+    this.gen();
+    this._hideBanner();
+    this._updateStatus();
+  }
+  /* ---------- BFS ---------- */
+  bfsNext(sr,sc,goalFn,passable){
+    const R=this.ROWS,C=this.COLS;
+    const dist=Array.from({length:R},()=>new Array(C).fill(-1));
+    const prev=Array.from({length:R},()=>new Array(C).fill(null));
+    const q=[[sr,sc]]; dist[sr][sc]=0;
+    let head=0;
+    while(head<q.length){
+      const [r,c]=q[head++];
+      if(goalFn(r,c) && (r!==sr||c!==sc)) {
+        // backtrack
+        let cur=[r,c];
+        while(prev[cur[0]][cur[1]] && !(prev[cur[0]][cur[1]][0]===sr&&prev[cur[0]][cur[1]][1]===sc)) cur=prev[cur[0]][cur[1]];
+        return {r:cur[0],c:cur[1]};
+      }
+      for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nr=r+dr,nc=c+dc;
+        if(nr<0||nr>=R||nc<0||nc>=C) continue;
+        if(dist[nr][nc]!==-1) continue;
+        if(!passable(nr,nc)) continue;
+        dist[nr][nc]=dist[r][c]+1; prev[nr][nc]=[r,c]; q.push([nr,nc]);
+      }
+    }
+    return null;
+  }
+  /* ---------- movement ---------- */
+  startStep(ent,tr,tc,passable){
+    if(!passable(tr,tc)) return false;
+    ent.tr=tr; ent.tc=tc; ent.moving=true;
+    ent.dir={x:Math.sign(tc-ent.c),y:Math.sign(tr-ent.r)};
+    return true;
+  }
+  digBelow(){
+    const p=this.player; const r=p.r+1,c=p.c;
+    if(r<this.ROWS && this.grid[r][c]===FLOOR){
+      this.grid[r][c]=HOLE; this.holes.push({r,c,t:PNOW()+4000}); this._autoProgress++;
+      return true;
+    }
+    return false;
+  }
+  decidePlayer(){
+    const p=this.player;
+    if(p.moving||p.trapped) return;
+    // auto
+    if(this.autoPlay){
+      // danger?
+      let danger=null;
+      for(const g of this.guards){ if(g.trapped) continue; const d=Math.abs(g.r-p.r)+Math.abs(g.c-p.c); if(d<=1){ danger=g; break; } }
+      if(danger){
+        // dig below if possible, then move away
+        if(this.digBelow()){
+          // after digging, try move up or perpendicular away
+          const away=this.awayDir(danger);
+          if(away && this.startStep(p,p.r+away.y,p.c+away.x,this.passablePlayer.bind(this))) return;
+        }
+        const away=this.awayDir(danger);
+        if(away && this.startStep(p,p.r+away.y,p.c+away.x,this.passablePlayer.bind(this))) return;
+        return;
+      }
+      // target
+      let goal;
+      if(this.goldCount>=this.goldTotal) goal=(r,c)=> (r===this.exit.r&&c===this.exit.c);
+      else goal=(r,c)=> this.grid[r][c]===GOLD;
+      const next=this.bfsNext(p.r,p.c,goal,this.passablePlayer.bind(this));
+      if(next && this.startStep(p,next.r,next.c,this.passablePlayer.bind(this))) return;
+      // else idle
+      return;
+    }
+    // manual: consume pending swipe
+    if(this._pendingDir){
+      const d=this._pendingDir; this._pendingDir=null;
+      const tr=p.r+d.y, tc=p.c+d.x;
+      if(d.y===1 && d.x===0 && this.grid[p.r+1] && this.grid[p.r+1][p.c]===FLOOR){
+        // manual dig down
+        this.digBelow(); return;
+      }
+      if(this.startStep(p,tr,tc,this.passablePlayer.bind(this))) return;
+    }
+  }
+  awayDir(g){
+    const p=this.player;
+    const opts=[[0,1],[0,-1],[1,0],[-1,0]].map(([y,x])=>({y,x}))
+      .filter(d=> this.passablePlayer(p.r+d.y,p.c+d.x));
+    if(!opts.length) return null;
+    opts.sort((a,b)=>{
+      const da=Math.abs((p.r+a.y)-g.r)+Math.abs((p.c+a.x)-g.c);
+      const db=Math.abs((p.r+b.y)-g.r)+Math.abs((p.c+b.x)-g.c);
+      return db-da;
+    });
+    return opts[0];
+  }
+  decideGuard(g){
+    if(g.moving||g.trapped) return;
+    g.stepT+=1;
+    // BFS toward player
+    const next=this.bfsNext(g.r,g.c,(r,c)=> (r===this.player.r&&c===this.player.c),this.passableGuard.bind(this));
+    if(next){ this.startStep(g,next.r,next.c,this.passableGuard.bind(this)); }
+    else { // random
+      const opts=[[0,1],[0,-1],[1,0],[-1,0]].filter(d=>this.passableGuard(g.r+d.y,g.c+d.x));
+      if(opts.length){ const d=opts[(Math.random()*opts.length)|0]; this.startStep(g,g.r+d.y,g.c+d.x,this.passableGuard.bind(this)); }
+    }
+  }
+  /* ---------- auto ---------- */
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){
+    this.autoPlay=true; this._autoProgress=0;
+    this._hideBanner();
+    document.getElementById('autoBtn').classList.add('on');
+    document.getElementById('autoBtn').textContent='停止';
+    this._updateStatus();
+  }
+  stopAuto(){
+    this.autoPlay=false;
+    if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; }
+    document.getElementById('autoBtn').classList.remove('on');
+    document.getElementById('autoBtn').textContent='自动';
+  }
+  /* ---------- interaction ---------- */
+  _bind(){
+    const cv=this.canvas;
+    let sx=0,sy=0,down=false;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; down=true; sx=e.clientX; sy=e.clientY; });
+    cv.addEventListener('pointermove',e=>{ if(!down||this.autoPlay) return; const dx=e.clientX-sx, dy=e.clientY-sy; if(Math.abs(dx)+Math.abs(dy)>14){ if(Math.abs(dx)>Math.abs(dy)) this._pendingDir={x:Math.sign(dx),y:0}; else this._pendingDir={x:0,y:Math.sign(dy)}; down=false; } });
+    cv.addEventListener('pointerup',e=>{ down=false; });
+    cv.addEventListener('pointercancel',e=>{ down=false; });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); if(this.over){ this.level=1; this.score=0; this.restart(); } else { this.restart(); } };
+    window.addEventListener('keydown',e=>{
+      if(this.autoPlay) return;
+      const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+      const k=e.key.length===1?e.key.toLowerCase():e.key;
+      if(m[k]){ this._pendingDir={x:m[k][0],y:m[k][1]}; e.preventDefault(); }
+      else if(k===' '){ this.digBelow(); e.preventDefault(); }
+    });
+  }
+  _moveEnt(ent,dt,speed){
+    if(!ent.moving) return;
+    const step=dt*speed;
+    const dr=ent.tr-ent.rx, dc=ent.tc-ent.ry;
+    const dist=Math.hypot(dr,dc);
+    if(dist<=step){ ent.rx=ent.tr; ent.ry=ent.tc; ent.r=ent.tr; ent.c=ent.tc; ent.moving=false; }
+    else { ent.rx+=dr/dist*step; ent.ry+=dc/dist*step; }
+  }
+  tick(dt){
+    const now=PNOW();
+    // refill holes
+    this.holes=this.holes.filter(h=>{
+      if(now>=h.t && this.grid[h.r][h.c]===HOLE){ this.grid[h.r][h.c]=FLOOR; return false; }
+      return true;
+    });
+    // player movement (faster)
+    this._moveEnt(this.player,dt,9);
+    if(!this.player.moving) this.decidePlayer();
+    // guard movement
+    for(const g of this.guards){
+      if(g.trapped){
+        g.trapT-=dt;
+        if(g.trapT<=0){ g.trapped=false; }
+        continue;
+      }
+      this._moveEnt(g,dt,6);
+      if(!g.moving){ g.stepT-=dt*4; if(g.stepT<=0){ g.stepT=0; this.decideGuard(g); } }
+    }
+    // arrival effects
+    const p=this.player;
+    if(this.grid[p.r] && this.grid[p.r][p.c]===GOLD){
+      this.grid[p.r][p.c]=FLOOR; this.goldCount++; this.score+=10; this._autoProgress++; this._updateStatus();
+    }
+    // guard steps into hole -> trapped
+    for(const g of this.guards){ if(!g.trapped && this.grid[g.r][g.c]===HOLE){ g.trapped=true; g.trapT=2.4; g.moving=false; } }
+    // capture
+    if(!this.over){
+      for(const g of this.guards){ if(!g.trapped && g.r===p.r && g.c===p.c){ this._caught(); break; } }
+    }
+    // win
+    if(!this.over && this.goldCount>=this.goldTotal && p.r===this.exit.r && p.c===this.exit.c){
+      this._win();
+    }
+  }
+  _caught(){
+    this.lives--; this._updateStatus();
+    if(this.lives<=0){
+      this.over=true;
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('grBest',this.best); }
+      this._showBanner('游戏结束','得分 '+this.score+(this.best===this.score?' · 新纪录！':''));
+    } else {
+      // respawn player at start, reset guards positions
+      this.player.r=1; this.player.c=1; this.player.rx=1; this.player.ry=1; this.player.tr=1; this.player.tc=1; this.player.moving=false;
+    }
+  }
+  _win(){
+    this.score+=50;
+    if(this.score>this.best){ this.best=this.score; localStorage.setItem('grBest',this.best); }
+    if(this.autoPlay){ this.level++; this.gen(); this._updateStatus(); return; }
+    this._showBanner('过关！','进入第 '+(this.level+1)+' 关 · 得分 '+this.score);
+  }
+  /* ---------- loop / render ---------- */
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.tick(dt);
+    this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  render(){
+    const ctx=this.ctx,R=this.ROWS,C=this.COLS,cell=this.cell;
+    ctx.clearRect(0,0,this.W,this.H);
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+      const x=this.ox+c*cell,y=this.oy+r*cell,v=this.grid[r][c];
+      if(v===BRICK){
+        ctx.fillStyle='#243049'; rrect(ctx,x+1,y+1,cell-2,cell-2,4); ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,.05)'; ctx.fillRect(x+3,y+3,cell-6,3);
+      } else {
+        ctx.fillStyle='rgba(255,255,255,.04)'; ctx.fillRect(x,y,cell,cell);
+      }
+      if(v===GOLD){
+        const cx=x+cell/2,cy=y+cell/2;
+        const grd=ctx.createRadialGradient(cx,cy,1,cx,cy,cell*0.5);
+        grd.addColorStop(0,'#fff6b0'); grd.addColorStop(1,'#ffb454');
+        ctx.fillStyle=grd; ctx.beginPath();
+        ctx.moveTo(cx,cy-cell*0.26); ctx.lineTo(cx+cell*0.22,cy); ctx.lineTo(cx,cy+cell*0.26); ctx.lineTo(cx-cell*0.22,cy); ctx.closePath(); ctx.fill();
+      } else if(v===HOLE){
+        ctx.fillStyle='#05070f'; ctx.beginPath(); ctx.arc(x+cell/2,y+cell/2,cell*0.34,0,7); ctx.fill();
+      }
+    }
+    // exit
+    const ex=this.ox+this.exit.c*cell, ey=this.oy+this.exit.r*cell;
+    ctx.strokeStyle=this.goldCount>=this.goldTotal?'#3ecf8e':'rgba(255,255,255,.18)'; ctx.lineWidth=2;
+    rrect(ctx,ex+3,ey+3,cell-6,cell-6,4); ctx.stroke();
+    if(this.goldCount>=this.goldTotal){ ctx.fillStyle='rgba(62,207,142,.18)'; rrect(ctx,ex+3,ey+3,cell-6,cell-6,4); ctx.fill(); }
+    // guards
+    for(const g of this.guards){
+      const cx=this.ox+(g.rx+0.5)*cell, cy=this.oy+(g.ry+0.5)*cell;
+      ctx.fillStyle=g.trapped?'#5a6b8c':'#ff5d6c';
+      ctx.beginPath(); ctx.arc(cx,cy,cell*0.32,0,7); ctx.fill();
+      ctx.fillStyle='#0a0a1a'; ctx.fillRect(cx-cell*0.16,cy-cell*0.1,cell*0.1,cell*0.1); ctx.fillRect(cx+cell*0.06,cy-cell*0.1,cell*0.1,cell*0.1);
+    }
+    // player
+    const p=this.player;
+    const cx=this.ox+(p.rx+0.5)*cell, cy=this.oy+(p.ry+0.5)*cell;
+    ctx.save();
+    ctx.shadowColor='rgba(255,180,84,.8)'; ctx.shadowBlur=12;
+    ctx.fillStyle='#ffd84d'; rrect(ctx,cx-cell*0.3,cy-cell*0.32,cell*0.6,cell*0.64,5); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle='#0a0a1a'; ctx.fillRect(cx-cell*0.16,cy-cell*0.12,cell*0.1,cell*0.1); ctx.fillRect(cx+cell*0.06,cy-cell*0.12,cell*0.1,cell*0.1);
+    // grid lines
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=1;
+    for(let i=0;i<=C;i++){ ctx.beginPath(); ctx.moveTo(this.ox+i*cell,this.oy); ctx.lineTo(this.ox+i*cell,this.oy+R*cell); ctx.stroke(); }
+    for(let i=0;i<=R;i++){ ctx.beginPath(); ctx.moveTo(this.ox,this.oy+i*cell); ctx.lineTo(this.ox+C*cell,this.oy+i*cell); ctx.stroke(); }
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const best=this.best>0?(' · 最佳 '+this.best):'';
+    document.getElementById('status').textContent=`第 ${this.level} 关 · 金子 ${this.goldCount}/${this.goldTotal} · 命 ${this.lives} · 分 ${this.score}${best}`;
+  }
+}
+window.game = new GoldRunner();
+</script>
+</body>
+</html>

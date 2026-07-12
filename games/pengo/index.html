@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>寒冰粉碎 · Ice Crush</title>
+<style>
+  :root{
+    --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6ecff;
+    --muted:#8a92b2; --accent:#5ad1ff; --accent-glow:rgba(90,209,255,.55);
+    --gold:#ffd84d; --red:#ff5d6c; --green:#3ecf8e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:600px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#5ad1ff,#9be8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#125a7a,#5ad1ff);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,560px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(90,209,255,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,26,.72);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(90,209,255,.25)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>寒冰粉碎 · Ice Crush</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">滑动 / 方向键移动；走到敌人背面把它推向冰墙即可压碎。消灭全部敌人即过关。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">过关！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">继续</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function rrect(ctx,x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+const FLOOR=0, WALL=2;
+const DIRS=[[0,-1],[0,1],[-1,0],[1,0]];
+class IceCrush {
+  constructor(){
+    this.COLS=13; this.ROWS=13;
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false; this._autoProgress=0; this.autoTimer=null;
+    this._cssW=0; this._last=null; this.score=0;
+    this.best=parseFloat(localStorage.getItem('icBest')||'0')||0;
+    this.level=1;
+    this.fit();
+    this.restart();
+    this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.cell=Math.min((w*0.98)/this.COLS,(h*0.98)/this.ROWS);
+    this.ox=(w-this.cell*this.COLS)/2; this.oy=(h-this.cell*this.ROWS)/2;
+    this._cssW=rect.width;
+  }
+  inB(r,c){ return r>=0&&r<this.ROWS&&c>=0&&c<this.COLS; }
+  enemyAt(r,c){ return this.enemies.find(e=>!e.dead&&e.r===r&&e.c===c); }
+  gen(){
+    const R=this.ROWS,C=this.COLS;
+    const g=Array.from({length:R},()=>new Array(C).fill(FLOOR));
+    for(let r=0;r<R;r++){ g[r][0]=WALL; g[r][C-1]=WALL; }
+    for(let c=0;c<C;c++){ g[0][c]=WALL; g[R-1][c]=WALL; }
+    this.grid=g;
+    const pr=1,pc=1;
+    this.player={r:pr,c:pc,rx:pr,ry:pc,tr:pr,tc:pc,moving:false};
+    this.enemies=[];
+    const spots=[];
+    for(let r=2;r<R-1;r++)for(let c=2;c<C-1;c++) if((Math.abs(r-pr)+Math.abs(c-pc))>4) spots.push([r,c]);
+    shuffle(spots);
+    const n=Math.min(3,spots.length);
+    for(let i=0;i<n;i++){ const [r,c]=spots[i]; this.enemies.push({r,c,rx:r,ry:c,tr:r,tc:c,moving:false,dead:false,stepT:0}); }
+    this.over=false; this._flash=[]; this._pendingDir=null;
+    this._updateStatus();
+  }
+  restart(){
+    this.stopAuto();
+    this.gen();
+    this._hideBanner();
+    this._updateStatus();
+  }
+  passableNav(r,c){ return this.inB(r,c) && this.grid[r][c]===FLOOR && !this.enemyAt(r,c); }
+  // can player at (r,c) move in dir (dr,dc)?
+  moveOK(r,c,dr,dc){
+    const nr=r+dr,nc=c+dc;
+    if(!this.inB(nr,nc)) return false;
+    if(this.grid[nr][nc]===WALL) return false;
+    const e=this.enemyAt(nr,nc);
+    if(e){
+      const br=nr+dr,bc=nc+dc;
+      if(!this.inB(br,bc)) return false;
+      return this.grid[br][bc]===WALL || this.grid[br][bc]===FLOOR;
+    }
+    return this.grid[nr][nc]===FLOOR;
+  }
+  attemptMove(ent,dr,dc){
+    const R=this.ROWS,C=this.COLS;
+    const nr=ent.r+dr,nc=ent.c+dc;
+    if(!this.inB(nr,nc)) return false;
+    if(this.grid[nr][nc]===WALL) return false;
+    const e=this.enemyAt(nr,nc);
+    if(e){
+      const br=nr+dr,bc=nc+dc;
+      if(!this.inB(br,bc)) return false;
+      if(this.grid[br][bc]===WALL){ e.dead=true; this.grid[nr][nc]=FLOOR; ent.r=nr; ent.c=nc; ent.tr=nr; ent.tc=nc; ent.moving=true; this.score+=120; this._autoProgress++; this._flash.push({r:nr,c:nc,t:PNOW()}); this._updateStatus(); return true; }
+      if(this.grid[br][bc]===FLOOR){ e.r=br; e.c=bc; e.tr=br; e.tc=bc; e.moving=true; this.grid[nr][nc]=FLOOR; ent.r=nr; ent.c=nc; ent.tr=nr; ent.tc=nc; ent.moving=true; return true; }
+      return false;
+    }
+    if(this.grid[nr][nc]===FLOOR){ ent.r=nr; ent.c=nc; ent.tr=nr; ent.tc=nc; ent.moving=true; return true; }
+    return false;
+  }
+  // direction from enemy toward nearest wall (the crush direction)
+  crushDirFor(e){
+    let best=[0,1],bestK=1e9;
+    for(const [dr,dc] of DIRS){
+      let k=0,nr=e.r,nc=e.c;
+      while(this.inB(nr+dr,nc+dc) && this.grid[nr+dr][nc+dc]!==WALL){ nr+=dr; nc+=dc; k++; }
+      if(k<bestK){ bestK=k; best=[dr,dc]; }
+    }
+    return best;
+  }
+  bfsNext(sr,sc,goalFn,passable){
+    const R=this.ROWS,C=this.COLS;
+    const dist=Array.from({length:R},()=>new Array(C).fill(-1));
+    const prev=Array.from({length:R},()=>new Array(C).fill(null));
+    const q=[[sr,sc]]; dist[sr][sc]=0; let head=0;
+    while(head<q.length){
+      const [r,c]=q[head++];
+      if(goalFn(r,c) && (r!==sr||c!==sc)){
+        let cur=[r,c];
+        while(prev[cur[0]][cur[1]] && !(prev[cur[0]][cur[1]][0]===sr&&prev[cur[0]][cur[1]][1]===sc)) cur=prev[cur[0]][cur[1]];
+        return {r:cur[0],c:cur[1]};
+      }
+      for(const [dr,dc] of DIRS){
+        const nr=r+dr,nc=c+dc;
+        if(nr<0||nr>=R||nc<0||nc>=C||dist[nr][nc]!==-1||!passable(nr,nc)) continue;
+        dist[nr][nc]=dist[r][c]+1; prev[nr][nc]=[r,c]; q.push([nr,nc]);
+      }
+    }
+    return null;
+  }
+  decidePlayer(){
+    const p=this.player;
+    if(p.moving) return;
+    const alive=this.enemies.filter(e=>!e.dead);
+    if(!alive.length) return;
+    if(this.autoPlay){
+      let near=alive[0],nd=1e9;
+      for(const e of alive){ const d=Math.abs(e.r-p.r)+Math.abs(e.c-p.c); if(d<nd){ nd=d; near=e; } }
+      const cd=this.crushDirFor(near);
+      const br=near.r-cd[0], bc=near.c-cd[1];
+      // already standing behind the enemy -> crush
+      if(p.r===br && p.c===bc){ this.attemptMove(p,cd[0],cd[1]); return; }
+      // adjacent to enemy and aligned with a crush direction -> push
+      for(const [dr,dc] of DIRS){
+        const nr=p.r+dr,nc=p.c+dc;
+        if(this.enemyAt(nr,nc)){ const brr=nr+dr,bc2=nc+dc; if(this.inB(brr,bc2)&&this.grid[brr][bc2]===WALL){ this.attemptMove(p,dr,dc); return; } }
+      }
+      // navigate to the behind cell
+      const next=this.bfsNext(p.r,p.c,(r,c)=>(r===br&&c===bc),this.passableNav.bind(this));
+      if(next){ const dr=Math.sign(next.r-p.r),dc=Math.sign(next.c-p.c); this.attemptMove(p,dr,dc); return; }
+      // approach enemy generally
+      const next2=this.bfsNext(p.r,p.c,(r,c)=> alive.some(e=>Math.abs(e.r-r)+Math.abs(e.c-c)===1),this.passableNav.bind(this));
+      if(next2){ this.attemptMove(p,Math.sign(next2.r-p.r),Math.sign(next2.c-p.c)); return; }
+      const opts=DIRS.filter(([dr,dc])=>this.passableNav(p.r+dr,p.c+dc));
+      if(opts.length){ const [dr,dc]=opts[(Math.random()*opts.length)|0]; this.attemptMove(p,dr,dc); }
+      return;
+    }
+    if(this._pendingDir){
+      const [dr,dc]=this._pendingDir; this._pendingDir=null;
+      this.attemptMove(p,dr,dc);
+    }
+  }
+  decideEnemy(e){
+    if(e.moving||e.dead) return;
+    e.stepT+=1;
+    const p=this.player;
+    if(this.autoPlay){
+      // wander to a random free floor cell (keeps them from dodging the crush)
+      const opts=DIRS.map(([dr,dc])=>({dr,dc})).filter(d=>{ const nr=e.r+d.dr,nc=e.c+d.dc; return this.inB(nr,nc)&&this.grid[nr][nc]===FLOOR&&!(nr===p.r&&nc===p.c); });
+      if(opts.length){ const d=opts[(Math.random()*opts.length)|0]; e.tr=e.r+d.dr; e.tc=e.c+d.dc; e.moving=true; }
+      return;
+    }
+    const next=this.bfsNext(e.r,e.c,(r,c)=>(r===p.r&&c===p.c),this.passableNav.bind(this));
+    if(next && this.grid[next.r][next.c]===FLOOR){ e.tr=next.r; e.tc=next.c; e.moving=true; return; }
+    const opts=DIRS.filter(([dr,dc])=>{ const nr=e.r+dr,nc=e.c+dc; return this.inB(nr,nc)&&this.grid[nr][nc]===FLOOR&&!(nr===p.r&&nc===p.c); });
+    if(opts.length){ const [dr,dc]=opts[(Math.random()*opts.length)|0]; e.tr=e.r+dr; e.tc=e.c+dc; e.moving=true; }
+  }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner();
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;}
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas; let sx=0,sy=0,down=false;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; down=true; sx=e.clientX; sy=e.clientY; });
+    cv.addEventListener('pointermove',e=>{ if(!down||this.autoPlay) return; const dx=e.clientX-sx,dy=e.clientY-sy; if(Math.abs(dx)+Math.abs(dy)>14){ if(Math.abs(dx)>Math.abs(dy)) this._pendingDir=[Math.sign(dx),0]; else this._pendingDir=[0,Math.sign(dy)]; down=false; } });
+    cv.addEventListener('pointerup',e=>{ down=false; });
+    cv.addEventListener('pointercancel',e=>{ down=false; });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); if(this.over){ this.level=1; this.score=0; this.restart(); } else this.restart(); };
+    window.addEventListener('keydown',e=>{ if(this.autoPlay) return;
+      const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+      const k=e.key.length===1?e.key.toLowerCase():e.key; if(m[k]){ this._pendingDir=m[k]; e.preventDefault(); } });
+  }
+  _moveEnt(ent,dt,speed){
+    if(!ent.moving) return;
+    const step=dt*speed, dr=ent.tr-ent.rx, dc=ent.tc-ent.ry, dist=Math.hypot(dr,dc);
+    if(dist<=step){ ent.rx=ent.tr; ent.ry=ent.tc; ent.r=ent.tr; ent.c=ent.tc; ent.moving=false; }
+    else { ent.rx+=dr/dist*step; ent.ry+=dc/dist*step; }
+  }
+  tick(dt){
+    const now=PNOW();
+    this._flash=this._flash.filter(f=>now-f.t<400);
+    this._moveEnt(this.player,dt,9);
+    if(!this.player.moving) this.decidePlayer();
+    for(const e of this.enemies){ if(e.dead) continue; this._moveEnt(e,dt,4.5); if(!e.moving){ e.stepT-=dt*3; if(e.stepT<=0){ e.stepT=0; this.decideEnemy(e); } } }
+    if(!this.over){
+      const e=this.enemyAt(this.player.r,this.player.c);
+      if(e){ this._caught(); }
+    }
+    if(!this.over && this.enemies.every(e=>e.dead)){
+      this.score+=200;
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('icBest',this.best); }
+      if(this.autoPlay){ this.level++; this.gen(); this._updateStatus(); return; }
+      this._showBanner('过关！','得分 '+this.score);
+    }
+  }
+  _caught(){
+    if(this.autoPlay){ this.gen(); return; }
+    this.over=true;
+    if(this.score>this.best){ this.best=this.score; localStorage.setItem('icBest',this.best); }
+    this._showBanner('被抓住了！','得分 '+this.score+(this.best===this.score?' · 新纪录！':''));
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.tick(dt); this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  render(){
+    const ctx=this.ctx,R=this.ROWS,C=this.COLS,cell=this.cell;
+    ctx.clearRect(0,0,this.W,this.H);
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+      const x=this.ox+c*cell,y=this.oy+r*cell,v=this.grid[r][c];
+      if(v===WALL){
+        const grd=ctx.createLinearGradient(x,y,x+cell,y+cell); grd.addColorStop(0,'#2a3556'); grd.addColorStop(1,'#16203a');
+        ctx.fillStyle=grd; rrect(ctx,x+1,y+1,cell-2,cell-2,4); ctx.fill();
+      } else {
+        const grd=ctx.createRadialGradient(x+cell/2,y+cell/2,2,x+cell/2,y+cell/2,cell/1.4);
+        grd.addColorStop(0,'rgba(120,200,255,.10)'); grd.addColorStop(1,'rgba(90,209,255,.03)');
+        ctx.fillStyle=grd; ctx.fillRect(x,y,cell,cell);
+      }
+    }
+    for(const e of this.enemies){ if(e.dead) continue;
+      const cx=this.ox+(e.rx+0.5)*cell, cy=this.oy+(e.ry+0.5)*cell;
+      ctx.save(); ctx.shadowColor='rgba(255,93,108,.7)'; ctx.shadowBlur=10;
+      ctx.fillStyle='#ff8aa0'; rrect(ctx,cx-cell*0.3,cy-cell*0.3,cell*0.6,cell*0.6,6); ctx.fill(); ctx.restore();
+      ctx.fillStyle='#0a0a1a'; ctx.fillRect(cx-cell*0.14,cy-cell*0.06,cell*0.09,cell*0.09); ctx.fillRect(cx+cell*0.05,cy-cell*0.06,cell*0.09,cell*0.09);
+    }
+    const p=this.player; const cx=this.ox+(p.rx+0.5)*cell, cy=this.oy+(p.ry+0.5)*cell;
+    ctx.save(); ctx.shadowColor='rgba(90,209,255,.8)'; ctx.shadowBlur=14;
+    ctx.fillStyle='#5ad1ff'; rrect(ctx,cx-cell*0.3,cy-cell*0.32,cell*0.6,cell*0.64,6); ctx.fill(); ctx.restore();
+    ctx.fillStyle='#0a0a1a'; ctx.fillRect(cx-cell*0.15,cy-cell*0.1,cell*0.1,cell*0.1); ctx.fillRect(cx+cell*0.05,cy-cell*0.1,cell*0.1,cell*0.1);
+    const now=PNOW();
+    for(const f of this._flash){ const a=1-(now-f.t)/400; const x=this.ox+f.c*cell,y=this.oy+f.r*cell;
+      ctx.strokeStyle=`rgba(255,216,77,${a})`; ctx.lineWidth=3; rrect(ctx,x+2,y+2,cell-4,cell-4,5); ctx.stroke(); }
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=1;
+    for(let i=0;i<=C;i++){ ctx.beginPath(); ctx.moveTo(this.ox+i*cell,this.oy); ctx.lineTo(this.ox+i*cell,this.oy+R*cell); ctx.stroke(); }
+    for(let i=0;i<=R;i++){ ctx.beginPath(); ctx.moveTo(this.ox,this.oy+i*cell); ctx.lineTo(this.ox+C*cell,this.oy+i*cell); ctx.stroke(); }
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const alive=this.enemies.filter(e=>!e.dead).length;
+    const best=this.best>0?(' · 最佳 '+this.best):'';
+    document.getElementById('status').textContent=`第 ${this.level} 关 · 剩余敌人 ${alive} · 分 ${this.score}${best}`;
+  }
+}
+window.game = new IceCrush();
+</script>
+</body>
+</html>

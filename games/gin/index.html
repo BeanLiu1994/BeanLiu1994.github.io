@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>金罗美 · Gin Rummy</title>
+<style>
+  :root{
+    --bg:#0a0c12; --surface:#141a2a; --board:#0e101c; --text:#eef2ff;
+    --muted:#8a94c0; --accent:#4dffb0; --accent-glow:rgba(77,255,176,.5);
+    --gold:#ffd84d; --red:#ff5d6c; --green:#3ecf8e; --cyan:#5ad1ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:680px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#4dffb0,#5ad1ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#1a7a55,#4dffb0);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,660px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(77,255,176,.1),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(10,12,18,.74);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(77,255,176,.22)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>金罗美 · Gin Rummy</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">自动模式双方由 AI 对战。手动：轮到你时点牌堆或弃牌堆摸牌，再点手中一张弃掉（散牌≤10 可敲牌）。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">本局结束</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">继续</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+const SUITS=['♠','♥','♦','♣'];
+const SUITCOL=['#e6ecff','#ff7a8a','#ffd84d','#7ab8ff'];
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function rankStr(r){ return r===1?'A':r===11?'J':r===12?'Q':r===13?'K':String(r); }
+
+function deadwood(cards){
+  const n=cards.length;
+  const melds=[];
+  const bySuit={};
+  cards.forEach((c,i)=>{ (bySuit[c.s]=bySuit[c.s]||[]).push({r:c.r,i}); });
+  for(const s in bySuit){ const arr=bySuit[s].sort((a,b)=>a.r-b.r);
+    let run=[arr[0]];
+    const flush=()=>{ if(run.length>=3){ for(let L=3;L<=run.length;L++) for(let st=0;st+L<=run.length;st++){ let mask=0; for(let t=st;t<st+L;t++) mask|=(1<<run[t].i); melds.push(mask); } } };
+    for(let k=1;k<arr.length;k++){ if(arr[k].r===run[run.length-1].r+1) run.push(arr[k]); else { flush(); run=[arr[k]]; } }
+    flush();
+  }
+  const byRank={};
+  cards.forEach((c,i)=>{ (byRank[c.r]=byRank[c.r]||[]).push(i); });
+  for(const r in byRank){ const arr=byRank[r]; if(arr.length>=3){ for(let L=3;L<=arr.length;L++) for(let st=0;st+L<=arr.length;st++){ let mask=0; for(let t=st;t<st+L;t++) mask|=(1<<arr[t]); melds.push(mask); } } }
+  let bestMask=0,bestCnt=-1;
+  const popcnt=m=>{ let c=0; while(m){ c+=m&1; m>>=1; } return c; };
+  function dfs(i,used){
+    if(i===melds.length){ const cnt=popcnt(used); if(cnt>bestCnt || (cnt===bestCnt && used<bestMask)){ bestCnt=cnt; bestMask=used; } return; }
+    if(!(melds[i]&used)) dfs(i+1,used|melds[i]);
+    dfs(i+1,used);
+  }
+  if(melds.length) dfs(0,0);
+  let val=0;
+  for(let i=0;i<n;i++) if(!(bestMask&(1<<i))) val+=cards[i].r;
+  return val;
+}
+
+class Gin {
+  constructor(){
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false; this._autoProgress=0; this._t=null;
+    this._cssW=0; this._last=null;
+    this.total=[0,0]; this.best=parseFloat(localStorage.getItem('ginBest')||'0')||0;
+    this.fit(); this.deal(); this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this._cssW=rect.width;
+  }
+  deal(){
+    const deck=[]; for(let s=0;s<4;s++) for(let r=1;r<=13;r++) deck.push({s,r}); shuffle(deck);
+    this.p0=deck.slice(0,10); this.p1=deck.slice(10,20); this.draw=deck.slice(21); this.discard=[deck[20]];
+    this.turn=0; this.over=false; this.msg=''; this._drew=null; this._hideBanner(); this._updateStatus();
+  }
+  bestDiscard(hand){ // 11 cards -> keep 10, return {hand,discarded,dw}
+    let best=null,bestDW=1e9,bestDiscarded=null;
+    for(let i=0;i<hand.length;i++){
+      const kept=hand.slice(0,i).concat(hand.slice(i+1));
+      const dw=deadwood(kept);
+      if(dw<bestDW){ bestDW=dw; best=kept; bestDiscarded=hand[i]; }
+    }
+    return {hand:best,discarded:bestDiscarded,dw:bestDW};
+  }
+  aiTurn(){
+    const me=this.turn===0?this.p0:this.p1;
+    const dtop=this.discard[this.discard.length-1];
+    const pileTop=this.draw.pop();
+    const planA=this.bestDiscard(me.concat([pileTop]));
+    let dwB=1e9,planB=null;
+    if(dtop){ planB=this.bestDiscard(me.concat([dtop])); dwB=planB.dw; }
+    let newHand,finalDiscarded;
+    if(dtop && dwB<=planA.dw){ newHand=planB.hand; finalDiscarded=planB.discarded; this.discard.pop(); }
+    else { newHand=planA.hand; finalDiscarded=planA.discarded; }
+    if(this.turn===0) this.p0=newHand; else this.p1=newHand;
+    this.discard.push(finalDiscarded);
+    const myDW=deadwood(newHand);
+    if(myDW<=10){ this.knock(newHand,myDW); return; }
+    this.turn=1-this.turn; this._updateStatus();
+  }
+  knock(knockerHand,knockerDW){
+    const opp=this.turn===0?this.p1:this.p0;
+    const oppDW=deadwood(opp);
+    let delta = knockerDW<oppDW ? (oppDW-knockerDW) : (oppDW-knockerDW+10);
+    if(knockerDW===0) delta+=20;
+    this.total[this.turn]+=delta; if(this.total[this.turn]>this.best){ this.best=this.total[this.turn]; localStorage.setItem('ginBest',this.best); }
+    this._autoProgress++;
+    this.msg='第'+(this.turn===0?'你':'AI')+'家敲牌 +'+delta;
+    if(this.autoPlay){ this.deal(); return; }
+    this.over=true; this._showBanner('本局结束',this.msg+' · 总分 '+(this.total[0]+'/'+this.total[1]));
+  }
+  schedule(fn,ms){ if(this._t){ clearTimeout(this._t); } this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
+  maybeAuto(){ if(this.over) return; if(this._t) return;
+    if(this.autoPlay){ this.schedule(()=>this.aiTurn(),520); }
+    else if(this.turn===1){ this.schedule(()=>this.aiTurn(),520); }
+  }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this.over=false; this.maybeAuto();
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this._t){ clearTimeout(this._t); this._t=null; }
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; const r=cv.getBoundingClientRect(); this.onTap(e.clientX-r.left,e.clientY-r.top); });
+    document.getElementById('newBtn').onclick=()=>{ this.total=[0,0]; this.deal(); };
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); this.over=false; this.deal(); };
+  }
+  onTap(x,y){
+    if(this.turn!==0||this.over) return;
+    const cw=Math.min(this.W*0.92/11,this.H*0.12), ch=cw*1.4;
+    if(!this._drew){
+      const dpx=this.W*0.18, dpy=this.H*0.40+ch/2;
+      if(Math.abs(x-dpx)<cw*0.7 && Math.abs(y-dpy)<ch*0.7 && this.draw.length){ const t=this.draw.pop(); this.p0=this.p0.concat([t]); this._drew='pile'; this._updateStatus(); return; }
+      const iscx=this.W*0.5, iscy=this.H*0.40+ch/2;
+      if(Math.abs(x-iscx)<cw*0.7 && Math.abs(y-iscy)<ch*0.7 && this.discard.length){ const t=this.discard.pop(); this.p0=this.p0.concat([t]); this._drew='disc'; this._updateStatus(); return; }
+      return;
+    }
+    const hand=this.p0; const startX=(this.W-cw*hand.length)/2; const py=this.H*0.82;
+    for(let i=0;i<hand.length;i++){ const cx=startX+i*cw; if(x>=cx&&x<=cx+cw&&y>=py-ch/2&&y<=py+ch/2){ const card=hand[i]; this.p0=hand.slice(0,i).concat(hand.slice(i+1)); this.discard.push(card); this._drew=null; const dw=deadwood(this.p0); if(dw<=10){ this.knock(this.p0,dw); } else { this.turn=1; this._updateStatus(); } return; } }
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.maybeAuto();
+    this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  _card(ctx,x,y,w,h,c,hi){
+    ctx.save(); if(hi){ ctx.shadowColor='#ffd84d'; ctx.shadowBlur=12; }
+    ctx.fillStyle='#171a28'; rrect(ctx,x,y,w,h,6); ctx.fill();
+    ctx.strokeStyle=hi?'#ffd84d':'rgba(255,255,255,.18)'; ctx.lineWidth=hi?2:1; ctx.stroke();
+    ctx.fillStyle=SUITCOL[c.s]; ctx.font='bold '+(w*0.34)+'px system-ui'; ctx.textBaseline='middle';
+    ctx.fillText(rankStr(c.r),x+w*0.12,y+h*0.26); ctx.fillText(SUITS[c.s],x+w*0.12,y+h*0.62);
+    ctx.restore();
+  }
+  render(){
+    const ctx=this.ctx,W=this.W,H=this.H;
+    ctx.clearRect(0,0,W,H);
+    const cw=Math.min(W*0.92/11,H*0.12), ch=cw*1.4;
+    const op=this.p1, ox=(W-cw*op.length)/2;
+    for(let i=0;i<op.length;i++){ ctx.save(); ctx.fillStyle='#1b2238'; rrect(ctx,ox+i*cw,H*0.06,cw,ch,6); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.stroke(); ctx.restore(); }
+    // draw pile
+    ctx.save(); ctx.fillStyle='#1b2238'; rrect(ctx,W*0.18-cw/2,H*0.40,cw,ch,6); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.stroke(); ctx.restore();
+    ctx.fillStyle='rgba(255,255,255,.5)'; ctx.font=(W*0.026)+'px system-ui'; ctx.textBaseline='top'; ctx.fillText('牌堆',W*0.18-cw/2,H*0.40+ch+4);
+    if(this.discard.length){ this._card(ctx,W*0.5-cw/2,H*0.40,cw,ch,this.discard[this.discard.length-1],false); }
+    else { ctx.save(); ctx.strokeStyle='rgba(255,255,255,.2)'; rrect(ctx,W*0.5-cw/2,H*0.40,cw,ch,6); ctx.stroke(); ctx.restore(); }
+    const ph=this.p0, px=(W-cw*ph.length)/2, py=H*0.82-ch/2;
+    for(let i=0;i<ph.length;i++){ this._card(ctx,px+i*cw,py,cw,ch,ph[i],false); }
+    ctx.fillStyle='rgba(255,255,255,.55)'; ctx.font=(W*0.03)+'px system-ui'; ctx.textBaseline='top';
+    ctx.fillText(this.turn===0?'你的回合':'AI 回合', W*0.02, H*0.02);
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const best=this.best>0?(' · 最佳 '+this.best):'';
+    document.getElementById('status').textContent=`总分 你${this.total[0]} : ${this.total[1]}AI · ${this.msg||'进行中'}${best}`;
+  }
+}
+function rrect(ctx,x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+window.game = new Gin();
+</script>
+</body>
+</html>

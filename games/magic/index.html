@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>幻方 · Magic Square</title>
+<style>
+  :root{
+    --bg:#080a14; --surface:#13182a; --board:#0c0f1c; --text:#eaf0ff;
+    --muted:#8a93c0; --accent:#9b8cff; --accent-glow:rgba(155,140,255,.5);
+    --gold:#ffd84d; --green:#3ecf8e; --red:#ff5d6c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:620px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#9b8cff,#c9c0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#5a3fb0,#9b8cff);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,560px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(155,140,255,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,20,.74);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(155,140,255,.22)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>幻方 · Magic Square</h1>
+    <div class="toolbar">
+      <button id="diffBtn">难度 3</button>
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">每行、每列、两条对角线之和都相等（幻方常数已给出）。点击下方数字，再点格子填入；点已填格可清除。自动模式按解法逐步演示。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">幻方成！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">继续</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function rotate(m,N){ const r=Array.from({length:N},()=>new Array(N).fill(0)); for(let i=0;i<N;i++)for(let j=0;j<N;j++) r[j][N-1-i]=m[i][j]; return r; }
+function sym(m,N,kind){ let r=m.map(row=>row.slice()); if(kind&1) r=r.map(row=>row.slice().reverse()); if(kind&2) r=r.slice().reverse(); if(kind&4) r=rotate(r,N); return r; }
+
+// Siamese method for odd N
+function siamese(N){
+  const m=Array.from({length:N},()=>new Array(N).fill(0));
+  let r=0,c=(N-1)/2;
+  for(let v=1;v<=N*N;v++){
+    m[r][c]=v;
+    let nr=r-1,nc=c+1;
+    if(nr<0) nr=N-1; if(nc>=N) nc=0;
+    if(m[nr][nc]!==0){ nr=r+1; nc=c; }
+    r=nr; c=nc;
+  }
+  return m;
+}
+
+class MagicSquare {
+  constructor(){
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.N=3; this.autoPlay=false; this._autoProgress=0; this._t=null;
+    this._cssW=0; this._last=null;
+    this.solvedCount=0; this.best=parseFloat(localStorage.getItem('magicBest')||'0')||0;
+    this.fit(); this.generate(); this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this._cssW=rect.width;
+  }
+  get M(){ return this.N*(this.N*this.N+1)/2; }
+  generate(){
+    const N=this.N;
+    let S=siamese(N);
+    S=sym(S,N,(Math.random()*8)|0);
+    this.S=S;
+    this.grid=Array.from({length:N},()=>new Array(N).fill(0));
+    this.fixed=new Set();
+    const total=N*N;
+    const fixedCount=N===3?3:8;
+    const positions=shuffle([...Array(total).keys()]).slice(0,fixedCount);
+    for(const p of positions){ const r=Math.floor(p/N),c=p%N; this.grid[r][c]=S[r][c]; this.fixed.add(r*N+c); }
+    this.sel=null; this.solved=false; this.autoFillIdx=0; this._hideBanner(); this._updateStatus();
+  }
+  restart(){ this.stopAuto(); this.generate(); }
+  geom(){
+    const W=this.W,H=this.H,N=this.N;
+    const board=Math.min(W*0.94, H*0.58);
+    const cell=board/N;
+    const gox=(W-cell*N)/2;
+    const goy=H*0.04;
+    const palTop=goy+board+H*0.04;
+    const palH=H-palTop-H*0.02;
+    const palCell=Math.min((W*0.94)/N, palH/N);
+    const px=(W-palCell*N)/2;
+    const py=palTop;
+    return {cell,gox,goy,palCell,px,py,board};
+  }
+  pickPalette(v){ if(this.solved) return; this.sel=(this.sel===v)?null:v; }
+  tapCell(r,c){
+    if(this.solved) return;
+    const k=r*this.N+c;
+    if(this.fixed.has(k)) return;
+    if(this.sel!=null){ this.grid[r][c]=this.sel; this.sel=null; }
+    else if(this.grid[r][c]!==0){ this.grid[r][c]=0; }
+    this._afterPlace();
+  }
+  _afterPlace(){
+    let filled=0; for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++) if(this.grid[r][c]!==0) filled++;
+    if(filled===this.N*this.N && this._isMagic()) this.win();
+    this._updateStatus();
+  }
+  _isMagic(){
+    const N=this.N,M=this.M;
+    for(let r=0;r<N;r++){ let s=0; for(let c=0;c<N;c++) s+=this.grid[r][c]; if(s!==M) return false; }
+    for(let c=0;c<N;c++){ let s=0; for(let r=0;r<N;r++) s+=this.grid[r][c]; if(s!==M) return false; }
+    let d1=0,d2=0; for(let i=0;i<N;i++){ d1+=this.grid[i][i]; d2+=this.grid[i][N-1-i]; }
+    return d1===M && d2===M;
+  }
+  win(){
+    if(this.autoPlay){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('magicBest',this.best); } this.schedule(()=>this.generate(),550); return; }
+    this.solved=true; this._showBanner('幻方成！','每行每列对角线之和均为 '+this.M);
+  }
+  autoStep(){
+    if(this.autoFillIdx>=this.N*this.N){ return; }
+    while(this.autoFillIdx<this.N*this.N){
+      const k=this.autoFillIdx, r=Math.floor(k/this.N), c=k%this.N;
+      this.autoFillIdx++;
+      if(this.fixed.has(k)) continue;
+      this.grid[r][c]=this.S[r][c]; this._autoProgress++; break;
+    }
+    if(this.autoFillIdx>=this.N*this.N && this._isMagic()) this.win();
+  }
+  schedule(fn,ms){ if(this._t){ clearTimeout(this._t); } this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
+  maybeAuto(){ if(!this.autoPlay||this.solved) return; if(this._t) return; this.schedule(()=>this.autoStep(),230); }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this.generate(); this.maybeAuto();
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this._t){ clearTimeout(this._t); this._t=null; }
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; const r=cv.getBoundingClientRect(); this.onTap(e.clientX-r.left,e.clientY-r.top); });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); this.solved=false; };
+    document.getElementById('diffBtn').onclick=()=>{ this.N=(this.N===3)?5:3; document.getElementById('diffBtn').textContent='难度 '+this.N; this.restart(); };
+  }
+  onTap(x,y){
+    const g=this.geom(), N=this.N;
+    for(let v=1;v<=N*N;v++){
+      const vr=Math.floor((v-1)/N), vc=(v-1)%N;
+      const rx=g.px+vc*g.palCell, ry=g.py+vr*g.palCell;
+      if(x>=rx&&x<rx+g.palCell&&y>=ry&&y<ry+g.palCell){ this.pickPalette(v); return; }
+    }
+    if(x>=g.gox&&x<g.gox+g.cell*N&&y>=g.goy&&y<g.goy+g.cell*N){
+      const c=Math.floor((x-g.gox)/g.cell), r=Math.floor((y-g.goy)/g.cell);
+      this.tapCell(r,c);
+    }
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    if(this.autoPlay) this.maybeAuto();
+    this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  render(){
+    const ctx=this.ctx,W=this.W,H=this.H,N=this.N,g=this.geom();
+    ctx.clearRect(0,0,W,H);
+    // grid
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const x=g.gox+c*g.cell,y=g.goy+r*g.cell, v=this.grid[r][c], fixed=this.fixed.has(r*N+c);
+      const isSel = (this.sel!=null && v===this.sel);
+      ctx.fillStyle = fixed ? 'rgba(155,140,255,.20)' : (v!==0?'rgba(155,140,255,.10)':'rgba(255,255,255,.03)');
+      ctx.fillRect(x+1,y+1,g.cell-2,g.cell-2);
+      ctx.strokeStyle = fixed ? 'rgba(155,140,255,.6)' : 'rgba(255,255,255,.12)';
+      ctx.lineWidth=1; ctx.strokeRect(x+1.5,y+1.5,g.cell-3,g.cell-3);
+      if(v!==0){
+        ctx.save();
+        if(isSel){ ctx.shadowColor='#ffd84d'; ctx.shadowBlur=16; ctx.fillStyle='#ffd84d'; }
+        else ctx.fillStyle='#eaf0ff';
+        ctx.font=`bold ${Math.floor(g.cell*0.42)}px system-ui,sans-serif`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(v, x+g.cell/2, y+g.cell/2);
+        ctx.restore();
+      }
+    }
+    // auto hint
+    if(this.autoPlay && this.autoFillIdx<this.N*this.N){
+      const k=this.autoFillIdx, r=Math.floor(k/N), c=k%N;
+      if(!this.fixed.has(k)){ const x=g.gox+c*g.cell,y=g.goy+r*g.cell;
+        ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.strokeRect(x+3,y+3,g.cell-6,g.cell-6); }
+    }
+    // palette
+    for(let v=1;v<=N*N;v++){
+      const vr=Math.floor((v-1)/N), vc=(v-1)%N;
+      const x=g.px+vc*g.palCell,y=g.py+vr*g.palCell;
+      const used=this._valueUsed(v), seld=(this.sel===v);
+      ctx.fillStyle = seld ? 'rgba(255,216,77,.25)' : (used?'rgba(255,255,255,.04)':'rgba(155,140,255,.12)');
+      ctx.fillRect(x+2,y+2,g.palCell-4,g.palCell-4);
+      ctx.strokeStyle = seld ? '#ffd84d' : 'rgba(255,255,255,.14)';
+      ctx.lineWidth=seld?2:1; ctx.strokeRect(x+3,y+3,g.palCell-6,g.palCell-6);
+      ctx.fillStyle = used ? 'rgba(234,240,255,.35)' : '#eaf0ff';
+      ctx.font=`bold ${Math.floor(g.palCell*0.4)}px system-ui,sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(v, x+g.palCell/2, y+g.palCell/2);
+    }
+  }
+  _valueUsed(v){ for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++) if(this.grid[r][c]===v) return true; return false; }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    let filled=0; for(let r=0;r<this.N;r++)for(let c=0;c<this.N;c++) if(this.grid[r][c]!==0) filled++;
+    const best=this.best>0?(' · 已解 '+this.best):'';
+    document.getElementById('status').textContent=`幻方常数 ${this.M} · 已填 ${filled}/${this.N*this.N}${best}`;
+  }
+}
+window.game = new MagicSquare();
+</script>
+</body>
+</html>

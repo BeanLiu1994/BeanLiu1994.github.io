@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>算 24 · Make 24</title>
+<style>
+  :root{
+    --bg:#080a14; --surface:#13182a; --board:#0c0f1c; --text:#eaf0ff;
+    --muted:#8a93c0; --accent:#ff9a4d; --accent-glow:rgba(255,154,77,.5);
+    --gold:#ffd84d; --green:#3ecf8e; --red:#ff5d6c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:620px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#ff9a4d,#ffd0a0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#b05a1f,#ff9a4d);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,560px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(255,154,77,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,20,.74);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(255,154,77,.22)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>算 24 · Make 24</h1>
+    <div class="toolbar">
+      <button id="newBtn">新牌</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">用 + − × ÷ 与括号，把 4 张牌算出 24（每张牌恰好用一次）。点牌入算式，点运算符拼接，= 求值。自动模式会演示一种解法。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">等于 24！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">继续</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function apply(x,op,y){ if(op==='+') return x+y; if(op==='-') return x-y; if(op==='*') return x*y; if(op==='/') return y===0?null:x/y; }
+
+function tryShape(a,b,c,d,o1,o2,o3){
+  const shapes=[
+    ()=>{ const t=apply(a,o1,b); if(t===null)return null; const u=apply(t,o2,c); if(u===null)return null; const v=apply(u,o3,d); if(v===null)return null; return {val:v,str:`((${a}${o1}${b})${o2}${c})${o3}${d}`}; },
+    ()=>{ const t=apply(b,o2,c); if(t===null)return null; const u=apply(a,o1,t); if(u===null)return null; const v=apply(u,o3,d); if(v===null)return null; return {val:v,str:`(${a}${o1}(${b}${o2}${c}))${o3}${d}`}; },
+    ()=>{ const t=apply(a,o1,b); if(t===null)return null; const u=apply(c,o3,d); if(u===null)return null; const v=apply(t,o2,u); if(v===null)return null; return {val:v,str:`(${a}${o1}${b})${o2}(${c}${o3}${d})`}; },
+    ()=>{ const t=apply(b,o2,c); if(t===null)return null; const u=apply(t,o3,d); if(u===null)return null; const v=apply(a,o1,u); if(v===null)return null; return {val:v,str:`${a}${o1}((${b}${o2}${c})${o3}${d})`}; },
+    ()=>{ const t=apply(c,o3,d); if(t===null)return null; const u=apply(b,o2,t); if(u===null)return null; const v=apply(a,o1,u); if(v===null)return null; return {val:v,str:`${a}${o1}(${b}${o2}(${c}${o3}${d}))`}; },
+  ];
+  for(const s of shapes){ const r=s(); if(r && Math.abs(r.val-24)<1e-6) return r.str; }
+  return null;
+}
+function permute(arr){ if(arr.length<=1) return [arr]; const res=[]; for(let i=0;i<arr.length;i++){ const rest=arr.slice(0,i).concat(arr.slice(i+1)); for(const p of permute(rest)) res.push([arr[i],...p]); } return res; }
+function solve24(vals){
+  const ops=['+','-','*','/'];
+  for(const p of permute([0,1,2,3])){
+    const a=vals[p[0]],b=vals[p[1]],c=vals[p[2]],d=vals[p[3]];
+    for(const o1 of ops)for(const o2 of ops)for(const o3 of ops){
+      const r=tryShape(a,b,c,d,o1,o2,o3);
+      if(r) return r;
+    }
+  }
+  return null;
+}
+function evalTokens(tokens){
+  const out=[],opStack=[]; const prec={'+':1,'-':1,'*':2,'/':2};
+  for(const t of tokens){
+    if(t.type==='num') out.push(t.val);
+    else if(t.type==='op'){ const ch=t.ch;
+      if(ch==='(') opStack.push(ch);
+      else if(ch===')'){ while(opStack.length && opStack[opStack.length-1]!=='(') out.push(opStack.pop()); opStack.pop(); }
+      else { while(opStack.length && opStack[opStack.length-1]!=='(' && prec[opStack[opStack.length-1]]>=prec[ch]) out.push(opStack.pop()); opStack.push(ch); }
+    }
+  }
+  while(opStack.length) out.push(opStack.pop());
+  const st=[];
+  for(const v of out){ if(typeof v==='number') st.push(v); else { const b=st.pop(), a=st.pop(); if(a===undefined||b===undefined) return null; const r=apply(a,v,b); if(r===null) return null; st.push(r); } }
+  return st.length===1?st[0]:null;
+}
+function cardLabel(v){ return v<=10?v:(v===11?'J':v===12?'Q':v===13?'K':String(v)); }
+
+class Make24 {
+  constructor(){
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false; this._autoProgress=0; this._t=null;
+    this._cssW=0; this._last=null;
+    this.solvedCount=0; this.best=parseFloat(localStorage.getItem('m24Best')||'0')||0;
+    this.fit(); this.deal(); this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this._cssW=rect.width;
+  }
+  deal(keepAuto){
+    let attempt=0, sol=null;
+    do{
+      this.cards=[1,2,3,4].map(()=>1+((Math.random()*13)|0));
+      sol=solve24(this.cards); attempt++;
+    } while(!sol && attempt<60);
+    if(!sol){ this.cards=[4,4,7,7]; sol=solve24(this.cards); }
+    this.solution=sol;
+    this.tokens=[]; this.used=[false,false,false,false];
+    this.solved=false; this.lastResult=null; this.lastOk=false; this._hideBanner();
+    this.buildAuto();
+    this._updateStatus();
+  }
+  buildAuto(){
+    const str=this.solution; const usedCards=new Array(this.cards.length).fill(false); const toks=[]; let i=0;
+    while(i<str.length){ const ch=str[i];
+      if(ch>='0'&&ch<='9'){ let j=i; while(j<str.length&&str[j]>='0'&&str[j]<='9')j++; const val=parseInt(str.slice(i,j));
+        const idx=usedCards.findIndex((u,k)=>!u && this.cards[k]===val); if(idx>=0) usedCards[idx]=true; toks.push({type:'num',card:idx>=0?idx:0}); i=j; }
+      else { toks.push({type:'op',ch}); i++; }
+    }
+    toks.push({type:'eq'});
+    this.autoTokens=toks; this.autoIdx=0;
+  }
+  restart(){ this.stopAuto(); this.deal(false); }
+  pushCard(i){ if(this.solved||this.used[i]) return; this.used[i]=true; this.tokens.push({type:'num',val:this.cards[i],card:i}); this._recalc(); }
+  pushOp(ch){ if(this.solved) return; this.tokens.push({type:'op',ch}); this._recalc(); }
+  backspace(){ if(this.solved) return; const t=this.tokens.pop(); if(t&&t.type==='num') this.used[t.card]=false; this._recalc(); }
+  clearAll(){ if(this.solved) return; this.tokens=[]; this.used=[false,false,false,false]; this._recalc(); }
+  _recalc(){
+    if(this.tokens.length===0){ this.lastResult=null; this.lastOk=false; this._updateStatus(); return; }
+    const v=evalTokens(this.tokens);
+    this.lastResult=v; this.lastOk=(v!==null && Math.abs(v-24)<1e-6);
+    this._updateStatus();
+  }
+  equal(){
+    if(this.solved) return;
+    if(this.used.some(u=>!u)){ this.lastOk=false; this._updateStatus(); return; }
+    const v=evalTokens(this.tokens);
+    if(v!==null && Math.abs(v-24)<1e-6) this.win();
+    else { this.lastOk=false; this._updateStatus(); }
+  }
+  win(){
+    if(this.autoPlay){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('m24Best',this.best); } this.schedule(()=>this.deal(true),480); return; }
+    this.solved=true; this._showBanner('等于 24！',this._exprStr()+' = 24');
+  }
+  autoStep(){
+    if(!this.autoTokens || this.autoIdx>=this.autoTokens.length){ this.deal(true); return; }
+    const tk=this.autoTokens[this.autoIdx++]; this._autoProgress++;
+    if(tk.type==='num'){ const i=tk.card; if(!this.used[i]){ this.used[i]=true; this.tokens.push({type:'num',val:this.cards[i],card:i}); } }
+    else if(tk.type==='op'){ this.tokens.push({type:'op',ch:tk.ch}); }
+    else if(tk.type==='eq'){ this.equal(); return; }
+    this._recalc();
+  }
+  schedule(fn,ms){ if(this._t){ clearTimeout(this._t); } this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
+  maybeAuto(){ if(!this.autoPlay||this.solved) return; if(this._t) return; this.schedule(()=>this.autoStep(),260); }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this.deal(true); this.maybeAuto();
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this._t){ clearTimeout(this._t); this._t=null; }
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; const r=cv.getBoundingClientRect(); this.onTap(e.clientX-r.left,e.clientY-r.top); });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); this.solved=false; };
+  }
+  geom(){
+    const W=this.W,H=this.H;
+    const cardW=Math.min(W*0.22, H*0.16), cardH=cardW*1.32;
+    const cardGap=(W-cardW*4)/5;
+    const cardY=H*0.05;
+    const exprY=cardY+cardH+H*0.03, exprH=H*0.07;
+    const btnTop=exprY+exprH+H*0.03;
+    const btnH=Math.min((H-btnTop-H*0.02)/5, W*0.13);
+    const btnW=btnH;
+    const btnGapX=(W-btnW*4)/5, btnGapY=btnH*0.22;
+    return {cardW,cardH,cardGap,cardY,exprY,exprH,btnTop,btnH,btnW,btnGapX,btnGapY};
+  }
+  _buttons(g){
+    const ops=[['+','op'],['−','op'],['×','op'],['÷','op'],['(','op'],[')','op'],['⌫','back'],['C','clear'],['=','eq']];
+    const btns=[];
+    const cols=4; const rows=3;
+    let idx=0;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      if(idx>=ops.length) break;
+      const [label,kind]=ops[idx++];
+      const x=g.btnGapX+c*(g.btnW+g.btnGapX);
+      const y=g.btnTop+r*(g.btnH+g.btnGapY);
+      btns.push({x,y,w:g.btnW,h:g.btnH,label,kind});
+    }
+    return btns;
+  }
+  onTap(x,y){
+    const g=this.geom();
+    // cards
+    for(let i=0;i<4;i++){ const cx=g.cardGap+i*(g.cardW+g.cardGap);
+      if(x>=cx&&x<cx+g.cardW&&y>=g.cardY&&y<g.cardY+g.cardH){ this.pushCard(i); return; } }
+    // buttons
+    for(const b of this._buttons(g)){
+      if(x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h){
+        if(b.kind==='op') this.pushOp(b.label==='×'?'*':b.label==='÷'?'/':b.label);
+        else if(b.kind==='back') this.backspace();
+        else if(b.kind==='clear') this.clearAll();
+        else if(b.kind==='eq') this.equal();
+        return;
+      }
+    }
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    if(this.autoPlay) this.maybeAuto();
+    this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  _exprStr(){
+    let s='';
+    for(const t of this.tokens){ if(t.type==='num') s+=cardLabel(t.val); else s+=t.ch; }
+    return s;
+  }
+  render(){
+    const ctx=this.ctx,W=this.W,H=this.H,g=this.geom();
+    ctx.clearRect(0,0,W,H);
+    // cards
+    for(let i=0;i<4;i++){
+      const x=g.cardGap+i*(g.cardW+g.cardGap), y=g.cardY;
+      const used=this.used[i];
+      ctx.fillStyle=used?'rgba(255,154,77,.10)':'rgba(255,255,255,.04)';
+      ctx.fillRect(x,y,g.cardW,g.cardH);
+      ctx.strokeStyle=used?'rgba(255,154,77,.6)':'rgba(255,255,255,.16)';
+      ctx.lineWidth=used?2:1; ctx.strokeRect(x+1.5,y+1.5,g.cardW-3,g.cardH-3);
+      ctx.fillStyle=used?'rgba(234,240,255,.4)':'#eaf0ff';
+      ctx.font=`bold ${Math.floor(g.cardW*0.5)}px system-ui,sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(cardLabel(this.cards[i]), x+g.cardW/2, y+g.cardH/2);
+    }
+    // expression band
+    const ex=g.exprY, eh=g.exprH;
+    ctx.fillStyle='rgba(255,255,255,.03)'; ctx.fillRect(g.cardGap,ex,W-2*g.cardGap,eh);
+    ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1; ctx.strokeRect(g.cardGap+0.5,ex+0.5,W-2*g.cardGap-1,eh-1);
+    ctx.fillStyle='#eaf0ff'; ctx.font=`${Math.floor(eh*0.5)}px ui-monospace,monospace`;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    let expr=this._exprStr(); if(expr==='') expr='—';
+    ctx.fillText(expr, g.cardGap+10, ex+eh/2);
+    // result
+    if(this.lastResult!==null){
+      ctx.textAlign='right';
+      ctx.fillStyle=this.lastOk?'#3ecf8e':'rgba(255,93,108,.85)';
+      ctx.font=`bold ${Math.floor(eh*0.5)}px ui-monospace,monospace`;
+      ctx.fillText('= '+ (Math.abs(this.lastResult-Math.round(this.lastResult))<1e-6?Math.round(this.lastResult):this.lastResult.toFixed(2)), W-g.cardGap-10, ex+eh/2);
+    }
+    // buttons
+    for(const b of this._buttons(g)){
+      ctx.fillStyle = b.kind==='eq' ? 'rgba(255,154,77,.22)' : 'rgba(255,255,255,.05)';
+      ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.strokeStyle='rgba(255,255,255,.14)'; ctx.lineWidth=1; ctx.strokeRect(b.x+1,b.y+1,b.w-2,b.h-2);
+      ctx.fillStyle = b.kind==='eq' ? '#ff9a4d' : '#eaf0ff';
+      ctx.font=`bold ${Math.floor(b.h*0.42)}px system-ui,sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(b.label, b.x+b.w/2, b.y+b.h/2);
+    }
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const best=this.best>0?(' · 已解 '+this.best):'';
+    document.getElementById('status').textContent=`目标 24 · 已用 ${this.used.filter(u=>u).length}/4 张${best}`;
+  }
+}
+window.game = new Make24();
+</script>
+</body>
+</html>

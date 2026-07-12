@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>星阵谜题 · Star Battle</title>
+<style>
+  :root{
+    --bg:#080a14; --surface:#13182a; --board:#0c0f1c; --text:#eaf0ff;
+    --muted:#8a93c0; --accent:#7af0ff; --accent-glow:rgba(122,240,255,.5);
+    --gold:#ffd84d; --red:#ff5d6c; --green:#3ecf8e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:620px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#7af0ff,#9be8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#1a6a7a,#7af0ff);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,560px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(122,240,255,.1),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,20,.74);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(122,240,255,.22)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>星阵谜题 · Star Battle</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">每行、每列、每个区域恰好放 1 颗星，且星与星不能相邻（含斜角）。点击格子放置/取消。自动模式会逐步填入解。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">解出！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">继续</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const REGION_HUES=['#ff7a8a','#ffd84d','#7af0ff','#9be8ff','#b66dff','#3ecf8e','#ff9a4d','#5ad1ff','#ff6ad5','#7affc0'];
+
+function placeStars(N){
+  const cols=new Set(), stars=[];
+  function ok(r,c){ for(const s of stars){ if(Math.abs(s.r-r)<=1 && Math.abs(s.c-c)<=1) return false; } return true; }
+  function bt(r){ if(r===N) return true; const order=shuffle([...Array(N).keys()]); for(const c of order){ if(cols.has(c)) continue; if(!ok(r,c)) continue; cols.add(c); stars.push({r,c}); if(bt(r+1)) return true; cols.delete(c); stars.pop(); } return false; }
+  bt(0); return stars;
+}
+function makeRegions(N,stars){
+  const reg=Array.from({length:N},()=>new Array(N).fill(-1));
+  const regionCells=[];
+  stars.forEach((s,ri)=>{ reg[s.r][s.c]=ri; regionCells.push([[s.r,s.c]]); });
+  let unassigned=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(reg[r][c]===-1) unassigned.push([r,c]);
+  let changed=true, guard=0;
+  while(unassigned.length && changed && guard++<5000){
+    changed=false;
+    for(let ri=0;ri<regionCells.length;ri++){
+      const frontier=[];
+      for(const [r,c] of regionCells[ri]) for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=N||nc<0||nc>=N) continue; if(reg[nr][nc]===-1) frontier.push([nr,nc]); }
+      if(frontier.length){ const [nr,nc]=frontier[0]; reg[nr][nc]=ri; regionCells[ri].push([nr,nc]); const idx=unassigned.findIndex(([a,b])=>a===nr&&b===nc); if(idx>=0) unassigned.splice(idx,1); changed=true; }
+    }
+  }
+  for(const [r,c] of unassigned){ for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=r+dr,nc=c+dc; if(nr>=0&&nr<N&&nc>=0&&nc<N&&reg[nr][nc]!==-1){ reg[r][c]=reg[nr][nc]; break; } } }
+  return reg;
+}
+
+class StarBattle {
+  constructor(){
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.N=8; this.autoPlay=false; this._autoProgress=0; this._t=null;
+    this._cssW=0; this._last=null;
+    this.solvedCount=0; this.best=parseFloat(localStorage.getItem('sbBest')||'0')||0;
+    this.fit(); this.generate(); this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this._cssW=rect.width;
+  }
+  generate(){
+    this.stars=placeStars(this.N);
+    this.reg=makeRegions(this.N,this.stars);
+    this.solution=this.stars.map(s=>s.r*this.N+s.c);
+    this.placed=new Set(); this.solved=false; this.solIdx=0; this._hideBanner(); this._updateStatus();
+  }
+  restart(){ this.stopAuto(); this.generate(); }
+  hasStar(r,c){ return this.placed.has(r*this.N+c); }
+  toggle(r,c){
+    if(this.solved) return;
+    const k=r*this.N+c;
+    if(this.placed.has(k)){ this.placed.delete(k); }
+    else {
+      // prevent adjacency with existing star
+      for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]){ const nr=r+dr,nc=c+dc; if(nr>=0&&nr<this.N&&nc>=0&&nc<this.N&&this.placed.has(nr*this.N+nc)) return; }
+      this.placed.add(k);
+    }
+    if(this.placed.size===this.N && this.validate()) this.win();
+  }
+  validate(){
+    if(this.placed.size!==this.N) return false;
+    const rows=new Array(this.N).fill(0), cols=new Array(this.N).fill(0), regs=new Array(this.N).fill(0);
+    for(const k of this.placed){ const r=Math.floor(k/this.N), c=k%this.N; rows[r]++; cols[c]++; regs[this.reg[r][c]]++; }
+    for(let i=0;i<this.N;i++){ if(rows[i]!==1||cols[i]!==1||regs[i]!==1) return false; }
+    return true;
+  }
+  win(){
+    if(this.autoPlay){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('sbBest',this.best); } this.schedule(()=>this.generate(),600); return; }
+    this.solved=true; this._showBanner('解出！','已放置 '+this.N+' 颗星');
+  }
+  autoStep(){
+    if(this.solIdx<this.solution.length){ this.placed.add(this.solution[this.solIdx]); this.solIdx++; this._autoProgress++; }
+    if(this.placed.size===this.N && this.validate()){ this.win(); }
+  }
+  schedule(fn,ms){ if(this._t){ clearTimeout(this._t); } this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
+  maybeAuto(){ if(!this.autoPlay||this.solved) return; if(this._t) return; this.schedule(()=>this.autoStep(),260); }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this.solIdx=0; this.placed=new Set(); this.maybeAuto();
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this._t){ clearTimeout(this._t); this._t=null; }
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; const r=cv.getBoundingClientRect(); this.onTap(e.clientX-r.left,e.clientY-r.top); });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); this.solved=false; };
+  }
+  onTap(x,y){
+    const cell=Math.min((this.W*0.92)/this.N,(this.H*0.82)/this.N);
+    const ox=(this.W-cell*this.N)/2, oy=(this.H-cell*this.N)/2+this.H*0.04;
+    const c=Math.floor((x-ox)/cell), r=Math.floor((y-oy)/cell);
+    if(r<0||r>=this.N||c<0||c>=this.N) return;
+    this.toggle(r,c); this._updateStatus();
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    if(this.autoPlay) this.maybeAuto();
+    this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  render(){
+    const ctx=this.ctx,W=this.W,H=this.H,N=this.N;
+    ctx.clearRect(0,0,W,H);
+    const cell=Math.min((W*0.92)/N,(H*0.82)/N);
+    const ox=(W-cell*N)/2, oy=(H-cell*N)/2+H*0.04;
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const x=ox+c*cell,y=oy+r*cell, hue=REGION_HUES[this.reg[r][c]%REGION_HUES.length];
+      ctx.fillStyle=hue+'22'; ctx.fillRect(x,y,cell,cell);
+      ctx.strokeStyle=hue+'66'; ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,cell-1,cell-1);
+    }
+    for(const k of this.placed){ const r=Math.floor(k/N),c=k%N; const cx=ox+(c+0.5)*cell, cy=oy+(r+0.5)*cell;
+      ctx.save(); ctx.shadowColor='#ffd84d'; ctx.shadowBlur=14; ctx.fillStyle='#ffd84d'; ctx.beginPath(); ctx.arc(cx,cy,cell*0.28,0,7); ctx.fill(); ctx.restore(); }
+    // solution faint hint in auto
+    if(this.autoPlay && this.solIdx<this.solution.length){ const k=this.solution[this.solIdx]; const r=Math.floor(k/N),c=k%N; const cx=ox+(c+0.5)*cell, cy=oy+(r+0.5)*cell; ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,cell*0.3,0,7); ctx.stroke(); }
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const best=this.best>0?(' · 已解 '+this.best):'';
+    document.getElementById('status').textContent=`已放 ${this.placed.size}/${this.N} 星${best}`;
+  }
+}
+window.game = new StarBattle();
+</script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>长空对决 · Sky Joust</title>
+<style>
+  :root{
+    --bg:#0a0612; --surface:#1a1230; --board:#0e0a1c; --text:#f0e9ff;
+    --muted:#9a8ec2; --accent:#b66dff; --accent-glow:rgba(182,109,255,.55);
+    --gold:#ffd84d; --red:#ff5d6c; --green:#3ecf8e; --cyan:#5ad1ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:680px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#b66dff,#5ad1ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#5a2a8a,#b66dff);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,640px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(182,109,255,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(10,6,18,.74);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(182,109,255,.25)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>长空对决 · Sky Joust</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">按住屏幕拍动翅膀上升，松开滑翔；从上方撞击敌人即可击落。清光每波敌人进入下一关。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">游戏结束</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">再来</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function rnd(a,b){ return a+Math.random()*(b-a); }
+
+class Joust {
+  constructor(){
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false; this._autoProgress=0; this.autoTimer=null;
+    this._cssW=0; this._last=null;
+    this.GRAV=380; this.LIFT=320; this.HSPEED=190;
+    this.score=0; this.best=parseFloat(localStorage.getItem('sjBest')||'0')||0;
+    this.fit();
+    this.restart();
+    this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this._cssW=rect.width;
+  }
+  restart(){
+    this.stopAuto();
+    this.player={x:this.W*0.3,y:this.H*0.4,vx:0,vy:0,r:13,flap:0,inv:0};
+    this.enemies=[]; this.parts=[];
+    this.lives=3; this.wave=1; this.over=false;
+    this._hideBanner();
+    this.spawnWave();
+    this._updateStatus();
+  }
+  spawnWave(){
+    const n=2+this.wave;
+    for(let i=0;i<n;i++){
+      this.enemies.push({ x:rnd(this.W*0.15,this.W*0.85), y:rnd(40,this.H*0.4),
+        vx:rnd(-1,1)>0?this.HSPEED*0.6:-this.HSPEED*0.6, vy:0, r:13, flap:rnd(0,0.3), hue:'#ff7a9c' });
+    }
+  }
+  flap(ent){ ent.vy=-this.LIFT; }
+  autoControl(dt){
+    const p=this.player;
+    let near=null,nd=1e9;
+    for(const e of this.enemies){ const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<nd){ nd=d; near=e; } }
+    // defensive avoidance: if a close enemy is at/below us, veer away and climb
+    let veer=0;
+    for(const e of this.enemies){
+      const d=Math.hypot(e.x-p.x,e.y-p.y);
+      if(d<70 && p.y>=e.y-4){ veer += Math.sign(p.x-e.x)||1; }
+    }
+    if(near){
+      const dir = veer!==0 ? Math.sign(veer) : (Math.sign(near.x-p.x)||1);
+      p.vx=dir*this.HSPEED;
+      if(p.y > near.y+4){ if(p.flap<=0){ p.vy=-this.LIFT; p.flap=0.34; } }
+      else if(p.vy>30 && p.y>this.H*0.5){ if(p.flap<=0){ p.vy=-this.LIFT; p.flap=0.34; } }
+    } else { p.vx*=0.9; if(p.y>this.H*0.5 && p.flap<=0){ p.vy=-this.LIFT; p.flap=0.34; } }
+    if(p.y>this.H-34 && p.vy>0 && p.flap<=0){ p.vy=-this.LIFT; p.flap=0.34; }
+    if(p.flap>0) p.flap-=dt;
+  }
+  manualControl(dt){
+    const p=this.player;
+    if(this._down){
+      const dir=Math.sign((this._targetX||p.x)-p.x);
+      p.vx=dir*this.HSPEED;
+      if(p.flap<=0){ p.vy=-this.LIFT; p.flap=0.34; }
+    } else p.vx*=0.9;
+    if(p.flap>0) p.flap-=dt;
+  }
+  update(dt){
+    if(this.over) return;
+    const p=this.player;
+    if(this.autoPlay) this.autoControl(dt); else this.manualControl(dt);
+    // player physics
+    p.vy+=this.GRAV*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+    if(p.x<p.r){ p.x=p.r; p.vx=Math.abs(p.vx); } if(p.x>this.W-p.r){ p.x=this.W-p.r; p.vx=-Math.abs(p.vx); }
+    if(p.y< p.r){ p.y=p.r; p.vy=0; }
+    if(p.y>this.H-p.r){ p.y=this.H-p.r; p.vy=0; if(p.flap<=0) p.flap=0.2; }
+    if(p.inv>0) p.inv-=dt;
+    // enemies
+    for(const e of this.enemies){
+      // AI: stay aloft, drift toward player
+      const dir=Math.sign(p.x-e.x)||1; e.vx += (dir*this.HSPEED - e.vx)*0.02;
+      e.vy+=this.GRAV*dt; e.x+=e.vx*dt; e.y+=e.vy*dt;
+      if(e.y>this.H*0.6 && e.flap<=0){ e.vy=-this.LIFT*0.9; e.flap=rnd(0.3,0.6); }
+      if(e.flap>0) e.flap-=dt;
+      if(e.y<e.r){ e.y=e.r; e.vy=0; }
+      if(e.y>this.H-e.r){ e.y=this.H-e.r; e.vy=0; }
+      if(e.x<e.r){ e.x=e.r; e.vx=Math.abs(e.vx); } if(e.x>this.W-e.r){ e.x=this.W-e.r; e.vx=-Math.abs(e.vx); }
+    }
+    // collisions
+    if(p.inv<=0){
+      for(const e of this.enemies){
+        if(Math.hypot(p.x-e.x,p.y-e.y) < p.r+e.r){
+          if(p.y < e.y-6){ e.dead=true; this.score+=100; this._autoProgress++; for(let i=0;i<8;i++) this.parts.push({x:e.x,y:e.y,vx:rnd(-160,160),vy:rnd(-160,160),life:0.5,hue:e.hue}); }
+          else if(e.y < p.y-6){ this.hit(); break; }
+          else { const a=Math.atan2(p.y-e.y,p.x-e.x); const f=120; p.vx+=Math.cos(a)*f; p.vy+=Math.sin(a)*f; e.vx-=Math.cos(a)*f; e.vy-=Math.sin(a)*f; }
+        }
+      }
+    }
+    this.enemies=this.enemies.filter(e=>!e.dead);
+    for(const p2 of this.parts){ p2.x+=p2.vx*dt; p2.y+=p2.vy*dt; p2.life-=dt; }
+    this.parts=this.parts.filter(p2=>p2.life>0);
+    if(!this.over && this.enemies.length===0){ this.wave++; this.spawnWave(); this._updateStatus(); }
+  }
+  hit(){
+    if(this.autoPlay){ this.player.x=this.W*0.3; this.player.y=this.H*0.4; this.player.vx=0; this.player.vy=0; this.player.inv=1.0; return; }
+    this.lives--; this._updateStatus();
+    if(this.lives<=0){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('sjBest',this.best); } this._showBanner('游戏结束','得分 '+this.score+(this.best===this.score?' · 新纪录！':'')); return; }
+    this.player.x=this.W*0.3; this.player.y=this.H*0.4; this.player.vx=0; this.player.vy=0; this.player.inv=1.2;
+  }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this._down=false;
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;}
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; this._down=true; const r=cv.getBoundingClientRect(); this._targetX=e.clientX-r.left; });
+    cv.addEventListener('pointermove',e=>{ if(!this._down||this.autoPlay) return; const r=cv.getBoundingClientRect(); this._targetX=e.clientX-r.left; });
+    cv.addEventListener('pointerup',e=>{ this._down=false; });
+    cv.addEventListener('pointercancel',e=>{ this._down=false; });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); this.score=0; this.restart(); };
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.update(dt); this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  render(){
+    const ctx=this.ctx,W=this.W,H=this.H;
+    ctx.clearRect(0,0,W,H);
+    // ground glow
+    const g=ctx.createLinearGradient(0,H-40,0,H); g.addColorStop(0,'rgba(182,109,255,0)'); g.addColorStop(1,'rgba(182,109,255,.25)');
+    ctx.fillStyle=g; ctx.fillRect(0,H-40,W,40);
+    for(const p2 of this.parts){ ctx.globalAlpha=Math.max(0,p2.life/0.5); ctx.fillStyle=p2.hue; ctx.beginPath(); ctx.arc(p2.x,p2.y,2.5,0,7); ctx.fill(); ctx.globalAlpha=1; }
+    for(const e of this.enemies){
+      ctx.save(); ctx.shadowColor=e.hue; ctx.shadowBlur=12; ctx.fillStyle=e.hue;
+      ctx.beginPath(); ctx.ellipse(e.x,e.y,e.r,e.r*0.7,0,0,7); ctx.fill();
+      // lance
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(e.x,e.y); ctx.lineTo(e.x,e.y-e.r-6); ctx.stroke();
+      ctx.restore();
+    }
+    const p=this.player;
+    if(p.inv>0 && Math.floor(p.inv*12)%2===0){} else {
+      ctx.save(); ctx.shadowColor='#3ecf8e'; ctx.shadowBlur=14; ctx.fillStyle='#3ecf8e';
+      ctx.beginPath(); ctx.ellipse(p.x,p.y,p.r,p.r*0.7,0,0,7); ctx.fill();
+      ctx.strokeStyle='#ffd84d'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x,p.y-p.r-6); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const best=this.best>0?(' · 最佳 '+this.best):'';
+    document.getElementById('status').textContent=`第 ${this.wave} 波 · 生命 ${this.lives} · 分 ${this.score}${best}`;
+  }
+}
+window.game = new Joust();
+</script>
+</body>
+</html>

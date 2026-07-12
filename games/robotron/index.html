@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>机械风暴 · Robotron</title>
+<style>
+  :root{
+    --bg:#07070f; --surface:#12122a; --board:#0c0c1c; --text:#e6ecff;
+    --muted:#8a92b2; --accent:#ff8a3d; --accent-glow:rgba(255,138,61,.55);
+    --gold:#ffd84d; --red:#ff5d6c; --green:#3ecf8e; --cyan:#5ad1ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);touch-action:none;overscroll-behavior:none}
+  .app{display:flex;flex-direction:column;height:100%;max-width:680px;margin:0 auto;padding:10px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 8px}
+  h1{font-size:19px;margin:0;letter-spacing:.5px;
+    background:linear-gradient(90deg,#ff8a3d,#ffd84d);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .toolbar{display:flex;gap:8px}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;
+    transition:transform .12s ease,box-shadow .2s ease,background .2s}
+  button:active{transform:scale(.95)}
+  button.on{background:linear-gradient(90deg,#7a3a12,#ff8a3d);box-shadow:0 0 16px var(--accent-glow)}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+  .board-wrap *{touch-action:none}
+  canvas{width:100%;height:100%;max-width:min(96vw,640px);max-height:92%;border-radius:14px;
+    background:var(--board);box-shadow:0 0 40px rgba(255,138,61,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(7,7,15,.74);backdrop-filter:blur(6px);z-index:20}
+  .banner.show{display:flex;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+    padding:26px 30px;text-align:center;box-shadow:0 0 50px rgba(255,138,61,.25)}
+  .card h2{margin:0 0 6px;font-size:26px;color:var(--gold)}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px}
+  .card button{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>机械风暴 · Robotron</h1>
+    <div class="toolbar">
+      <button id="newBtn">新局</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status"></div>
+  <div class="hint">拖动屏幕移动，子弹自动射向最近的机械体。避开接触，清光每波敌人进入下一关。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2 id="bannerTitle">游戏结束</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">再来</button>
+</div></div>
+<script>
+const PNOW = () => (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+function rnd(a,b){ return a+Math.random()*(b-a); }
+function dist(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-by); }
+
+class Robotron {
+  constructor(){
+    this.canvas=document.getElementById('c');
+    this.ctx=this.canvas.getContext('2d');
+    this.autoPlay=false; this._autoProgress=0; this.autoTimer=null;
+    this._cssW=0; this._last=null;
+    this.score=0; this.best=parseFloat(localStorage.getItem('rbBest')||'0')||0;
+    this.fit();
+    this.restart();
+    this._bind();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  fit(){
+    const rect=this.canvas.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    const w=rect.width||360,h=rect.height||360;
+    this.W=w; this.H=h;
+    this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this._cssW=rect.width;
+  }
+  restart(){
+    this.stopAuto();
+    this.player={x:this.W/2,y:this.H/2,vx:0,vy:0,r:11,inv:0};
+    this.enemies=[]; this.bullets=[]; this.parts=[];
+    this.lives=3; this.wave=1; this.over=false; this.shootCD=0;
+    this._hideBanner();
+    this.spawnWave();
+    this._updateStatus();
+  }
+  spawnWave(){
+    const n=2+this.wave;
+    for(let i=0;i<n;i++){
+      const edge=Math.floor(Math.random()*4);
+      let x,y;
+      if(edge===0){ x=rnd(20,this.W-20); y=20; }
+      else if(edge===1){ x=rnd(20,this.W-20); y=this.H-20; }
+      else if(edge===2){ x=20; y=rnd(20,this.H-20); }
+      else { x=this.W-20; y=rnd(20,this.H-20); }
+      const spher=Math.random()<0.4;
+      this.enemies.push({ x,y, vx:0,vy:0, r: spher?10:11,
+        speed: spher? rnd(90,130): rnd(60,95)+this.wave*4,
+        spher, hue: spher?'#5ad1ff':'#ff5d6c', dir: rnd(0,Math.PI*2) });
+    }
+  }
+  shoot(tx,ty){
+    const a=Math.atan2(ty-this.player.y,tx-this.player.x);
+    const sp=520;
+    this.bullets.push({ x:this.player.x, y:this.player.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, r:3 });
+  }
+  autoControl(dt){
+    const p=this.player;
+    let rx=0,ry=0;
+    for(const e of this.enemies){
+      const d=dist(p.x,p.y,e.x,e.y);
+      if(d<240){ const f=(240-d)/240; rx+=(p.x-e.x)/d*f; ry+=(p.y-e.y)/d*f; }
+    }
+    // edge avoidance
+    if(p.x<120) rx+=(120-p.x)/120; if(p.x>this.W-120) rx-=(p.x-(this.W-120))/120;
+    if(p.y<120) ry+=(120-p.y)/120; if(p.y>this.H-120) ry-=(p.y-(this.H-120))/120;
+    const m=Math.hypot(rx,ry)||1;
+    const SPEED=210;
+    p.vx=rx/m*SPEED; p.vy=ry/m*SPEED;
+    // shoot nearest
+    let near=null,nd=1e9;
+    for(const e of this.enemies){ const d=dist(p.x,p.y,e.x,e.y); if(d<nd){ nd=d; near=e; } }
+    if(near && this.shootCD<=0){ this.shoot(near.x,near.y); this.shootCD=0.18; }
+  }
+  manualControl(dt){
+    const p=this.player;
+    if(this._target){
+      const dx=this._target.x-p.x, dy=this._target.y-p.y, d=Math.hypot(dx,dy);
+      if(d>4){ const SPEED=210; p.vx=dx/d*SPEED; p.vy=dy/d*SPEED; } else { p.vx=0; p.vy=0; }
+    } else { p.vx*=0.8; p.vy*=0.8; }
+    let near=null,nd=1e9;
+    for(const e of this.enemies){ const d=dist(p.x,p.y,e.x,e.y); if(d<nd){ nd=d; near=e; } }
+    if(near && this.shootCD<=0){ this.shoot(near.x,near.y); this.shootCD=0.18; }
+  }
+  update(dt){
+    if(this.over) return;
+    const p=this.player;
+    if(this.autoPlay) this.autoControl(dt); else this.manualControl(dt);
+    if(this.shootCD>0) this.shootCD-=dt;
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    p.x=Math.max(p.r,Math.min(this.W-p.r,p.x)); p.y=Math.max(p.r,Math.min(this.H-p.r,p.y));
+    if(p.inv>0) p.inv-=dt;
+    for(const e of this.enemies){
+      if(e.spher){
+        e.x+=Math.cos(e.dir)*e.speed*dt; e.y+=Math.sin(e.dir)*e.speed*dt;
+        if(e.x<e.r||e.x>this.W-e.r) e.dir=Math.PI-e.dir;
+        if(e.y<e.r||e.y>this.H-e.r) e.dir=-e.dir;
+        e.x=Math.max(e.r,Math.min(this.W-e.r,e.x)); e.y=Math.max(e.r,Math.min(this.H-e.r,e.y));
+      } else {
+        const a=Math.atan2(p.y-e.y,p.x-e.x);
+        e.x+=Math.cos(a)*e.speed*dt; e.y+=Math.sin(a)*e.speed*dt;
+      }
+    }
+    for(const b of this.bullets){ b.x+=b.vx*dt; b.y+=b.vy*dt; }
+    this.bullets=this.bullets.filter(b=>b.x>-10&&b.x<this.W+10&&b.y>-10&&b.y<this.H+10);
+    // bullet-enemy
+    for(const b of this.bullets){
+      for(const e of this.enemies){
+        if(!e.dead && dist(b.x,b.y,e.x,e.y)<e.r+b.r){
+          e.dead=true; b.dead=true; this.score+=10; this._autoProgress++;
+          for(let i=0;i<6;i++) this.parts.push({x:e.x,y:e.y,vx:rnd(-120,120),vy:rnd(-120,120),life:0.5,hue:e.hue});
+          break;
+        }
+      }
+    }
+    this.bullets=this.bullets.filter(b=>!b.dead);
+    this.enemies=this.enemies.filter(e=>!e.dead);
+    for(const p2 of this.parts){ p2.x+=p2.vx*dt; p2.y+=p2.vy*dt; p2.life-=dt; }
+    this.parts=this.parts.filter(p2=>p2.life>0);
+    // player-enemy
+    if(p.inv<=0){
+      for(const e of this.enemies){ if(dist(p.x,p.y,e.x,e.y)<p.r+e.r){ this.hit(); break; } }
+    }
+    if(!this.over && this.enemies.length===0){ this.wave++; if(this.wave>this.best){} this.spawnWave(); this._updateStatus(); }
+  }
+  hit(){
+    this.lives--; this._updateStatus();
+    if(this.lives<=0){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('rbBest',this.best); } this._showBanner('游戏结束','得分 '+this.score+(this.best===this.score?' · 新纪录！':'')); return; }
+    this.player.x=this.W/2; this.player.y=this.H/2; this.player.vx=0; this.player.vy=0; this.player.inv=1.2;
+  }
+  toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this._target=null;
+    document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
+  stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;}
+    document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
+  _bind(){
+    const cv=this.canvas; let down=false;
+    cv.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay) return; down=true; const r=cv.getBoundingClientRect(); this._target={x:e.clientX-r.left,y:e.clientY-r.top}; });
+    cv.addEventListener('pointermove',e=>{ if(!down||this.autoPlay) return; const r=cv.getBoundingClientRect(); this._target={x:e.clientX-r.left,y:e.clientY-r.top}; });
+    cv.addEventListener('pointerup',e=>{ down=false; this._target=null; });
+    cv.addEventListener('pointercancel',e=>{ down=false; this._target=null; });
+    document.getElementById('newBtn').onclick=()=>this.restart();
+    document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+    document.getElementById('bannerBtn').onclick=()=>{ this._hideBanner(); this.score=0; this.restart(); };
+  }
+  loop(ts){
+    const rect=this.canvas.getBoundingClientRect();
+    if(rect.width && rect.width!==this._cssW) this.fit();
+    const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+    this._last=ts;
+    this.update(dt); this.render();
+    this._raf=requestAnimationFrame(this.loop.bind(this));
+  }
+  render(){
+    const ctx=this.ctx,W=this.W,H=this.H;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,138,61,.10)'; ctx.lineWidth=1;
+    for(let x=0;x<W;x+=40){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+    for(let y=0;y<H;y+=40){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+    for(const b of this.bullets){ ctx.save(); ctx.shadowColor='#ffd84d'; ctx.shadowBlur=8; ctx.fillStyle='#ffd84d'; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fill(); ctx.restore(); }
+    for(const e of this.enemies){
+      ctx.save(); ctx.shadowColor=e.hue; ctx.shadowBlur=12; ctx.fillStyle=e.hue;
+      if(e.spher){ ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,7); ctx.fill(); }
+      else { ctx.fillRect(e.x-e.r,e.y-e.r,e.r*2,e.r*2); }
+      ctx.restore();
+    }
+    for(const p2 of this.parts){ ctx.globalAlpha=Math.max(0,p2.life/0.5); ctx.fillStyle=p2.hue; ctx.beginPath(); ctx.arc(p2.x,p2.y,2.5,0,7); ctx.fill(); ctx.globalAlpha=1; }
+    const p=this.player;
+    if(p.inv>0 && Math.floor(p.inv*12)%2===0){ /* blink */ }
+    else { ctx.save(); ctx.shadowColor='#3ecf8e'; ctx.shadowBlur=14; ctx.fillStyle='#3ecf8e'; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); ctx.restore(); }
+  }
+  _showBanner(t,m){ document.getElementById('bannerTitle').textContent=t; document.getElementById('bannerMsg').textContent=m; document.getElementById('banner').classList.add('show'); }
+  _hideBanner(){ document.getElementById('banner').classList.remove('show'); }
+  _updateStatus(){
+    const best=this.best>0?(' · 最佳 '+this.best):'';
+    document.getElementById('status').textContent=`第 ${this.wave} 波 · 生命 ${this.lives} · 分 ${this.score}${best}`;
+  }
+}
+window.game = new Robotron();
+</script>
+</body>
+</html>
