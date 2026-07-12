@@ -86,6 +86,7 @@
   'use strict';
   const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
   const COLS=7, ROWS=6, DEPTH=5;
+  const COLORS={R:'#ff4d6a',Y:'#ffd700'};
   function fitCanvas(){ const w=canvas.clientWidth||400; const dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=w*ROWS/COLS*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); return w; }
   class CF{
     constructor(){
@@ -96,7 +97,7 @@
     }
     restart(){
       this.stopAuto(); this.stopLoop();
-      this.W=fitCanvas(); this.cs=this.W/COLS;
+      this.W=fitCanvas(); this.cs=this.W/COLS; this.H=this.W*ROWS/COLS;
       this.board=Array.from({length:ROWS},()=>Array(COLS).fill(null));
       this.current='R'; this.over=false; this.winLine=null; this.moves=0;
       this.anim=null; this.hoverCol=-1;
@@ -195,7 +196,8 @@
       if(this.anim){ const cx=(this.anim.col+0.5)*cs; this.drawDisc(cx,this.anim.y,cs*0.4,this.anim.color,false); }
     }
     drawDisc(cx,cy,r,color,win){
-      ctx.save(); ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=win?18:10;
+      const c=COLORS[color]||color;
+      ctx.save(); ctx.fillStyle=c; ctx.shadowColor=c; ctx.shadowBlur=win?18:10;
       ctx.beginPath(); ctx.arc(cx,cy,r*0.92,0,7); ctx.fill();
       ctx.shadowBlur=0; ctx.fillStyle='#ffffff33'; ctx.beginPath(); ctx.arc(cx-r*0.28,cy-r*0.28,r*0.3,0,7); ctx.fill();
       ctx.restore();
@@ -209,7 +211,7 @@
       wrap.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.autoPlay||this.over||this.anim) return; const c=colAt(e.clientX); if(c>=0&&c<COLS) this.place(c); });
       wrap.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over||this.anim) return; this.hoverCol=colAt(e.clientX); this.draw(); });
       wrap.addEventListener('pointerleave',()=>{ this.hoverCol=-1; });
-      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.cs=this.W/COLS; this.draw(); });
+      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.cs=this.W/COLS; this.H=this.W*ROWS/COLS; this.draw(); });
     }
   }
   window.game=new CF();
