@@ -59,7 +59,7 @@
     </div>
   </div>
   <div class="board-wrap" id="board-wrap">
-    <canvas id="cv" width="420" height="640"></canvas>
+    <canvas id="cv" width="640" height="320"></canvas>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Clear!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
     <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Scratch!</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
   </div>
@@ -73,7 +73,7 @@
 <script>
 (function(){
   'use strict';
-  const W=420, H=640, M=26, BR=11, PR=17, FR=0.986, REST=0.9;
+  const W=640, H=320, M=26, BR=11, PR=17, FR=0.986, REST=0.9;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
   const cols=['#ffd24d','#3a7bff','#ff4d6a','#9b59ff','#ff8c1a','#2ad6c8','#8b1a1a','#1a1a1a','#ff5db1','#36c24a','#5a3a1a','#1aa0ff','#ff2d2d','#7a4dff','#2ecc71'];
