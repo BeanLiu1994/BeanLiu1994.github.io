@@ -47,7 +47,20 @@
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
   .stats-bar span{background:var(--surface);padding:3px 8px;border-radius:6px;border:1px solid #ffffff08;}
-  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
+  .legend{display:flex;gap:16px;justify-content:center;margin-top:10px;flex-wrap:wrap;font-size:0.72rem;color:var(--muted);}
+  .legend .item{display:flex;align-items:center;gap:6px;}
+  .peg-dot{width:14px;height:14px;border-radius:50%;flex:none;}
+  .peg-dot.black{background:#0a0a1a;border:1px solid #ffffff44;}
+  .peg-dot.white{background:#ffffff;}
+  .peg-dot.none{background:#ffffff22;}
+  .overlay.help h2{color:var(--accent);font-size:1.5rem;}
+  .help-body{text-align:left;max-width:350px;margin:0 auto 16px;font-size:0.82rem;line-height:1.6;color:var(--text);max-height:60vh;overflow:auto;padding:0 6px;}
+  .help-body h3{font-size:0.88rem;color:var(--accent);margin:12px 0 5px;}
+  .help-body ul{margin:0 0 0 18px;padding:0;}
+  .help-body li{margin:4px 0;}
+  .help-body .ex{color:var(--gold);font-weight:600;}
+  .help-body .peg-inline{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle;margin:0 1px;}
+  @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}.help-body{font-size:0.78rem;}}
 </style>
 </head>
 <body>
@@ -68,12 +81,44 @@
     <button class="btn primary" onclick="game.submitGuess()">Guess</button>
     <button class="btn" onclick="game.clearGuess()">Clear</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+    <button class="btn" onclick="game.showHelp()">Rules</button>
+  </div>
+  <div class="legend">
+    <div class="item"><span class="peg-dot black"></span>位置和颜色都对</div>
+    <div class="item"><span class="peg-dot white"></span>颜色对、位置错</div>
+    <div class="item"><span class="peg-dot none"></span>该色不在答案里</div>
   </div>
   <div class="stats-bar" style="margin-top:6px;flex-wrap:wrap;gap:6px;">
     <span id="cand-stat">Candidates: 0</span><span id="rows-stat">Rows: 0/10</span>
     <span>键 1–6 选色并跳下一格 · ←→ 移动 · ⌫ 清除 · ↵ 提交</span>
   </div>
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI thinking...</span></div>
+  <div class="overlay help" id="overlay-help"><div class="overlay-bg"></div><div class="overlay-content">
+    <h2>怎么玩 · Mastermind 破译密码</h2>
+    <div class="help-body">
+      <p>电脑随机生成一组 <strong>4 个颜色</strong> 的秘密密码（共 6 种颜色，<strong>可重复</strong>）。你的目标：在 <strong>10 次</strong> 猜测内推理出这组密码的<strong>颜色与顺序</strong>。</p>
+      <h3>① 怎么猜</h3>
+      <ul>
+        <li>在当前行的 4 个槽里各放一个颜色，点 <strong>Guess</strong> 提交。</li>
+        <li>点调色板选色会<strong>自动跳到下一格</strong>；也可点某个槽先选中它。</li>
+        <li>键盘：<span class="ex">1–6</span> 选色并前进一格，<span class="ex">←→</span> 移动，<span class="ex">⌫</span> 清除，<span class="ex">↵</span> 提交。</li>
+      </ul>
+      <h3>② 读懂反馈钉（每行右侧的小圆点）</h3>
+      <ul>
+        <li><span class="peg-inline" style="background:#0a0a1a;border:1px solid #ffffff44;"></span><strong>黑/深钉</strong> = 有一个颜色<strong>位置和颜色都对</strong>。</li>
+        <li><span class="peg-inline" style="background:#fff;"></span><strong>白钉</strong> = 有一个颜色<strong>对、但位置放错了</strong>。</li>
+        <li><span class="peg-inline" style="background:#ffffff22;"></span><strong>灰钉</strong> = 这一位的颜色<strong>不在答案里</strong>。</li>
+        <li>钉子<strong>不指明</strong>是哪一格对应哪个钉——要靠你多次对比推理。</li>
+      </ul>
+      <h3>③ 举个例</h3>
+      <ul>
+        <li>秘密是 <span class="ex">红 绿 蓝 黄</span>，你猜 <span class="ex">红 蓝 绿 紫</span> → 得 <strong>1 黑</strong>（红对位）+ <strong>2 白</strong>（绿、蓝颜色对但错位），紫不在里面。</li>
+        <li>拿到 <strong>4 黑钉</strong> = 完全猜中，破译成功！</li>
+      </ul>
+      <p style="margin-top:12px;color:var(--muted);">不想动脑也能看：点 <strong>Auto</strong> 让 AI 用候选消除法自动破译。用越少次数猜中，Best 越低越好。</p>
+    </div>
+    <button class="btn primary" onclick="game.hideHelp()">开始玩</button>
+  </div></div>
 </div>
 <script>
 (function(){
@@ -89,8 +134,12 @@
     constructor(){
       this.best=parseInt(localStorage.getItem('bestMaster')||'0');
       this.autoPlay=false; this.autoTimer=null;
+      this.helpSeen=localStorage.getItem('masterHelpSeen')==='1';
       this.hit=[]; this.bindInput(); this.restart();
+      if(!this.helpSeen) this.showHelp();
     }
+    showHelp(){ document.getElementById('overlay-help').classList.add('active'); }
+    hideHelp(){ document.getElementById('overlay-help').classList.remove('active'); localStorage.setItem('masterHelpSeen','1'); this.helpSeen=true; }
     allCombos(){ const a=[]; const rec=(p)=>{ if(p.length===SLOTS){a.push(p.slice());return;} for(let i=0;i<COLORS;i++){p.push(i);rec(p);p.pop();} }; rec([]); return a; }
     restart(){
       this.stopAuto();
@@ -124,7 +173,7 @@
     lose(){ document.getElementById('lose-msg').textContent='Secret was '+this.secret.map(c=>PAL[c]).join(' '); document.getElementById('overlay-lose').classList.add('active'); }
     aiGuess(){ if(this.candidates.length===0) return; this.guess=this.candidates[Math.floor(Math.random()*this.candidates.length)].slice(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
+    startAuto(){ this.hideHelp(); this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } this.aiGuess(); this.submitGuess(); if(!this.over){ document.getElementById('ai-status').textContent='AI: '+this.history.length+' guesses · '+this.candidates.length+' candidates'; this.autoTimer=setTimeout(()=>this.autoStep(),550); } }
     toScreen(e){ const r=canvas.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H }; }
