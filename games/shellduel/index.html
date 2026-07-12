@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Shell Duel · 炮术对决</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+  --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  overflow:hidden;touch-action:none;overscroll-behavior:none;}
+body{display:flex;flex-direction:column;align-items:center;user-select:none;-webkit-user-select:none;}
+header{width:100%;max-width:760px;padding:10px 14px 4px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.5px;
+  background:linear-gradient(90deg,#4f9cff,#3ecf8e,#ff5d6c);-webkit-background-clip:text;background-clip:text;color:transparent;}
+header .sub{font-size:12px;color:var(--muted);}
+.wrap{width:100%;max-width:760px;flex:1;display:flex;flex-direction:column;align-items:center;min-height:0;}
+canvas{width:100%;height:100%;display:block;touch-action:none;}
+.status{width:100%;max-width:760px;text-align:center;font-size:12px;color:var(--muted);padding:3px 0;min-height:16px;}
+.toolbar{width:100%;max-width:760px;display:flex;gap:8px;padding:8px 14px 12px;flex-wrap:wrap;justify-content:center;}
+button{font:inherit;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--border);
+  border-radius:10px;padding:8px 14px;cursor:pointer;transition:transform .08s ease,border-color .15s ease,box-shadow .15s ease;}
+button:hover{border-color:var(--accent);}
+button:active{transform:scale(.96);}
+button.on{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok),0 0 14px rgba(62,207,142,.4);color:var(--ok);}
+</style>
+</head>
+<body>
+<header><h1>炮术对决 · Shell Duel</h1><span class="sub">拖拽瞄准蓄力，命中对手三发即胜</span></header>
+<div class="wrap"><canvas id="c"></canvas></div>
+<div class="status" id="status">准备中…</div>
+<div class="toolbar">
+  <button id="autoBtn">自动游玩</button>
+  <button id="newBtn">重新开战</button>
+</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+  const statusEl=document.getElementById('status');
+  const autoBtn=document.getElementById('autoBtn'), newBtn=document.getElementById('newBtn');
+  const best=parseInt(localStorage.getItem('shellduel_best')||'0',10);
+
+  class ShellDuel{
+    constructor(){
+      this.autoPlay=false; this._autoProgress=0; this._last=0; this._t=null;
+      this.cv=cv; this.ctx=ctx;
+      window.addEventListener('resize',()=>this.fit());
+      this.fit(); this.reset();
+      this._tick=(ts)=>{ try{this.loop(ts);}catch(e){console.error(e);} requestAnimationFrame(this._tick); };
+      requestAnimationFrame(this._tick);
+      this.updateStatus();
+    }
+    fit(){
+      const r=cv.getBoundingClientRect();
+      const W=Math.max(320,r.width||cv.width||360), H=Math.max(360,r.height||cv.height||520);
+      const dpr=window.devicePixelRatio||1;
+      cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+      this.W=W; this.H=H; ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    genTerrain(){
+      const W=this.W, H=this.H;
+      const n=Math.max(2,Math.round(W));
+      const base=H*0.78;
+      const h1=H*0.06*(Math.random()*1.2+0.4);
+      const h2=H*0.05*(Math.random()*1.2+0.4);
+      const p1=Math.random()*6.28, p2=Math.random()*6.28;
+      const t=new Array(n);
+      for(let i=0;i<n;i++){
+        const x=i/n;
+        let y=base - (Math.sin(x*Math.PI*2+p1)*h1 + Math.sin(x*Math.PI*5+p2)*h2);
+        t[i]=Math.max(H*0.45, Math.min(H*0.94, y));
+      }
+      // flatten tank spots
+      this.tankX=[Math.round(W*0.12), Math.round(W*0.88)];
+      for(const tx of this.tankX){
+        const lo=Math.max(0,tx-22), hi=Math.min(n-1,tx+22);
+        const y=t[tx];
+        for(let i=lo;i<=hi;i++) t[i]=y;
+      }
+      this.terr=t;
+    }
+    groundY(x){ const i=Math.max(0,Math.min(this.terr.length-1,Math.round(x))); return this.terr[i]; }
+    reset(){
+      this.genTerrain();
+      this.tanks={
+        you:{x:this.tankX[0], y:this.groundY(this.tankX[0]), hp:100, color:'#4f9cff', angle:45, power:0.6, dir:1},
+        ai:{x:this.tankX[1], y:this.groundY(this.tankX[1]), hp:100, color:'#ff5d6c', angle:45, power:0.6, dir:-1}
+      };
+      this.wind=(Math.random()*2-1)*40;
+      this.turn=Math.random()<0.5?'you':'ai';
+      this.phase='aim'; this.proj=null; this.parts=[]; this.flash=0;
+      this.aim=null; this.over=false; this.win=null;
+      this.maybeAuto(); this.updateStatus();
+    }
+    current(){ return this.tanks[this.turn]; }
+    fire(angle,power){
+      const tk=this.current(); tk.angle=angle; tk.power=power;
+      const sp=380*power+120;
+      const a=angle*Math.PI/180;
+      this.proj={ x:tk.x, y:tk.y-14, vx:tk.dir*sp*Math.cos(a), vy:-sp*Math.sin(a), life:0 };
+      this.phase='fly';
+      if(this.autoPlay) this._autoProgress++;
+    }
+    simulate(angle,power,dir,wind,sx,sy,ex,ey){
+      const sp=380*power+120; const a=angle*Math.PI/180;
+      let x=sx,y=sy, vx=dir*sp*Math.cos(a), vy=-sp*Math.sin(a);
+      const g=220, dt=0.02; let closest=1e9; let hit=false; let impact=null;
+      for(let i=0;i<700;i++){
+        x+=vx*dt; y+=vy*dt; vx+=wind*dt; vy+=g*dt;
+        const d=Math.hypot(x-ex,y-ey); if(d<closest) closest=d;
+        if(d<13){ hit=true; impact={x,y}; break; }
+        if(x<2||x>this.W-2){ impact={x:Math.max(2,Math.min(this.W-2,x)),y}; break; }
+        const gy=this.groundY(x);
+        if(y>=gy){ impact={x,y:gy}; break; }
+      }
+      return {hit,closest,impact};
+    }
+    aiShot(){
+      const tk=this.current(); const t2=this.tanks[this.turn==='you'?'ai':'you'];
+      let best=null, bestD=1e9;
+      for(let ang=12; ang<=82; ang+=2){
+        for(let p=0.22; p<=1.0; p+=0.04){
+          const r=this.simulate(ang,p,tk.dir,this.wind,tk.x,tk.y-14,t2.x,t2.y-10);
+          if(r.hit){ return {angle:ang,power:p}; }
+          if(r.closest<bestD){ bestD=r.closest; best={angle:ang,power:p}; }
+        }
+      }
+      return best||{angle:45,power:0.6};
+    }
+    stepFly(dt){
+      const p=this.proj; if(!p) return;
+      const g=220; const sub=3; const sdt=dt/sub;
+      for(let s=0;s<sub;s++){
+        p.x+=p.vx*sdt; p.y+=p.vy*sdt; p.vx+=this.wind*sdt; p.vy+=g*sdt; p.life+=sdt;
+        const enemy=this.tanks[this.turn==='you'?'ai':'you'];
+        if(Math.hypot(p.x-enemy.x,p.y-(enemy.y-10))<13){ this.impact(p.x,p.y,true); return; }
+        if(p.x<2||p.x>this.W-2){ this.impact(Math.max(2,Math.min(this.W-2,p.x)),p.y,false); return; }
+        const gy=this.groundY(p.x);
+        if(p.y>=gy){ this.impact(p.x,gy,false); return; }
+      }
+    }
+    impact(x,y,direct){
+      this.proj=null; this.flash=0.35; this.flashX=x; this.flashY=y;
+      const enemy=this.tanks[this.turn==='you'?'ai':'you'];
+      let dmg=0;
+      const dHit=Math.hypot(x-enemy.x,y-(enemy.y-10));
+      if(direct||dHit<13) dmg=34;
+      else if(dHit<28) dmg=Math.round(18*(1-dHit/28));
+      // particles
+      for(let i=0;i<22;i++){ const a=Math.random()*6.28, sp=40+Math.random()*120; this.parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.6+Math.random()*0.4,c:direct?'#ffd700':'#ff8a4d'}); }
+      if(dmg>0){ enemy.hp=Math.max(0,enemy.hp-dmg); }
+      if(enemy.hp<=0){ this.endGame(this.turn); return; }
+      // next turn
+      this.turn=this.turn==='you'?'ai':'you';
+      this.wind=(Math.random()*2-1)*40;
+      this.phase='aim'; this.maybeAuto(); this.updateStatus();
+    }
+    endGame(winner){
+      if(this.over) return; this.over=true; this.win=winner; this.phase='over';
+      this.score=this.tanks[winner].hp;
+      if(this.score>best) localStorage.setItem('shellduel_best',String(this.score));
+      if(this.autoPlay){ this.schedule(800,()=>this.reset()); return; }
+      this.msg=(winner==='you'?'你赢了！':'AI 赢了'); this.updateStatus();
+    }
+    startAuto(){ if(this.autoPlay)return; this.autoPlay=true; autoBtn.classList.add('on'); autoBtn.textContent='停止自动'; this.sel=null; this.maybeAuto(); }
+    stopAuto(){ if(!this.autoPlay)return; this.autoPlay=false; autoBtn.classList.remove('on'); autoBtn.textContent='自动游玩'; if(this._t){clearTimeout(this._t);this._t=null;} }
+    toggleAuto(){ if(this.autoPlay)this.stopAuto(); else this.startAuto(); }
+    schedule(ms,fn){ if(this._t)clearTimeout(this._t); this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
+    maybeAuto(){ if(this.over||this._t) return; if(this.autoPlay||this.turn==='ai'){ this.schedule(560,()=>this.autoStep()); } }
+    autoStep(){
+      if(this.over||this.phase!=='aim') return;
+      const s=this.aiShot();
+      this.fire(s.angle,s.power);
+    }
+    updateStatus(){
+      const b=Math.max(best,this.score||0);
+      if(this.over&&!this.autoPlay){ statusEl.textContent=this.msg+'　你 HP '+this.tanks.you.hp+'　最高 '+b; return; }
+      const wtxt=this.wind<0?('← 风 '+Math.abs(Math.round(this.wind))):('风 '+Math.round(this.wind)+' →');
+      let s=(this.turn==='you'?'轮到你':'AI 瞄准')+'　风 '+Math.round(this.wind);
+      s+='　你 '+this.tanks.you.hp+' / AI '+this.tanks.ai.hp+(this.autoPlay?'　[AUTO]':'');
+      statusEl.textContent=s;
+    }
+    loop(ts){
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+      if(this.phase==='fly'&&this.proj) this.stepFly(dt);
+      for(const p of this.parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=180*dt; p.life-=dt; }
+      this.parts=this.parts.filter(p=>p.life>0);
+      if(this.flash>0) this.flash-=dt;
+      this.render();
+    }
+    render(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // sky
+      const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0b1020'); g.addColorStop(1,'#131a2c');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+      // stars
+      ctx.fillStyle='#2a3450';
+      for(let i=0;i<30;i++){ const sx=(i*97%W), sy=(i*53%Math.round(H*0.5)); ctx.fillRect(sx,sy,1.5,1.5); }
+      // terrain
+      ctx.beginPath(); ctx.moveTo(0,H);
+      for(let i=0;i<W;i+=2) ctx.lineTo(i,this.terr[Math.round(i)]);
+      ctx.lineTo(W,H); ctx.closePath();
+      const tg=ctx.createLinearGradient(0,H*0.4,0,H); tg.addColorStop(0,'#1c5a3a'); tg.addColorStop(1,'#0e3322');
+      ctx.fillStyle=tg; ctx.fill();
+      ctx.strokeStyle='#3ecf8e'; ctx.lineWidth=1.5; ctx.beginPath();
+      for(let i=0;i<W;i+=2){ const y=this.terr[Math.round(i)]; if(i===0)ctx.moveTo(i,y); else ctx.lineTo(i,y); } ctx.stroke();
+      // tanks
+      this.drawTank(this.tanks.you); this.drawTank(this.tanks.ai);
+      // aim preview
+      if(this.phase==='aim'&&this.aim&&(this.turn==='you')&&!this.autoPlay){
+        const tk=this.tanks.you; const a=this.aim.angle*Math.PI/180;
+        const L=30+this.aim.power*70;
+        ctx.strokeStyle='rgba(79,156,255,.7)'; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.moveTo(tk.x,tk.y-14); ctx.lineTo(tk.x+tk.dir*Math.cos(a)*L, tk.y-14-Math.sin(a)*L); ctx.stroke(); ctx.setLineDash([]);
+      }
+      // projectile
+      if(this.proj){ ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=12; ctx.beginPath(); ctx.arc(this.proj.x,this.proj.y,3.5,0,6.28); ctx.fill(); ctx.shadowBlur=0; }
+      // particles
+      for(const p of this.parts){ ctx.globalAlpha=Math.max(0,Math.min(1,p.life)); ctx.fillStyle=p.c; ctx.fillRect(p.x-2,p.y-2,4,4); }
+      ctx.globalAlpha=1;
+      if(this.flash>0){ ctx.fillStyle='rgba(255,200,80,'+(this.flash*1.6)+')'; ctx.beginPath(); ctx.arc(this.flashX||this.proj?.x||W/2, this.flashY||this.proj?.y||H/2, 30*(1-this.flash)+6,0,6.28); ctx.fill(); }
+    }
+    drawTank(tk){
+      const x=tk.x, y=tk.y;
+      // barrel
+      const a=tk.angle*Math.PI/180; const L=22;
+      ctx.strokeStyle=tk.color; ctx.lineWidth=4; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(x,y-12); ctx.lineTo(x+tk.dir*Math.cos(a)*L, y-12-Math.sin(a)*L); ctx.stroke();
+      // body
+      ctx.fillStyle=tk.color; ctx.shadowColor=tk.color; ctx.shadowBlur=10;
+      ctx.beginPath(); ctx.roundRect? ctx.roundRect(x-13,y-12,26,14,4) : ctx.rect(x-13,y-12,26,14); ctx.fill(); ctx.shadowBlur=0;
+      // hp bar
+      ctx.fillStyle='#222'; ctx.fillRect(x-15,y-22,30,4);
+      ctx.fillStyle=tk.color; ctx.fillRect(x-15,y-22,30*(tk.hp/100),4);
+    }
+  }
+
+  const game=new ShellDuel(); window.game=game;
+  let aimStart=null;
+  function getPos(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+  cv.addEventListener('pointerdown',(e)=>{
+    if(game.autoPlay||game.over||game.phase!=='aim'||game.turn!=='you') return;
+    const p=getPos(e); aimStart=p;
+    const tk=game.tanks.you;
+    const dx=p.x-tk.x, dy=tk.y-14-p.y;
+    let ang=Math.atan2(dy,Math.abs(dx))*180/Math.PI; ang=Math.max(5,Math.min(85,ang));
+    let pw=Math.min(1,Math.hypot(dx,dy)/180);
+    game.aim={angle:ang,power:pw};
+  });
+  cv.addEventListener('pointermove',(e)=>{
+    if(!aimStart||game.autoPlay) return;
+    const p=getPos(e); const tk=game.tanks.you;
+    const dx=p.x-tk.x, dy=tk.y-14-p.y;
+    let ang=Math.atan2(dy,Math.abs(dx))*180/Math.PI; ang=Math.max(5,Math.min(85,ang));
+    let pw=Math.min(1,Math.hypot(dx,dy)/180);
+    game.aim={angle:ang,power:pw};
+  });
+  function release(e){
+    if(!aimStart) return; const a=game.aim; aimStart=null; game.aim=null;
+    if(a) game.fire(a.angle,a.power);
+  }
+  cv.addEventListener('pointerup',release);
+  cv.addEventListener('pointercancel',()=>{aimStart=null;game.aim=null;});
+  autoBtn.addEventListener('click',()=>game.toggleAuto());
+  newBtn.addEventListener('click',()=>{ game.stopAuto(); game.reset(); });
+})();
+</script>
+</body>
+</html>

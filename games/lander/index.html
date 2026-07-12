@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>登月舱 · Lunar Lander</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0;
+    --accent:#7fe0ff; --accent-glow:#7fe0ff55; --gold:#ffd54a; --ok:#3ecf8e; --err:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #102a44 0%, transparent 60%), radial-gradient(ellipse at 80% 90%, #241a44 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#b388ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:46px; }
+  .score-card .label { font-size:0.48rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:linear-gradient(#05060f,#0b1024); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:62px; padding:9px 6px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.95rem; font-weight:700; cursor:pointer; transition:all .2s; text-align:center; user-select:none; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.thrust { background:linear-gradient(135deg,#ff8a3a,#ff5d6a); border-color:#ff5d6a; color:#2a0500; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04201a; }
+  .btn.primary:hover { box-shadow:0 0 18px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04201a; animation:pg 1.6s infinite; }
+  @keyframes pg {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>登月舱</h1><div class="sub">L U N A R &nbsp; L A N D E R</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Fuel</div><div class="value" id="fuel">100</div></div>
+      <div class="score-card best"><div class="label">Lands</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="440"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-l" onpointerdown="game.setRot(-1)" onpointerup="game.setRot(0)" onpointerleave="game.setRot(0)">⟲</button>
+    <button class="btn thrust" id="btn-t" onpointerdown="game.setThrust(true)" onpointerup="game.setThrust(false)" onpointerleave="game.setThrust(false)">▲ 推力</button>
+    <button class="btn" id="btn-r" onpointerdown="game.setRot(1)" onpointerup="game.setRot(0)" onpointerleave="game.setRot(0)">⟳</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">按住「推力」减速下降，左右调整姿态，落在高亮平台（速度要慢、机身要正）</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const statusEl=document.getElementById('status'); const fuelEl=document.getElementById('fuel'); const bestEl=document.getElementById('best');
+  const G=150, THR=330, ROT=2.2;
+
+  class Lander {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0; this.rot=0; this.thrust=false;
+      this.best=parseInt(localStorage.getItem('landerBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>{ this.fit(); });
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(rect.width,440));
+      this.W=w; this.H=w*440/420; canvas.width=w; canvas.height=this.H; }
+    terrain(){
+      const W=this.W,H=this.H, padW=64, padX=W*0.5; this.padX=padX; this.padW=padW;
+      const pts=[]; const seg=24; for(let i=0;i<=seg;i++){ const x=W*i/seg; let y=H*0.74 + Math.sin(i*1.3)*H*0.07 + (Math.random()-0.5)*H*0.10; pts.push({x,y}); }
+      // flatten pad
+      const p0=Math.round((padX-padW/2)/W*seg), p1=Math.round((padX+padW/2)/W*seg);
+      const py=H*0.82; for(let i=p0;i<=p1;i++) pts[i].y=py;
+      this.terr=pts; this.groundY=(x)=>{ const t=x/W*seg; const i=Math.floor(t); if(i>=seg) return pts[seg].y; const f=t-i; return pts[i].y+(pts[i+1].y-pts[i].y)*f; };
+      this.padY=py;
+    }
+    restart(){ this.stopAuto(); this.terrain(); this.x=this.W*0.5; this.y=this.H*0.12; this.vx=(Math.random()-0.5)*0.6; this.vy=0.2; this.angle=0; this.fuel=100; this.over=false; this.win=false; this._autoProgress=0; this.updateHUD(); this.updateStatus(); }
+    setRot(r){ if(this.autoPlay||this.over) return; this.rot=r; }
+    setThrust(t){ if(this.autoPlay||this.over) return; this.thrust=t; }
+    updateHUD(){ fuelEl.textContent=Math.max(0,Math.round(this.fuel)); }
+    updateStatus(){
+      if(this.over){ statusEl.textContent=this.win?'🎉 完美着陆！':'💥 坠毁 — 再来一次'; return; }
+      if(this.autoPlay){ statusEl.textContent='自动驾驶降落中…'; return; }
+      statusEl.textContent='按住「推力」减速下降，左右调整姿态，落在高亮平台（速度要慢、机身要正）';
+    }
+    autoCtrl(){
+      const alt=this.groundY(this.x)-this.y-14;
+      let target=Math.max(-0.5,Math.min(0.5,(this.padX-this.x)*0.02));
+      if(alt<70) target=0; // upright for landing
+      const da=target-this.angle; this.rot=Math.max(-1,Math.min(1,da*3));
+      let want=false;
+      const desiredVy = alt>150?95:34;
+      if(this.y<14 && this.vy<0) want=false;
+      else want = this.vy>desiredVy || (Math.abs(this.padX-this.x)>12 && alt>50);
+      if(alt<40) want = this.vy>20; // always ease down near ground
+      this.thrust=want && this.fuel>0;
+    }
+    update(dt){
+      if(this.over) return;
+      if(this.autoPlay) this.autoCtrl();
+      if(this.rot) this.angle+=this.rot*ROT*dt;
+      if(this.thrust && this.fuel>0){ this.fuel-=12*dt; this.vx+=Math.sin(this.angle)*THR*dt; this.vy+=-Math.cos(this.angle)*THR*dt; }
+      this.vy+=G*dt; this.vx*=0.995;
+      this.x+=this.vx*dt; this.y+=this.vy*dt;
+      if(this.x<10){ this.x=10; this.vx=Math.abs(this.vx)*0.4; } if(this.x>this.W-10){ this.x=this.W-10; this.vx=-Math.abs(this.vx)*0.4; }
+      // contact
+      const gy=this.groundY(this.x);
+      if(this.y+14>=gy){
+        this.y=gy-14; const onPad=Math.abs(this.x-this.padX)<this.padW/2-6;
+        if(onPad && Math.abs(this.vy)<70 && Math.abs(this.vx)<50 && Math.abs(this.angle)<0.26){ this.over=true; this.win=true; this.best++; localStorage.setItem('landerBest',String(this.best)); bestEl.textContent=this.best; this.updateStatus(); }
+        else { this.over=true; this.win=false; this.updateStatus(); }
+      }
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; this.thrust=false; this.rot=0; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); }
+    stopAuto(){ this.autoPlay=false; this.thrust=false; this.rot=0; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // stars
+      ctx.fillStyle='#ffffff55'; for(let i=0;i<30;i++){ const sx=(i*53%W), sy=(i*97%Math.floor(H*0.6)); ctx.fillRect(sx,sy,1.5,1.5); }
+      // terrain
+      ctx.beginPath(); ctx.moveTo(0,H); for(const p of this.terr) ctx.lineTo(p.x,p.y); ctx.lineTo(W,H); ctx.closePath();
+      const g=ctx.createLinearGradient(0,H*0.6,0,H); g.addColorStop(0,'#2a3550'); g.addColorStop(1,'#0c1326'); ctx.fillStyle=g; ctx.fill();
+      // pad
+      ctx.strokeStyle='#3ecf8e'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(this.padX-this.padW/2,this.padY); ctx.lineTo(this.padX+this.padW/2,this.padY); ctx.stroke();
+      ctx.fillStyle='#3ecf8e88'; ctx.fillRect(this.padX-this.padW/2,this.padY-2,this.padW,4);
+      // ship
+      ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.angle);
+      if(this.thrust && this.fuel>0){ ctx.fillStyle='#ffb14a'; ctx.beginPath(); ctx.moveTo(-5,8); ctx.lineTo(5,8); ctx.lineTo(0,8+10+Math.random()*8); ctx.closePath(); ctx.fill(); }
+      ctx.fillStyle='#d7d9ea'; ctx.strokeStyle='#7fe0ff'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(9,9); ctx.lineTo(0,4); ctx.lineTo(-9,9); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      // hud
+      ctx.fillStyle='#8a8ab0'; ctx.font='11px Segoe UI'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText('ALT '+Math.max(0,Math.round(this.groundY(this.x)-this.y-14)), 8, 8);
+      ctx.fillText('V↓'+this.vy.toFixed(2), 8, 22);
+      // fuel bar
+      ctx.fillStyle='#222a40'; ctx.fillRect(W-90,8,82,8); ctx.fillStyle=this.fuel<20?'#ff5d6a':'#7fe0ff'; ctx.fillRect(W-90,8,82*Math.max(0,this.fuel)/100,8);
+      if(this.over){ ctx.fillStyle=this.win?'#3ecf8e':'#ff5d6a'; ctx.font='bold 22px Segoe UI'; ctx.textAlign='center'; ctx.fillText(this.win?'LANDED':'CRASH', W/2, H*0.4); }
+      this.updateHUD();
+    }
+  }
+  window.game=new Lander();
+})();
+</script>
+</body>
+</html>

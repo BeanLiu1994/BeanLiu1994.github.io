@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>金字塔纸牌 · Pyramid</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0;
+    --accent:#ffb86b; --red:#ff5d6a; --accent-glow:#ffb86b55; --gold:#ffd54a; --line:#2a2f4a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 15%, #1a2238 0%, transparent 55%), radial-gradient(ellipse at 82% 85%, #2a1a40 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:46px; }
+  .score-card .label { font-size:0.48rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:74px; padding:9px 10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#2a1500; }
+  .btn.primary:hover { box-shadow:0 0 18px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#2a1500; animation:pg 1.6s infinite; }
+  @keyframes pg {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>金字塔纸牌</h1><div class="sub">P Y R A M I D</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Cleared</div><div class="value" id="clr">0/28</div></div>
+      <div class="score-card best"><div class="label">Won</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="460" height="470"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-new" onclick="game.restart()">New Deal</button>
+    <button class="btn" id="btn-stock" onclick="game.drawStock()">Draw</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点两张自由牌（和为 13）消除，K 可单独消除；点 Draw 发牌</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const SUITS=['S','H','D','C']; const RED={H:1,D:1,S:0,C:0}; const VAL={A:1,J:11,Q:12,K:13};
+  const RL=(r)=> r===1?'A':r===11?'J':r===12?'Q':r===13?'K':String(r);
+  const SYM={S:'♠',H:'♥',D:'♦',C:'♣'};
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const statusEl=document.getElementById('status'); const clrEl=document.getElementById('clr'); const bestEl=document.getElementById('best');
+
+  class Pyramid {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0; this.redCol='#ff5d6a';
+      this.best=parseInt(localStorage.getItem('pyrBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>{ this.fit(); });
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onDown(e); });
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(rect.width,460));
+      this.W=w; this.H=w*470/460; canvas.width=w; canvas.height=this.H; this.cs=w/8.2; this.cardH=this.cs*1.3; this.rowH=this.cs*0.62; }
+    restart(){
+      this.stopAuto(); this.over=false; this.win=false; this.sel=null; this.redeals=1; this._autoProgress=0;
+      const deck=[]; for(const s of SUITS) for(let r=1;r<=13;r++) deck.push({s,r});
+      for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; }
+      this.pyr=[]; let k=0; for(let r=0;r<7;r++){ const row=[]; for(let c=0;c<=r;c++){ row.push(deck[k++]); } this.pyr.push(row); }
+      this.stock=deck.slice(k); this.waste=[];
+      this.updateStatus(); this.updateClr();
+    }
+    isFree(r,c){ if(this.pyr[r][c]===null) return false;
+      if(r+1<7){ if(this.pyr[r+1][c]!==null) return false; if(this.pyr[r+1][c+1]!==null) return false; }
+      return true;
+    }
+    freeList(){ const out=[]; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(this.isFree(r,c)) out.push({r,c}); return out; }
+    val(card){ return card?VAL[RL(card.r)]:0; }
+    updateClr(){ let gone=0; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(this.pyr[r][c]===null) gone++; clrEl.textContent=gone+'/28'; }
+    checkWin(){ let left=0; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(this.pyr[r][c]!==null) left++; if(left===0){ this.over=true; this.win=true; this.best++; localStorage.setItem('pyrBest',String(this.best)); bestEl.textContent=this.best; this.updateStatus(); } }
+    // ---- interaction ----
+    pick(x,y){ const cs=this.cs;
+      // stock (bottom-left) / waste (bottom-right)
+      const sx=cs*0.6, sy=this.H-this.cardH-6, wx=this.W-cs*1.6;
+      if(Math.abs(x-sx)<cs*0.5 && Math.abs(y-(sy+this.cardH/2))<this.cardH*0.6) return {type:'stock'};
+      if(Math.abs(x-wx)<cs*0.5 && Math.abs(y-(sy+this.cardH/2))<this.cardH*0.6) return {type:'waste'};
+      for(let r=0;r<7;r++){ for(let c=0;c<=r;c++){ if(this.pyr[r][c]===null) continue; const p=this.posFor(r,c); if(Math.abs(x-(p.x+cs/2))<cs*0.5 && Math.abs(y-(p.y+this.cardH/2))<this.cardH*0.55) return {type:'pyr',r,c}; } }
+      return null;
+    }
+    posFor(r,c){ const cs=this.cs; const x=this.W/2 - (r+1)*cs/2 + c*cs; const y=this.cardH*0.2 + r*this.rowH; return {x,y}; }
+    removePair(a,b){ this.clearCell(a); this.clearCell(b); this._autoProgress+=2; this.updateClr(); this.checkWin(); }
+    removeSingle(a){ this.clearCell(a); this._autoProgress++; this.updateClr(); this.checkWin(); }
+    clearCell(p){ if(p.type==='waste'){ this.waste.pop(); } else { this.pyr[p.r][p.c]=null; } }
+    onDown(e){
+      if(this.autoPlay||this.over) return;
+      const rect=canvas.getBoundingClientRect();
+      const x=(e.clientX-rect.left)*(this.W/rect.width), y=(e.clientY-rect.top)*(this.H/rect.height);
+      const p=this.pick(x,y); if(!p){ this.sel=null; this.updateStatus(); return; }
+      if(p.type==='stock'){ this.drawStock(); this.sel=null; return; }
+      if(p.type==='waste'){ if(!this.waste.length) return; this.trySelect({type:'waste'}); return; }
+      this.trySelect(p);
+    }
+    trySelect(p){
+      const card = p.type==='waste'? this.waste[this.waste.length-1] : (this.isFree(p.r,p.c)?this.pyr[p.r][p.c]:null);
+      if(!card) return;
+      if(!this.sel){ this.sel=p; this.updateStatus(); return; }
+      // resolve
+      const a=this.sel, b=p; const ca = a.type==='waste'? this.waste[this.waste.length-1] : this.pyr[a.r][a.c];
+      const cb = b.type==='waste'? this.waste[this.waste.length-1] : this.pyr[b.r][b.c];
+      if(a.type==='waste' && b.type==='waste'){ this.sel=p; this.updateStatus(); return; }
+      let ok=false;
+      if(this.val(ca)===13){ this.waste.pop(); this.removeSingle(a); ok=true; }
+      else if(this.val(cb)===13){ if(b.type==='waste') this.waste.pop(); this.removeSingle(b); ok=true; }
+      else if(this.val(ca)+this.val(cb)===13){ if(a.type==='waste') this.waste.pop(); if(b.type==='waste') this.waste.pop(); this.removePair(a,b); ok=true; }
+      this.sel = ok?null:p; this.updateStatus();
+    }
+    drawStock(){
+      if(this.over) return;
+      if(this.stock.length){ this.waste.push(this.stock.pop()); }
+      else if(this.redeals>0 && this.waste.length){ this.redeals--; this.stock=this.waste.reverse(); this.waste=[]; }
+      this.sel=null; this._autoProgress++; this.updateStatus();
+    }
+    updateStatus(){
+      if(this.over){ statusEl.textContent=this.win?'🎉 通关！':'结束'; return; }
+      if(this.autoPlay){ statusEl.textContent='自动消除中… 已消 '+this._autoProgress; return; }
+      if(this.sel){ statusEl.textContent='已选一张，请点另一张（和 13 / K 单独）'; }
+      else statusEl.textContent='点两张自由牌（和为 13）消除，K 可单独消除；点 Draw 发牌';
+    }
+    // ---- auto ----
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.scheduleAuto(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    scheduleAuto(){ if(!this.autoPlay||this.over) return; this.autoTimer=setTimeout(()=>this.autoStep(),300); }
+    autoStep(){
+      if(!this.autoPlay||this.over) return;
+      const free=this.freeList(); const wt=this.waste.length?this.waste[this.waste.length-1]:null;
+      let done=false;
+      // 1) lone King among free
+      for(const f of free){ if(this.val(this.pyr[f.r][f.c])===13){ this.removeSingle(f); done=true; break; } }
+      // 2) pair of free summing 13
+      if(!done){ outer: for(let i=0;i<free.length;i++){ for(let j=i+1;j<free.length;j++){ if(this.val(this.pyr[free[i].r][free[i].c])+this.val(this.pyr[free[j].r][free[j].c])===13){ this.removePair(free[i],free[j]); done=true; break outer; } } } }
+      // 3) waste + free
+      if(!done && wt){ for(const f of free){ if(this.val(wt)+this.val(this.pyr[f.r][f.c])===13){ this.removePair({type:'waste'},f); done=true; break; } } }
+      // 4) waste lone King
+      if(!done && wt && this.val(wt)===13){ this.waste.pop(); done=true; }
+      if(this.over){ this.scheduleAuto(); return; }
+      if(!done){ if(this.stock.length || (this.redeals>0 && this.waste.length)) this.drawStock(); else { this.restart(); return; } }
+      this.scheduleAuto();
+    }
+    // ---- render ----
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(); }catch(err){ console.error(err); } }
+    draw(){
+      const W=this.W,H=this.H,cs=this.cs,ch=this.cardH; ctx.clearRect(0,0,W,H);
+      for(let r=0;r<7;r++) for(let c=0;c<=r;c++){ if(this.pyr[r][c]===null) continue; const p=this.posFor(r,c); this.drawCard(this.pyr[r][c],p.x,p.y,this.isFree(r,c)); }
+      // stock / waste
+      const sx=cs*0.6, sy=H-ch-6; this.roundRect(sx,sy,cs,ch,8,'#0a0e1e','#2a2f4a');
+      if(this.stock.length){ ctx.fillStyle='#3a3f55'; ctx.font=(cs*0.42)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('STK', sx+cs/2, sy+ch/2); }
+      const wx=W-cs*1.6; this.roundRect(wx,sy,cs,ch,8,'#0a0e1e','#2a2f4a');
+      if(this.waste.length) this.drawCard(this.waste[this.waste.length-1],wx,sy,true);
+      // selection
+      if(this.sel && this.sel.type==='pyr'){ const p=this.posFor(this.sel.r,this.sel.c); ctx.strokeStyle='#ffd54a'; ctx.lineWidth=3; ctx.strokeRect(p.x-2,p.y-2,cs+4,ch+4); }
+      else if(this.sel && this.sel.type==='waste'){ ctx.strokeStyle='#ffd54a'; ctx.lineWidth=3; ctx.strokeRect(wx-2,sy-2,cs+4,ch+4); }
+    }
+    drawCard(d,x,y,free){ const cs=this.cs,ch=this.cardH; const col=RED[d.s]?this.redCol:'#e6e6f5';
+      const g=ctx.createLinearGradient(x,y,x,y+ch); g.addColorStop(0,'#fbfbff'); g.addColorStop(1,'#d7d9ea');
+      this.roundRect(x,y,cs,ch,8,g,null);
+      if(!free){ ctx.fillStyle='#0a0e1e55'; this.roundRect(x,y,cs,ch,8,'#0a0e1e33',null); }
+      ctx.fillStyle=col; ctx.font='bold '+(cs*0.34)+'px Segoe UI'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText(RL(d.r), x+6, y+4); ctx.textAlign='right'; ctx.fillText(SYM[d.s], x+cs-6, y+4);
+      ctx.textAlign='center'; ctx.font=(cs*0.5)+'px Segoe UI'; ctx.fillText(SYM[d.s], x+cs/2, y+ch*0.52);
+    }
+    roundRect(x,y,w,h,r,fill,stroke){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill){ctx.fillStyle=fill;ctx.fill();} if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();} }
+  }
+  window.game=new Pyramid();
+})();
+</script>
+</body>
+</html>

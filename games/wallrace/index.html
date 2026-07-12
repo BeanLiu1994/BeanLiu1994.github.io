@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>步步为营 · Wall Race</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0;
+    --accent:#5ef2c8; --accent2:#ff5d8f; --accent-glow:#5ef2c855; --gold:#ffd54a; --line:#2a2f4a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 20% 15%, #14224a 0%, transparent 55%), radial-gradient(ellipse at 82% 85%, #2a1140 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:430px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#7fe0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:46px; }
+  .score-card .label { font-size:0.48rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.p1 .value { color:var(--accent); }
+  .score-card.p2 .value { color:var(--accent2); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:74px; padding:9px 10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04201a; }
+  .btn.primary:hover { box-shadow:0 0 18px var(--accent-glow); }
+  .btn.wall-on { background:var(--accent2); border-color:var(--accent2); color:#2a0418; animation:pg 1.6s infinite; }
+  @keyframes pg { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .legend { display:flex; gap:14px; justify-content:center; margin-top:6px; font-size:0.66rem; color:var(--muted); }
+  .legend span b { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:-1px; margin-right:4px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>步步为营</h1><div class="sub">W A L L &nbsp; R A C E</div></div>
+    <div class="score-panel">
+      <div class="score-card p1"><div class="label">You · Walls</div><div class="value" id="w1">10</div></div>
+      <div class="score-card p2"><div class="label">AI · Walls</div><div class="value" id="w2">10</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="400" height="400"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-wall" onclick="game.toggleWall()">Wall: OFF</button>
+    <button class="btn" id="btn-restart" onclick="game.restart()">New Game</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">你的回合：点相邻空格移动，或开 Wall 模式放墙</div>
+  <div class="legend"><span><b style="background:var(--accent)"></b>你（下→上）</span><span><b style="background:var(--accent2)"></b>AI（上→下）</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=9, COLS=9, ROWS=9;
+  const canvas=document.getElementById('game');
+  const ctx=canvas.getContext('2d');
+  const statusEl=document.getElementById('status');
+  const w1El=document.getElementById('w1'), w2El=document.getElementById('w2');
+
+  class WallRace {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('wallraceBest')||'0');
+      this.M=[];
+      this.fit(); window.addEventListener('resize',()=>{ this.fit(); });
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onDown(e); });
+      this.restart();
+      this.loop=this.loop.bind(this);
+      requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const rect=canvas.getBoundingClientRect(); const s=Math.max(220,Math.min(rect.width,430));
+      this.S=s; canvas.width=s; canvas.height=s; this.cell=s/(N+1);
+    }
+    cellPos(r,c){ const g=this.cell; return { x:g*(c+1), y:g*(r+1) }; }
+    restart(){
+      this.stopAuto();
+      this.p1={r:ROWS-1,c:(COLS-1)/2}; this.p2={r:0,c:(COLS-1)/2};
+      this.walls1=10; this.walls2=10; this.wallSet=new Set();
+      this.turn='p1'; this.over=false; this.winner=null; this.wallMode=false;
+      this.pendingWall=null; this._autoProgress=0;
+      this.updateStatus();
+    }
+    // ---- wall helpers ----
+    key(t,r,c){ return t+' '+r+' '+c; }
+    canPlace(t,r,c){
+      if(this.wallSet.has(this.key(t,r,c))) return false;
+      if(t==='H'){
+        if(r<1||r>N-1||c<0||c>N-2) return false;
+        if(this.wallSet.has(this.key('H',r,c-1))) return false;
+        if(this.wallSet.has(this.key('H',r,c+1))) return false;
+        if(this.wallSet.has(this.key('V',r,c))) return false;
+        if(this.wallSet.has(this.key('V',r,c+1))) return false;
+      } else {
+        if(c<1||c>N-1||r<0||r>N-2) return false;
+        if(this.wallSet.has(this.key('V',r-1,c))) return false;
+        if(this.wallSet.has(this.key('V',r+1,c))) return false;
+        if(this.wallSet.has(this.key('H',r,c))) return false;
+        if(this.wallSet.has(this.key('H',r+1,c))) return false;
+      }
+      // must not fully block either pawn
+      return this.pathExists(this.p1,'top') && this.pathExists(this.p2,'bottom');
+    }
+    placeWall(t,r,c,who){
+      this.wallSet.add(this.key(t,r,c));
+      if(who==='p1') this.walls1--; else this.walls2--;
+      this._autoProgress++;
+    }
+    wallBlocks(a,b){
+      // movement from a to b (adjacent). Check walls.
+      const dr=b.r-a.r, dc=b.c-a.c;
+      if(dr===0&&dc===1){ // right
+        return this.wallSet.has(this.key('V',a.r,a.c+1));
+      }
+      if(dr===0&&dc===-1){
+        return this.wallSet.has(this.key('V',a.r,a.c));
+      }
+      if(dc===0&&dr===1){
+        return this.wallSet.has(this.key('H',a.r+1,a.c));
+      }
+      if(dc===0&&dr===-1){
+        return this.wallSet.has(this.key('H',a.r,a.c));
+      }
+      return true;
+    }
+    pawnAt(r,c){ if(this.p1.r===r&&this.p1.c===c) return 'p1'; if(this.p2.r===r&&this.p2.c===c) return 'p2'; return null; }
+    // BFS shortest path length for `pawn` to reach its goal edge (goal: 'top' for p1, 'bottom' for p2)
+    pathExists(pawn,goal){
+      const start={r:pawn.r,c:pawn.c};
+      const seen=new Set([start.r+','+start.c]);
+      const q=[start]; let found=false;
+      while(q.length){
+        const cur=q.shift();
+        if(goal==='top'&&cur.r===0){found=true;break;}
+        if(goal==='bottom'&&cur.r===ROWS-1){found=true;break;}
+        const nbrs=this.movesFor(cur,true);
+        for(const n of nbrs){ const k=n.r+','+n.c; if(seen.has(k)) continue; seen.add(k); q.push(n); }
+      }
+      return found;
+    }
+    shortestPath(pawn,goal){
+      const start={r:pawn.r,c:pawn.c};
+      const prev=new Map(); const seen=new Set([start.r+','+start.c]); const q=[start];
+      while(q.length){
+        const cur=q.shift();
+        if(goal==='top'&&cur.r===0) return this.reconstruct(prev,start,cur);
+        if(goal==='bottom'&&cur.r===ROWS-1) return this.reconstruct(prev,start,cur);
+        for(const n of this.movesFor(cur,true)){ const k=n.r+','+n.c; if(seen.has(k)) continue; seen.add(k); prev.set(k,cur); q.push(n); }
+      }
+      return null;
+    }
+    reconstruct(prev,start,end){
+      const path=[end]; let k=end.r+','+end.c; let cur=prev.get(k);
+      while(cur){ path.unshift(cur); k=cur.r+','+cur.c; cur=prev.get(k); }
+      return path;
+    }
+    movesFor(cur,ignoreOpp){
+      const res=[];
+      const dirs=[{r:1,c:0},{r:-1,c:0},{r:0,c:1},{r:0,c:-1}];
+      for(const d of dirs){
+        const nr=cur.r+d.r, nc=cur.c+d.c;
+        if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+        if(this.wallBlocks(cur,{r:nr,c:nc})) continue;
+        const occ=this.pawnAt(nr,nc);
+        if(!occ){ res.push({r:nr,c:nc}); }
+        else {
+          // jump
+          const jr=nr+d.r, jc=nc+d.c;
+          if(jr<0||jr>=ROWS||jc<0||jc>=COLS) continue;
+          if(this.wallBlocks({r:nr,c:nc},{r:jr,c:jc})) continue;
+          if(this.pawnAt(jr,jc)) continue;
+          res.push({r:jr,c:jc});
+        }
+      }
+      return res;
+    }
+    // ---- interaction ----
+    onDown(e){
+      if(this.over) return;
+      const g=this.cell; const x=e.clientX-canvas.getBoundingClientRect().left, y=e.clientY-canvas.getBoundingClientRect().top;
+      const c=Math.round(x/g-1), r=Math.round(y/g-1);
+      if(this.autoPlay){ return; }
+      if(this.turn!=='p1') return;
+      if(this.wallMode){
+        // determine nearest wall slot
+        const wc=Math.round(x/g-1.5), wr=Math.round(y/g-1.5);
+        const onH=Math.abs((y/g-1)-(wr+0.5)) < Math.abs((x/g-1)-(wc+0.5));
+        if(onH){ if(this.canPlace('H',wr,wc)&&this.walls1>0){ this.placeWall('H',wr,wc,'p1'); this.afterMove(); } }
+        else { if(this.canPlace('V',wr,wc)&&this.walls1>0){ this.placeWall('V',wr,wc,'p1'); this.afterMove(); } }
+        return;
+      }
+      if(r<0||r>=ROWS||c<0||c>=COLS) return;
+      if(Math.abs(r-this.p1.r)+Math.abs(c-this.p1.c)!==1) return;
+      const ok=this.movesFor(this.p1,false).some(m=>m.r===r&&m.c===c);
+      if(!ok) return;
+      this.p1={r,c}; this.afterMove();
+    }
+    afterMove(){
+      this._autoProgress++;
+      w1El.textContent=this.walls1; w2El.textContent=this.walls2;
+      this.checkWin();
+      if(this.over) return;
+      this.turn = this.turn==='p1'?'p2':'p1';
+      this.updateStatus();
+      if(this.autoPlay){ this.scheduleAuto(); }
+    }
+    checkWin(){
+      if(this.p1.r===0){ this.over=true; this.winner='p1'; if(this.best<1){} }
+      else if(this.p2.r===ROWS-1){ this.over=true; this.winner='p2'; }
+      if(this.over){
+        const mv=this._autoProgress; if(mv>this.best){ this.best=mv; localStorage.setItem('wallraceBest',String(mv)); }
+        this.updateStatus();
+      }
+    }
+    updateStatus(){
+      if(this.over){ statusEl.textContent=(this.winner==='p1'?'🎉 你赢了！':'AI 赢了')+' · 步数 '+this._autoProgress; return; }
+      if(this.autoPlay){ statusEl.textContent='自动对战进行中… 步数 '+this._autoProgress; return; }
+      if(this.turn==='p1') statusEl.textContent=this.wallMode?'Wall 模式：点格子间隙放墙（剩 '+this.walls1+'）':'你的回合：点相邻空格移动，或开 Wall 模式放墙';
+      else statusEl.textContent='AI 思考中…';
+    }
+    toggleWall(){
+      if(this.autoPlay||this.over) return;
+      this.wallMode=!this.wallMode;
+      const b=document.getElementById('btn-wall');
+      b.textContent='Wall: '+(this.wallMode?'ON':'OFF'); b.classList.toggle('wall-on',this.wallMode);
+    }
+    // ---- auto ----
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){
+      this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('wall-on');
+      this.scheduleAuto();
+    }
+    stopAuto(){
+      this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;}
+      const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('wall-on');
+      const bw=document.getElementById('btn-wall'); bw.textContent='Wall: OFF'; bw.classList.remove('wall-on');
+    }
+    scheduleAuto(){ if(!this.autoPlay||this.over) return; this.autoTimer=setTimeout(()=>this.autoStep(),420); }
+    autoStep(){
+      if(!this.autoPlay||this.over) return;
+      if(this.turn==='p1') this.autoPawn('p1',true,'top');
+      else this.autoPawn('p2',false,'bottom');
+      this.afterMove();
+    }
+    autoPawn(who,isP1,goal){
+      const pawn=who==='p1'?this.p1:this.p2;
+      const path=this.shortestPath(pawn,goal);
+      if(path&&path.length>1){ const nxt=path[1]; if(who==='p1') this.p1={r:nxt.r,c:nxt.c}; else this.p2={r:nxt.r,c:nxt.c}; }
+      // occasionally place a wall to hinder opponent (only p1 has walls used by AI cleverly; here both try)
+      const myWalls=who==='p1'?this.walls1:this.walls2;
+      const opp=who==='p1'?this.p2:this.p1;
+      if(myWalls>0 && Math.random()<0.16){
+        const oPath=this.shortestPath(opp, who==='p1'?'bottom':'top');
+        if(oPath&&oPath.length>3){
+          // place a wall cutting opponent's path near its 2nd/3rd step
+          const cut=oPath[Math.min(2,oPath.length-1)];
+          const cand=[];
+          cand.push(['H',cut.r,cut.c-1]); cand.push(['H',cut.r,cut.c]);
+          cand.push(['V',cut.r-1,cut.c]); cand.push(['V',cut.r,cut.c]);
+          for(const [t,r,c] of cand){ if(this.canPlace(t,r,c)){ this.placeWall(t,r,c,who); break; } }
+        }
+      }
+    }
+    // ---- render loop ----
+    loop(ts){
+      requestAnimationFrame(this.loop);
+      try{
+        const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+        this.draw();
+      }catch(err){ console.error(err); }
+    }
+    draw(){
+      const g=this.cell; ctx.clearRect(0,0,this.S,this.S);
+      // grid
+      ctx.strokeStyle='#2a2f4a'; ctx.lineWidth=1;
+      for(let i=0;i<=N;i++){ const p=g*i; ctx.beginPath(); ctx.moveTo(p,0); ctx.lineTo(p,this.S); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,p); ctx.lineTo(this.S,p); ctx.stroke(); }
+      // walls
+      ctx.strokeStyle=this.wallMode?'#ff5d8f':'#5ef2c8'; ctx.lineWidth=Math.max(4,g*0.16); ctx.lineCap='round';
+      for(const k of this.wallSet){
+        const [t,r,c]=k.split(' ');
+        if(t==='H'){ const y=g*(r); const x1=g*(c+1), x2=g*(c+3); ctx.beginPath(); ctx.moveTo(x1,y); ctx.lineTo(x2,y); ctx.stroke(); }
+        else { const x=g*(c); const y1=g*(r+1), y2=g*(r+3); ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x,y2); ctx.stroke(); }
+      }
+      // goal lines
+      ctx.strokeStyle='#5ef2c855'; ctx.setLineDash([6,6]); ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(0,g); ctx.lineTo(this.S,g); ctx.stroke();
+      ctx.strokeStyle='#ff5d8f55'; ctx.beginPath(); ctx.moveTo(0,this.S-g); ctx.lineTo(this.S,this.S-g); ctx.stroke(); ctx.setLineDash([]);
+      // pawns
+      this.drawPawn(this.p1,'#5ef2c8'); this.drawPawn(this.p2,'#ff5d8f');
+    }
+    drawPawn(p,col){
+      const pos=this.cellPos(p.r,p.c); const rad=this.cell*0.34;
+      const grd=ctx.createRadialGradient(pos.x-rad*0.3,pos.y-rad*0.3,1,pos.x,pos.y,rad);
+      grd.addColorStop(0,'#ffffff'); grd.addColorStop(0.3,col); grd.addColorStop(1,col+'99');
+      ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(pos.x,pos.y,rad,0,Math.PI*2); ctx.fill();
+      if((this.turn===((p===this.p1)?'p1':'p2'))&&!this.over){ ctx.strokeStyle='#ffffff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(pos.x,pos.y,rad+3,0,Math.PI*2); ctx.stroke(); }
+    }
+  }
+  window.game=new WallRace();
+})();
+</script>
+</body>
+</html>

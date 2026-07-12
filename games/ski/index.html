@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>障碍滑雪 · Slalom</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0e1226; --text:#e6e6f5; --muted:#8a8ab0;
+    --accent:#5ef2c8; --accent-glow:#5ef2c855; --gold:#ffd54a; --err:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #10304a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0c1a30 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:420px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#7fe0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:46px; }
+  .score-card .label { font-size:0.48rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:#dff2ff; }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:74px; padding:9px 10px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.78rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04201a; }
+  .btn.primary:hover { box-shadow:0 0 18px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04201a; animation:pg 1.6s infinite; }
+  @keyframes pg {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>障碍滑雪</h1><div class="sub">S L A L O M</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Dist</div><div class="value" id="dist">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="400" height="560"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-new" onclick="game.restart()">New Run</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">按住屏幕左右滑动控制方向，躲开树木与岩石</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
+  const statusEl=document.getElementById('status'); const distEl=document.getElementById('dist'); const bestEl=document.getElementById('best');
+  class Ski {
+    constructor(){
+      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('skiBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>{ this.fit(); });
+      canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); const r=canvas.getBoundingClientRect(); this.drag=true; this.targetX=(e.clientX-r.left)*(this.W/r.width); });
+      canvas.addEventListener('pointermove',(e)=>{ if(!this.drag)return; const r=canvas.getBoundingClientRect(); this.targetX=(e.clientX-r.left)*(this.W/r.width); });
+      canvas.addEventListener('pointerup',()=>{ this.drag=false; this.targetX=null; });
+      canvas.addEventListener('pointercancel',()=>{ this.drag=false; this.targetX=null; });
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(240,Math.min(r.width,420)); this.W=w; this.H=w*560/400; canvas.width=w; canvas.height=this.H; }
+    restart(){ this.stopAuto(); this.scroll=0; this.speed=130; this.px=this.W/2; this.over=false; this.score=0; this.obst=[]; this.nextSpawn=this.H*0.4; this.targetX=null; this.drag=false; this._autoProgress=0; this.updateStatus(); }
+    genRow(y){
+      const W=this.W; const gapX=46+Math.random()*(W-92); const n=Math.random()<0.45?2:1; const obs=[];
+      for(let i=0;i<n;i++){ let ox; let tries=0; do{ ox=30+Math.random()*(W-60); tries++; }while(Math.abs(ox-gapX)<34 && tries<12); obs.push(ox); }
+      this.obst.push({y, gapX, obs, hit:false});
+    }
+    autoSteer(){
+      const py=this.scroll+this.H*0.78; let best=null,bd=1e9;
+      for(const row of this.obst){ if(row.y<=py) continue; const d=row.y-py; if(d<bd){ bd=d; best=row; } }
+      if(best){ const dx=best.gapX-this.px; this.px+=Math.max(-200*0.016,Math.min(200*0.016,dx)); }
+    }
+    update(dt){
+      if(this.over) return;
+      this.scroll+=this.speed*dt; this.speed=Math.min(380,this.speed+7*dt);
+      while(this.nextSpawn<this.scroll+this.H+80){ this.genRow(this.nextSpawn); this.nextSpawn+=92; }
+      if(this.autoPlay) this.autoSteer();
+      else if(this.targetX!=null){ const dx=this.targetX-this.px; this.px+=Math.max(-210*dt,Math.min(210*dt,dx)); }
+      this.px=Math.max(14,Math.min(this.W-14,this.px));
+      const py=this.scroll+this.H*0.78;
+      for(const row of this.obst){ if(row.hit) continue; for(const ox of row.obs){ if(Math.abs(ox-this.px)<16 && Math.abs(row.y-py)<15){ row.hit=true; this.crash(); return; } } }
+      this.score=this.scroll/10; this._autoProgress=Math.floor(this.score);
+      if(this.score>this.best){ this.best=Math.floor(this.score); localStorage.setItem('skiBest',String(this.best)); bestEl.textContent=this.best; }
+      distEl.textContent=Math.floor(this.score);
+    }
+    crash(){ this.over=true; this.updateStatus(); }
+    updateStatus(){ if(this.over){ statusEl.textContent='💥 撞上了！距离 '+Math.floor(this.score)+' m'; } else if(this.autoPlay){ statusEl.textContent='自动滑行中… '+Math.floor(this.score)+' m'; } else statusEl.textContent='按住屏幕左右滑动控制方向，躲开树木与岩石'; }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); }
+    stopAuto(){ this.autoPlay=false; this.drag=false; this.targetX=null; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // snow slope stripes
+      ctx.fillStyle='#eaf6ff'; ctx.fillRect(0,0,W,H);
+      ctx.strokeStyle='#cfe6ff'; ctx.lineWidth=2;
+      const off=this.scroll%48; for(let y=-48+off;y<H;y+=48){ ctx.beginPath(); ctx.moveTo(0,y); for(let x=0;x<=W;x+=20) ctx.lineTo(x, y+Math.sin(x*0.05+y)*4); ctx.stroke(); }
+      const py=this.scroll+H*0.78;
+      for(const row of this.obst){ const sy=row.y-this.scroll; if(sy<-30||sy>H+30) continue; for(const ox of row.obs){ if(ox<20){ ctx.fillStyle='#5a6b7a'; ctx.beginPath(); ctx.arc(ox,sy,13,0,Math.PI*2); ctx.fill(); } else { ctx.fillStyle='#1f7a4a'; ctx.beginPath(); ctx.moveTo(ox,sy-15); ctx.lineTo(ox+11,sy+9); ctx.lineTo(ox-11,sy+9); ctx.closePath(); ctx.fill(); ctx.fillStyle='#0e4a2a'; ctx.fillRect(ox-2,sy-6,4,12); } } }
+      // player
+      ctx.save(); ctx.translate(this.px,py); ctx.fillStyle=row_hit(); ctx.fillStyle='#ff5d6a'; ctx.beginPath(); ctx.moveTo(0,-15); ctx.lineTo(11,11); ctx.lineTo(0,5); ctx.lineTo(-11,11); ctx.closePath(); ctx.fill(); ctx.fillStyle='#2a3a6a'; ctx.beginPath(); ctx.arc(0,-4,4,0,Math.PI*2); ctx.fill(); ctx.restore();
+      function row_hit(){ return '#ff5d6a'; }
+      if(this.over){ ctx.fillStyle='rgba(10,10,26,0.55)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.font='bold 26px Segoe UI'; ctx.textAlign='center'; ctx.fillText('💥 撞毁', W/2, H*0.42); ctx.font='14px Segoe UI'; ctx.fillText('距离 '+Math.floor(this.score)+' m', W/2, H*0.42+26); }
+    }
+  }
+  window.game=new Ski();
+})();
+</script>
+</body>
+</html>

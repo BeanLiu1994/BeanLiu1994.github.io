@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Dominoes · 多米诺骨牌</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+  --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  overflow:hidden;touch-action:none;overscroll-behavior:none;}
+body{display:flex;flex-direction:column;align-items:center;user-select:none;-webkit-user-select:none;}
+header{width:100%;max-width:760px;padding:10px 14px 4px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.5px;
+  background:linear-gradient(90deg,#4f9cff,#3ecf8e,#ff5d6c);-webkit-background-clip:text;background-clip:text;color:transparent;}
+header .sub{font-size:12px;color:var(--muted);}
+.wrap{width:100%;max-width:760px;flex:1;display:flex;flex-direction:column;align-items:center;min-height:0;}
+canvas{width:100%;height:100%;display:block;touch-action:none;}
+.status{width:100%;max-width:760px;text-align:center;font-size:12px;color:var(--muted);padding:3px 0;min-height:16px;}
+.toolbar{width:100%;max-width:760px;display:flex;gap:8px;padding:8px 14px 12px;flex-wrap:wrap;justify-content:center;}
+button{font:inherit;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--border);
+  border-radius:10px;padding:8px 14px;cursor:pointer;transition:transform .08s ease,border-color .15s ease,box-shadow .15s ease;}
+button:hover{border-color:var(--accent);}
+button:active{transform:scale(.96);}
+button.on{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok),0 0 14px rgba(62,207,142,.4);color:var(--ok);}
+</style>
+</head>
+<body>
+<header><h1>多米诺骨牌 · Dominoes</h1><span class="sub">接龙两端，先出完者胜</span></header>
+<div class="wrap"><canvas id="c"></canvas></div>
+<div class="status" id="status">准备中…</div>
+<div class="toolbar">
+  <button id="autoBtn">自动游玩</button>
+  <button id="newBtn">重新发牌</button>
+</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+  const statusEl=document.getElementById('status');
+  const autoBtn=document.getElementById('autoBtn'), newBtn=document.getElementById('newBtn');
+  const best=parseInt(localStorage.getItem('dominoes_best')||'0',10);
+
+  class Dominoes{
+    constructor(){
+      this.autoPlay=false; this._autoProgress=0; this._last=0; this._t=null;
+      this.cv=cv; this.ctx=ctx;
+      window.addEventListener('resize',()=>this.fit());
+      this.fit(); this.newDeal();
+      this._tick=(ts)=>{ try{this.loop(ts);}catch(e){console.error(e);} requestAnimationFrame(this._tick); };
+      requestAnimationFrame(this._tick);
+      this.updateStatus();
+    }
+    fit(){
+      const r=cv.getBoundingClientRect();
+      const W=Math.max(320,r.width||cv.width||360), H=Math.max(360,r.height||cv.height||520);
+      const dpr=window.devicePixelRatio||1;
+      cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+      this.W=W; this.H=H; ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    newDeal(){
+      const all=[]; for(let a=0;a<=6;a++) for(let b=a;b<=6;b++) all.push({a,b});
+      for(let i=all.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [all[i],all[j]]=[all[j],all[i]]; }
+      this.you=all.slice(0,7); this.ai=all.slice(7,14); this.boneyard=all.slice(14);
+      // start with highest double
+      let start=-1; for(let i=0;i<this.you.length;i++) if(this.you[i].a===this.you[i].b && this.you[i].a>start){start=this.you[i].a;}
+      let hand=this.you, who='you';
+      if(start<0){ for(let i=0;i<this.ai.length;i++) if(this.ai[i].a===this.ai[i].b && this.ai[i].a>start){start=this.ai[i].a;hand=this.ai;who='ai';} }
+      if(start<0){ start=all[0].a; hand=this.you; who='you'; }
+      const ti=hand.findIndex(t=>t.a===start&&t.b===start);
+      const tile=hand.splice(ti,1)[0];
+      this.chain=[{l:tile.a,r:tile.b}];
+      this.turn=who;
+      this.over=false; this.win=null; this.placed=1; this.sel=-1; this.msg='';
+      this.updateStatus();
+      this.maybeAuto();
+    }
+    leftEnd(){ return this.chain[0].l; }
+    rightEnd(){ return this.chain[this.chain.length-1].r; }
+    canPlay(hand,end){ return hand.some(t=>t.a===end||t.b===end); }
+    handHasMove(hand){ return this.canPlay(hand,this.leftEnd())||this.canPlay(hand,this.rightEnd()); }
+    place(hand,who,tile,side){
+      const end = side==='L'?this.leftEnd():this.rightEnd();
+      let l,r;
+      if(tile.a===end){ if(side==='L'){l=tile.b;r=tile.a;} else {l=tile.a;r=tile.b;} }
+      else { if(side==='L'){l=tile.a;r=tile.b;} else {l=tile.b;r=tile.a;} }
+      if(side==='L') this.chain.unshift({l,r}); else this.chain.push({l,r});
+      this.placed++;
+      if(this.autoPlay) this._autoProgress++;
+    }
+    playCurrent(){
+      if(this.over) return;
+      const hand=this.turn==='you'?this.you:this.ai;
+      const ends=[this.leftEnd(),this.rightEnd()];
+      // try play on an end
+      for(const end of ends){
+        const side=end===this.leftEnd()?'L':'R';
+        const ti=hand.findIndex(t=>t.a===end||t.b===end);
+        if(ti>=0){ this.place(hand,this.turn,hand.splice(ti,1)[0],side); this.afterMove(); return true; }
+      }
+      // draw
+      if(this.boneyard.length){
+        let drew=true;
+        while(this.boneyard.length && !this.handHasMove(hand)){
+          const t=this.boneyard.pop(); hand.push(t); this.msg=(this.turn==='you'?'你':'AI')+' 抽牌';
+        }
+        if(this.handHasMove(hand)){ this.playCurrent(); return true; }
+        this.msg=(this.turn==='you'?'你':'AI')+' 无牌可出，跳过'; this.pass(); return true;
+      }
+      this.msg=(this.turn==='you'?'你':'AI')+' 无牌可出，跳过'; this.pass(); return true;
+    }
+    pass(){
+      if(this.turn==='you') this.turn='ai'; else this.turn='you';
+      this.maybeAuto(); this.updateStatus();
+    }
+    afterMove(){
+      if((this.turn==='you'&&this.you.length===0)||(this.turn==='ai'&&this.ai.length===0)){ this.endGame(this.turn); return; }
+      // both passed check
+      if(!this.handHasMove(this.you)&&!this.handHasMove(this.ai)&&this.boneyard.length===0){ this.endBlocked(); return; }
+      this.turn=this.turn==='you'?'ai':'you';
+      this.maybeAuto(); this.updateStatus();
+    }
+    endGame(winner){
+      if(this.over) return; this.over=true; this.win=winner;
+      const wsum=winner==='you'?this.ai.reduce((s,t)=>s+t.a+t.b,0):this.you.reduce((s,t)=>s+t.a+t.b,0);
+      this.score=wsum;
+      if(this.score>best) localStorage.setItem('dominoes_best',String(this.score));
+      if(this.autoPlay){ this.schedule(700,()=>{ this.newDeal(); }); return; }
+      this.msg=(winner==='you'?'你赢了！':'AI 赢了')+'　俘获 '+wsum+' 点';
+      this.updateStatus();
+    }
+    endBlocked(){
+      if(this.over) return; this.over=true; this.win=null;
+      const ys=this.you.reduce((s,t)=>s+t.a+t.b,0), as=this.ai.reduce((s,t)=>s+t.a+t.b,0);
+      this.score=Math.max(ys,as);
+      if(this.score>best) localStorage.setItem('dominoes_best',String(this.score));
+      if(this.autoPlay){ this.schedule(700,()=>{ this.newDeal(); }); return; }
+      this.msg='封盘！点数多者负　你 '+ys+' / AI '+as; this.updateStatus();
+    }
+    startAuto(){ if(this.autoPlay)return; this.autoPlay=true; autoBtn.classList.add('on'); autoBtn.textContent='停止自动'; this.sel=-1; this.schedule(400,()=>this.playCurrent()); }
+    stopAuto(){ if(!this.autoPlay)return; this.autoPlay=false; autoBtn.classList.remove('on'); autoBtn.textContent='自动游玩'; if(this._t){clearTimeout(this._t);this._t=null;} }
+    toggleAuto(){ if(this.autoPlay)this.stopAuto(); else this.startAuto(); }
+    schedule(ms,fn){ if(this._t)clearTimeout(this._t); this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
+    maybeAuto(){
+      if(this.over||this._t) return;
+      if(this.autoPlay || this.turn==='ai'){ this.schedule(520,()=>this.playCurrent()); }
+    }
+    humanPick(idx){
+      if(this.autoPlay||this.over||this.turn!=='you') return;
+      const tile=this.you[idx]; if(!tile) return;
+      if(!this.canPlay(this.you,this.leftEnd())&&!this.canPlay(this.you,this.rightEnd())){ this.msg='你没有可出的牌'; this.updateStatus(); return; }
+      if(this.canPlay([tile],this.leftEnd())&&this.canPlay([tile],this.rightEnd())){
+        // both ends match: prefer left
+        this.place(this.you,'you',this.you.splice(idx,1)[0],'L'); this.afterMove(); return;
+      }
+      const side=this.canPlay([tile],this.leftEnd())?'L':'R';
+      this.place(this.you,'you',this.you.splice(idx,1)[0],side); this.afterMove();
+    }
+    updateStatus(){
+      const b=Math.max(best,this.score||0);
+      let s='';
+      if(this.over&&!this.autoPlay){ s=this.msg; }
+      else { s=(this.turn==='you'?'轮到你':'AI 思考中')+'　链长 '+this.chain.length+'　你 '+this.you.length+' / AI '+this.ai.length+(this.autoPlay?'　[AUTO]':''); if(this.msg&&this.autoPlay===false) s+='　'+this.msg; }
+      statusEl.textContent=s+(b?('　最高 '+b):'');
+    }
+    loop(ts){
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+      this.render();
+    }
+    drawTile(x,y,w,t,opt){
+      opt=opt||{}; const h=w*0.5, g=Math.max(2,w*0.06);
+      ctx.save(); ctx.translate(x,y);
+      if(opt.glow){ ctx.shadowColor=opt.glow; ctx.shadowBlur=14; }
+      ctx.fillStyle=opt.dim?'#11141b':'#f4f6fb'; this.rr(0,0,w,h,4); ctx.fill(); ctx.shadowBlur=0;
+      ctx.strokeStyle=opt.sel?'#3ecf8e':'#c4ccd8'; ctx.lineWidth=opt.sel?2:1; this.rr(0,0,w,h,4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w/2,3); ctx.lineTo(w/2,h-3); ctx.stroke();
+      ctx.fillStyle=opt.dim?'#5b6573':'#1f2733'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font='bold '+(w*0.34)+'px Arial';
+      ctx.fillText(String(t.a),w*0.25,h*0.5);
+      ctx.fillText(String(t.b),w*0.75,h*0.5);
+      ctx.restore();
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    render(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // chain
+      const n=this.chain.length;
+      let tw=Math.min(W*0.11,H*0.15);
+      tw=Math.max(8, Math.min(tw, (W*0.9)/Math.max(1,n)));
+      const th=tw*0.5, gap=Math.max(1,tw*0.06);
+      const totalW=n*(tw+gap)-gap;
+      let x=(W-totalW)/2, y=H*0.30;
+      for(let i=0;i<n;i++){
+        const c=this.chain[i];
+        const isEnd=(i===0||i===n-1);
+        this.drawTile(x,y,tw,{a:c.l,b:c.r},{glow:isEnd?'rgba(79,156,255,.7)':null});
+        x+=tw+gap;
+      }
+      ctx.fillStyle='#5b6573'; ctx.font='12px Arial'; ctx.textAlign='center';
+      ctx.fillText('左端 '+this.leftEnd()+'　右端 '+this.rightEnd(), W/2, y-th*0.5-6);
+      // hands
+      this.drawHand(this.you, H*0.66, 'you');
+      this.drawHand(this.ai, H*0.90, 'ai');
+    }
+    drawHand(hand,y,who){
+      const W=this.W, H=this.H; const n=7; let tw=Math.min(W*0.11,H*0.13);
+      tw=Math.max(8,Math.min(tw,(W*0.92)/n)); const th=tw*0.5; const gap=Math.max(1,tw*0.08);
+      const totalW=Math.min(n,hand.length)*(tw+gap)-gap;
+      let x=(W-totalW)/2; const yy=y-th/2;
+      const faceUp = who==='you'||this.autoPlay||this.over;
+      for(let i=0;i<hand.length;i++){
+        const t=hand[i];
+        if(faceUp){
+          const sel=this.sel===i;
+          const playable=(this.turn==='you'&&!this.autoPlay)&&(this.canPlay([t],this.leftEnd())||this.canPlay([t],this.rightEnd()));
+          this.drawTile(x,yy,tw,t,{sel:sel&&who==='you',glow:(who==='you'&&playable)?'rgba(62,207,142,.6)':null});
+        } else {
+          this.drawTile(x,yy,tw,{a:0,b:0},{dim:true,back:true});
+        }
+        x+=tw+gap;
+      }
+      ctx.fillStyle='#5b6573'; ctx.font='11px Arial'; ctx.textAlign='center';
+      ctx.fillText((who==='you'?'你的手牌':'AI 手牌')+' ('+hand.length+')', W/2, yy-th*0.55);
+    }
+  }
+
+  const game=new Dominoes(); window.game=game;
+  let downX=0,downY=0;
+  function getPos(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+  function handHit(p){
+    const W=game.W,H=game.H; const n=7; let tw=Math.min(W*0.11,H*0.13);
+    tw=Math.max(8,Math.min(tw,(W*0.92)/n)); const th=tw*0.5; const gap=Math.max(1,tw*0.08);
+    const totalW=Math.min(n,game.you.length)*(tw+gap)-gap;
+    let x=(W-totalW)/2; const yy=H*0.66-th/2;
+    if(p.y>=yy-6&&p.y<=yy+th+6){ for(let i=0;i<game.you.length;i++){ if(p.x>=x&&p.x<=x+tw){ return i; } x+=tw+gap; } }
+    return -1;
+  }
+  cv.addEventListener('pointerdown',(e)=>{ if(game.autoPlay||game.over||game.turn!=='you')return; const p=getPos(e); const i=handHit(p); if(i>=0) game.humanPick(i); });
+  autoBtn.addEventListener('click',()=>game.toggleAuto());
+  newBtn.addEventListener('click',()=>{ game.stopAuto(); game.newDeal(); });
+})();
+</script>
+</body>
+</html>

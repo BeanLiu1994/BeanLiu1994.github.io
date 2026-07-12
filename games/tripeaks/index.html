@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tri-Peaks Solitaire · 三峰纸牌</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+  --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{
+  margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  overflow:hidden; touch-action:none; overscroll-behavior:none;
+}
+body{display:flex; flex-direction:column; align-items:center; user-select:none; -webkit-user-select:none;}
+header{
+  width:100%; max-width:760px; padding:10px 14px 4px; display:flex;
+  align-items:baseline; gap:10px; flex-wrap:wrap;
+}
+header h1{
+  margin:0; font-size:18px; font-weight:700; letter-spacing:.5px;
+  background:linear-gradient(90deg,#4f9cff,#3ecf8e,#ff5d6c);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+header .sub{font-size:12px; color:var(--muted);}
+.wrap{width:100%; max-width:760px; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:0;}
+canvas{width:100%; height:100%; display:block; touch-action:none;}
+.toolbar{width:100%; max-width:760px; display:flex; gap:8px; padding:8px 14px 12px; flex-wrap:wrap; justify-content:center;}
+button{
+  font:inherit; font-size:13px; color:var(--text); background:var(--panel);
+  border:1px solid var(--border); border-radius:10px; padding:8px 14px; cursor:pointer;
+  transition:transform .08s ease, border-color .15s ease, box-shadow .15s ease;
+}
+button:hover{border-color:var(--accent);}
+button:active{transform:scale(.96);}
+button.on{border-color:var(--ok); box-shadow:0 0 0 1px var(--ok), 0 0 14px rgba(62,207,142,.4); color:var(--ok);}
+.status{width:100%; max-width:760px; text-align:center; font-size:12px; color:var(--muted); padding:2px 0 2px; min-height:16px;}
+.banner{
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  background:rgba(8,10,14,.72); backdrop-filter:blur(4px); z-index:20;
+}
+.banner.show{display:flex;}
+.banner .box{
+  background:var(--panel); border:1px solid var(--border); border-radius:16px;
+  padding:26px 34px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.5);
+}
+.banner .box h2{margin:0 0 6px; font-size:22px;}
+.banner .box p{margin:0 0 14px; color:var(--muted); font-size:13px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>三峰纸牌 · Tri-Peaks</h1>
+  <span class="sub">点亮的牌比废牌堆顶 ±1 即可消除</span>
+</header>
+<div class="wrap"><canvas id="c"></canvas></div>
+<div class="status" id="status">准备中…</div>
+<div class="toolbar">
+  <button id="autoBtn">自动游玩</button>
+  <button id="newBtn">重新发牌</button>
+  <button id="drawBtn">翻一张</button>
+</div>
+<div class="banner" id="banner"><div class="box">
+  <h2 id="bTitle">完成！</h2>
+  <p id="bText"></p>
+  <button id="bBtn">再来一局</button>
+</div></div>
+<script>
+(function(){
+  const S=['♠','♥','♦','♣'];
+  const RANK=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const RED=s=>s==='♥'||s==='♦';
+  const cv=document.getElementById('c');
+  const ctx=cv.getContext('2d');
+  const statusEl=document.getElementById('status');
+  const autoBtn=document.getElementById('autoBtn');
+  const newBtn=document.getElementById('newBtn');
+  const drawBtn=document.getElementById('drawBtn');
+  const banner=document.getElementById('banner');
+  const bTitle=document.getElementById('bTitle');
+  const bText=document.getElementById('bText');
+  const bBtn=document.getElementById('bBtn');
+  const best=parseInt(localStorage.getItem('tripeaks_best')||'0',10);
+
+  class TriPeaks{
+    constructor(){
+      this.autoPlay=false; this._autoProgress=0; this._last=0; this._autoTimer=null;
+      this.cv=cv; this.ctx=ctx;
+      this.fit();
+      window.addEventListener('resize',()=>{ this.fit(); });
+      this.newDeal();
+      this._tick=(ts)=>{ try{ this.loop(ts); }catch(e){ console.error(e); } requestAnimationFrame(this._tick); };
+      requestAnimationFrame(this._tick);
+      this.updateStatus();
+    }
+    fit(){
+      const r=cv.getBoundingClientRect();
+      const W=Math.max(320,r.width||cv.width||360), H=Math.max(360,r.height||cv.height||520);
+      const dpr=window.devicePixelRatio||1;
+      cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+      this.W=W; this.H=H; this.dpr=dpr;
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      this.layout();
+    }
+    layout(){
+      if(!this.cards) return;
+      const W=this.W,H=this.H;
+      let cw=Math.min(W*0.094, (H*0.66)/(1.4+3*0.46));
+      cw=Math.max(20,cw);
+      const ch=cw*1.4, step=cw*1.06, rowH=ch*0.46;
+      const cx0=(W-9*step)/2 + cw/2;
+      const topY=H*0.06;
+      this.cw=cw; this.ch=ch; this.step=step; this.rowH=rowH;
+      const pos=(x,y)=>({x:x-cw/2, y:y-ch/2});
+      const set=(card,k,x,y)=>{ const p=pos(x,y); card.x=p.x; card.y=p.y; card.cx=x; card.cy=y; };
+      // base row (10), row2 (9), row1 (6), row0 (3 peaks)
+      const Y=[topY, topY+rowH, topY+2*rowH, topY+3*rowH];
+      let idx=0;
+      for(let i=0;i<10;i++){ if(this.cards[i]) set(this.cards[i], cx0+i*step, Y[3]); }
+      for(let k=0;k<9;k++){ if(this.cards[10+k]) set(this.cards[10+k], cx0+(k+0.5)*step, Y[2]); }
+      for(let m=0;m<6;m++){ if(this.cards[19+m]) set(this.cards[19+m], cx0+(m+1)*step, Y[1]); }
+      for(let p=0;p<3;p++){ if(this.cards[25+p]) set(this.cards[25+p], cx0+(p+1.5)*step, Y[0]); }
+      // waste / stock draw positions
+      this.stockPos={x:W*0.30, y:H*0.90};
+      this.wastePos={x:W*0.55, y:H*0.90};
+    }
+    newDeal(){
+      const deck=[];
+      for(let s=0;s<4;s++) for(let r=1;r<=13;r++) deck.push({rank:r,suit:S[s]});
+      for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; }
+      this.cards=[];
+      for(let i=0;i<28;i++){ const d=deck[i]; this.cards.push({rank:d.rank,suit:d.suit,removed:false,x:0,y:0,cx:0,cy:0,row:i<10?3:(i<19?2:(i<25?1:0))}); }
+      this.stock=deck.slice(28);
+      this.waste=[];
+      this.score=0; this.cleared=0; this.over=false; this.win=false;
+      this.anim=null; this.drawPulse=0;
+      this.layout();
+      if(this.stock.length){ this.waste.push(this.stock.pop()); }
+      this.updateStatus();
+    }
+    wasteTop(){ return this.waste.length?this.waste[this.waste.length-1].rank:-1; }
+    isFree(card){
+      if(card.removed) return false;
+      for(const o of this.cards){
+        if(o===card||o.removed) continue;
+        if(o.cy>card.cy+0.5){ // strictly lower row
+          if(Math.abs(o.cx-card.cx)<this.cw*0.92 && Math.abs(o.cy-card.cy)<this.ch*0.6) return false;
+        }
+      }
+      return true;
+    }
+    removable(card){
+      if(!this.isFree(card)) return false;
+      const w=this.wasteTop();
+      return w>=1 && Math.abs(card.rank-w)===1;
+    }
+    cardAt(px,py){
+      // topmost (higher cy = lower) drawn last; iterate reverse
+      for(let i=this.cards.length-1;i>=0;i--){
+        const c=this.cards[i]; if(c.removed) continue;
+        if(px>=c.x&&px<=c.x+this.cw&&py>=c.y&&py<=c.y+this.ch) return c;
+      }
+      return null;
+    }
+    tryMove(card){
+      if(this.over||this.anim) return false;
+      if(!this.removable(card)){
+        this.flash=card; this.flashT=0.4; return false;
+      }
+      this.doRemove(card); return true;
+    }
+    doRemove(card){
+      card.removed=true; this.cleared++;
+      this.score+=1 + Math.floor(this.cleared/10);
+      this.anim={card, fromX:card.cx, fromY:card.cy, toX:this.wastePos.x, toY:this.wastePos.y, t:0, dur:0.22};
+      if(this.autoPlay) this._autoProgress++;
+      if(this.cleared>=28) this.endGame(true);
+      this.updateStatus();
+    }
+    drawStock(){
+      if(this.over||this.anim||!this.stock.length) return false;
+      this.waste.push(this.stock.pop());
+      this.drawPulse=0.3;
+      this.updateStatus(); return true;
+    }
+    noMoves(){
+      if(this.stock.length) return false;
+      for(const c of this.cards){ if(!c.removed && this.removable(c)) return false; }
+      return true;
+    }
+    endGame(win){
+      if(this.over) return;
+      this.over=true; this.win=win;
+      if(this.score>best){ localStorage.setItem('tripeaks_best',String(this.score)); }
+      if(this.autoPlay){ // soft reset keeps auto demonstrating
+        const self=this; this._autoTimer=setTimeout(()=>{ self.newDeal(); self.scheduleAuto(); }, 700);
+        return;
+      }
+      this.showBanner(win?'通关！':'无路可走', '得分 '+this.score+(this.score>best?'(新纪录!)':''));
+    }
+    showBanner(t,sub){
+      bTitle.textContent=t; bText.textContent=sub; banner.classList.add('show');
+    }
+    hideBanner(){ banner.classList.remove('show'); }
+    startAuto(){
+      if(this.autoPlay) return; this.autoPlay=true; autoBtn.classList.add('on'); autoBtn.textContent='停止自动';
+      this.hideBanner(); this.scheduleAuto();
+    }
+    stopAuto(){
+      if(!this.autoPlay) return; this.autoPlay=false; autoBtn.classList.remove('on'); autoBtn.textContent='自动游玩';
+      if(this._autoTimer){ clearTimeout(this._autoTimer); this._autoTimer=null; }
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    scheduleAuto(){
+      if(!this.autoPlay) return;
+      const self=this;
+      this._autoTimer=setTimeout(()=>self.autoStep(), 620);
+    }
+    autoStep(){
+      if(!this.autoPlay||this.over) return;
+      if(this.anim){ this.scheduleAuto(); return; }
+      // find removable free card
+      let target=null;
+      for(const c of this.cards){ if(!c.removed && this.removable(c)){ target=c; break; } }
+      if(target){ this.doRemove(target); this.scheduleAuto(); return; }
+      if(this.stock.length){ this.drawStock(); this.scheduleAuto(); return; }
+      if(this.cleared>=28){ this.endGame(true); return; }
+      // no moves
+      this.endGame(false);
+    }
+    updateStatus(){
+      const b=Math.max(best,this.score);
+      statusEl.textContent='已消除 '+this.cleared+'/28　得分 '+this.score+'　最高 '+b+(this.autoPlay?'　[AUTO]':'');
+    }
+    loop(ts){
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+      if(this.anim){
+        this.anim.t+=dt;
+        if(this.anim.t>=this.anim.dur){
+          this.waste.push(this.anim.card);
+          this.anim=null;
+          if(this.noMoves() && this.cleared<28 && !this.over) this.endGame(false);
+        }
+      }
+      if(this.flashT){ this.flashT-=dt; if(this.flashT<=0) this.flash=null; }
+      if(this.drawPulse>0) this.drawPulse-=dt;
+      this.render();
+    }
+    drawCard(x,y,card,opt){
+      opt=opt||{};
+      const cw=this.cw, ch=this.ch, r=5;
+      ctx.save();
+      ctx.translate(x,y);
+      if(opt.glow){ ctx.shadowColor=opt.glow; ctx.shadowBlur=opt.glowBlur||16; }
+      ctx.fillStyle=opt.dim?'#11141b':'#f4f6fb';
+      this.rr(0,0,cw,ch,r); ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.strokeStyle=opt.stroke||(opt.dim?'#2a2f3a':'#c4ccd8'); ctx.lineWidth=opt.sel?2.5:1; this.rr(0,0,cw,ch,r); ctx.stroke();
+      if(!opt.back){
+        const col=RED(card.suit)?'#ff5d6c':'#1f2733';
+        ctx.fillStyle=col; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.font='bold '+(cw*0.30)+'px Arial';
+        ctx.fillText(RANK[card.rank], cw*0.22, ch*0.18);
+        ctx.font=(cw*0.30)+'px Arial';
+        ctx.fillText(card.suit, cw*0.24, ch*0.86);
+        // center big suit
+        ctx.font=(cw*0.5)+'px Arial';
+        ctx.fillText(card.suit, cw*0.66, ch*0.52);
+      } else {
+        ctx.strokeStyle='#4f9cff'; ctx.lineWidth=1.5;
+        for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(cw/2,ch/2,cw*0.16+i*4,0,Math.PI*2); ctx.stroke(); }
+      }
+      ctx.restore();
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    render(){
+      const W=this.W,H=this.H;
+      ctx.clearRect(0,0,W,H);
+      // board cards
+      for(const c of this.cards){
+        if(c.removed) continue;
+        const free=this.isFree(c); const rem=this.removable(c);
+        let glow=null,stroke=null,sel=false,dim=false;
+        if(this.autoPlay&&rem){ glow='rgba(62,207,142,.8)'; stroke='#3ecf8e'; }
+        if(this.flash===c){ glow='rgba(255,93,108,.9)'; stroke='#ff5d6c'; }
+        if(!free) dim=true;
+        this.drawCard(c.x,c.y,c,{glow,stroke,sel,dim});
+      }
+      // animating card (flying to waste)
+      if(this.anim){
+        const t=ease(this.anim.t/this.anim.dur);
+        const x=this.anim.fromX+(this.anim.toX-this.anim.fromX)*t;
+        const y=this.anim.fromY+(this.anim.toY-this.anim.fromY)*t;
+        this.drawCard(x-this.cw/2, y-this.ch/2, this.anim.card, {glow:'rgba(79,156,255,.9)'});
+      }
+      // stock
+      ctx.save();
+      if(this.stock.length){
+        this.drawCard(this.stockPos.x-this.cw/2, this.stockPos.y-this.ch/2, null, {back:true});
+        ctx.fillStyle='#9aa4b2'; ctx.font='bold '+(this.cw*0.26)+'px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(String(this.stock.length), this.stockPos.x, this.stockPos.y);
+      }
+      // waste
+      if(this.waste.length){
+        const top=this.waste[this.waste.length-1];
+        const sc=1+ (this.drawPulse>0?this.drawPulse*0.6:0);
+        ctx.translate(this.wastePos.x, this.wastePos.y); ctx.scale(sc,sc); ctx.translate(-this.wastePos.x,-this.wastePos.y);
+        this.drawCard(this.wastePos.x-this.cw/2, this.wastePos.y-this.ch/2, top, {});
+      }
+      ctx.restore();
+      ctx.fillStyle='#5b6573'; ctx.font='11px Arial'; ctx.textAlign='center';
+      ctx.fillText('牌库', this.stockPos.x, this.stockPos.y+this.ch*0.62);
+      ctx.fillText('废牌', this.wastePos.x, this.wastePos.y+this.ch*0.62);
+    }
+  }
+  function ease(t){ return t<0?0:t>1?1:1-Math.pow(1-t,3); }
+
+  const game=new TriPeaks();
+  window.game=game;
+
+  // pointer interactions
+  let downX=0,downY=0;
+  function getPos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left), y:(e.clientY-r.top)}; }
+  cv.addEventListener('pointerdown',(e)=>{
+    if(game.autoPlay||game.over) return;
+    const p=getPos(e); downX=p.x; downY=p.y;
+    const c=game.cardAt(p.x,p.y);
+    if(c) game.tryMove(c);
+  });
+  autoBtn.addEventListener('click',()=>game.toggleAuto());
+  newBtn.addEventListener('click',()=>{ game.hideBanner(); game.stopAuto(); game.newDeal(); });
+  drawBtn.addEventListener('click',()=>{ if(!game.autoPlay&&!game.over) game.drawStock(); });
+  bBtn.addEventListener('click',()=>{ game.hideBanner(); game.stopAuto(); game.newDeal(); });
+})();
+</script>
+</body>
+</html>
