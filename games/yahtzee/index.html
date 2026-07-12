@@ -49,6 +49,12 @@
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
+  .end-banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:#0a0f1ad9;border-radius:14px;backdrop-filter:blur(3px);z-index:5;text-align:center;padding:12px;}
+  .end-banner.show{display:flex;animation:fade-in .3s ease;}
+  @keyframes fade-in{from{opacity:0;transform:scale(.96);}to{opacity:1;transform:scale(1);}}
+  .end-banner .big{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#ffd79a,#ffb14d,#ff8a5c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .end-banner .sub{font-size:.8rem;color:var(--text);}
+  .end-banner .sub b{color:var(--gold);}
   @media(max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
 </style>
 </head>
@@ -64,6 +70,7 @@
   </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="game" width="440" height="150"></canvas>
+    <div class="end-banner" id="end-banner"><div class="big">Game Over</div><div class="sub">Final Score: <b id="end-score">0</b></div><div class="sub" id="end-best"></div></div>
   </div>
   <div class="cats" id="cats"></div>
   <div class="controls">
@@ -79,12 +86,13 @@
   'use strict';
   const CATS=[['ones','Ones'],['twos','Twos'],['threes','Threes'],['fours','Fours'],['fives','Fives'],['sixes','Sixes'],
     ['3k','3 of Kind'],['4k','4 of Kind'],['fh','Full House'],['ss','Sm Straight'],['ls','Lg Straight'],['y','Yahtzee'],['ch','Chance']];
+  const FACE={'ones':1,'twos':2,'threes':3,'fours':4,'fives':5,'sixes':6};
   const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
-  function fitCanvas(){ const w=canvas.clientWidth||440; const dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=150*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); return w; }
+  function fitCanvas(){ const w=canvas.clientWidth||440; const dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=150*dpr; if(dpr!==1) ctx.setTransform(dpr,0,0,dpr,0,0); return w; }
   const lerp=(a,b,t)=>a+(b-a)*t;
   function counts(d){ const c=[0,0,0,0,0,0,0]; d.forEach(v=>c[v]++); return c; }
   function score(cat,d){ const c=counts(d); const sum=d.reduce((a,b)=>a+b,0);
-    if(['ones','twos','threes','fours','fives','sixes'].includes(cat)) return c[parseInt(cat[0])]*parseInt(cat[0]);
+    if(['ones','twos','threes','fours','fives','sixes'].includes(cat)){ const f=FACE[cat]; return c[f]*f; }
     if(cat==='3k') return c.some(x=>x>=3)?sum:0;
     if(cat==='4k') return c.some(x=>x>=4)?sum:0;
     if(cat==='fh'){ const has3=c.some(x=>x===3),has2=c.some(x=>x===2); const has5=c.some(x=>x===5); return (has3&&has2)||has5?25:0; }
@@ -97,7 +105,9 @@
   class Yahtzee{
     constructor(){ this.best=parseInt(localStorage.getItem('bestYahtzee')||'0'); this.autoPlay=false; this.buildCats(); this.bindInput(); this.restart(); this._tick=this.tick.bind(this); requestAnimationFrame(this._tick); }
     buildCats(){ const el=document.getElementById('cats'); CATS.forEach(([id,name])=>{ const d=document.createElement('div'); d.className='cat open'; d.dataset.cat=id; d.innerHTML='<span class="n">'+name+'</span><span class="v" id="cat-'+id+'">-</span>'; el.appendChild(d); }); }
-    restart(){ this.stopAuto(); this.size=fitCanvas(); this.dice=[1,2,3,4,5]; this.held=[false,false,false,false,false]; this.rollsLeft=3; this.turn=0; this.scoreCard={}; this.totalScore=0; this.over=false; this.rolling=null; this.autoAccum=0; this.phase='idle'; this.updateUI(); this.render(); }
+    restart(){ this.stopAuto(); this.size=fitCanvas(); this.dice=[1,2,3,4,5]; this.held=[false,false,false,false,false]; this.rollsLeft=3; this.turn=0; this.scoreCard={}; this.totalScore=0; this.over=false; this.rolling=null; this.autoAccum=0; this.phase='idle'; this.hideEnd(); this.updateUI(); this.render(); }
+    showEnd(){ const isBest=this.totalScore>=this.best && this.totalScore>0; const b=document.getElementById('end-banner'); if(!b) return; document.getElementById('end-score').textContent=this.totalScore; document.getElementById('end-best').innerHTML=isBest?'<b>New Best! &#127881;</b>':'Best: <b>'+this.best+'</b>'; b.classList.add('show'); }
+    hideEnd(){ const b=document.getElementById('end-banner'); if(b) b.classList.remove('show'); }
     updateUI(){
       document.getElementById('score').textContent=this.totalScore;
       document.getElementById('best').textContent=this.best;
@@ -129,10 +139,10 @@
       }
       // score: pick open category with max score
       const open=CATS.map(c=>c[0]).filter(id=>this.scoreCard[id]===undefined);
-      let bestId=open[0], bestSc=-1; open.forEach(id=>{ const sc=score(id,this.dice); if(sc>bestSc){bestSc=sc;bestId=id;} });
+      let bestId=open[0], bestSc=-1; open.forEach(id=>{ const sc=score(id,this.dice)||0; if(sc>bestSc){bestSc=sc;bestId=id;} });
       this.scoreCard[bestId]=bestSc; this.totalScore+=bestSc;
       if(this.totalScore>this.best){ this.best=this.totalScore; localStorage.setItem('bestYahtzee',this.best); }
-      this.turn++; if(this.turn>=13){ this.over=true; } else { this.dice=[1,2,3,4,5]; this.held=[false,false,false,false,false]; this.rollsLeft=3; }
+      this.turn++; if(this.turn>=13){ this.over=true; this.showEnd(); } else { this.dice=[1,2,3,4,5]; this.held=[false,false,false,false,false]; this.rollsLeft=3; }
       this.phase='idle'; this.updateUI();
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
@@ -147,7 +157,7 @@
     bindInput(){
       const wrap=document.getElementById('board-wrap');
       wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.rolling) return; const sq=this.diceAt(e.clientX,e.clientY); if(sq<0)return; e.preventDefault(); if(this.rollsLeft<3&&this.phase!=='score'){ this.held[sq]=!this.held[sq]; this.render(); } });
-      document.getElementById('cats').querySelectorAll('.cat').forEach(el=>{ el.addEventListener('pointerdown',()=>{ if(this.autoPlay||this.over) return; const id=el.dataset.cat; if(this.scoreCard[id]!==undefined||this.rollsLeft>0) return; this.scoreCard[id]=score(id,this.dice); this.totalScore+=this.scoreCard[id]; if(this.totalScore>this.best){this.best=this.totalScore;localStorage.setItem('bestYahtzee',this.best);} this.turn++; if(this.turn>=13){this.over=true;} else { this.dice=[1,2,3,4,5]; this.held=[false,false,false,false,false]; this.rollsLeft=3; this.phase='idle'; } this.updateUI(); this.render(); }); });
+      document.getElementById('cats').querySelectorAll('.cat').forEach(el=>{ el.addEventListener('pointerdown',()=>{ if(this.autoPlay||this.over) return; const id=el.dataset.cat; if(this.scoreCard[id]!==undefined||this.rollsLeft>0) return; const gained=score(id,this.dice)||0; this.scoreCard[id]=gained; this.totalScore+=gained; if(this.totalScore>this.best){this.best=this.totalScore;localStorage.setItem('bestYahtzee',this.best);} this.turn++; if(this.turn>=13){this.over=true; this.showEnd();} else { this.dice=[1,2,3,4,5]; this.held=[false,false,false,false,false]; this.rollsLeft=3; this.phase='idle'; } this.updateUI(); this.render(); }); });
       window.addEventListener('resize',()=>{ this.size=fitCanvas(); });
     }
     diceAt(px,py){ const rect=canvas.getBoundingClientRect(); const x=px-rect.left, y=py-rect.top; const dw=this.size/5; for(let i=0;i<5;i++){ const dx=i*dw+8, dy=20, dwd=dw-16, dhd=110; if(x>=dx&&x<=dx+dwd&&y>=dy&&y<=dy+dhd) return i; } return -1; }
