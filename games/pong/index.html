@@ -111,6 +111,12 @@
         this._aiErr += (Math.random()*2-1)*12*dt;
         this._aiErr = Math.max(-PH*0.45*boost, Math.min(PH*0.45*boost, this._aiErr*0.96));
         this._autoAITarget = b.y + this._aiErr; // AI 也带误差
+        // 轮转漏球：让"要漏球"的一方把拍子主动撤到角落，使球从其旁边经过——看起来是主动退让，而非"拍子挡着却穿模"。
+        if(this._autoLet!==0){
+          const retreat = (b.y < H/2) ? H-PH/2-12 : PH/2+12;
+          if(this._autoLet===-1) this._autoAITarget = retreat;   // 右拍(AI)退让
+          if(this._autoLet===1)  this.targetY = retreat;          // 左拍(我方)退让
+        }
       }
       // 手动模式挡板跟球更跟手(10.2/帧)；自动演示挡板限速低一些，配合游走误差更"human"
       this.aiMovePaddle(this.ai, this.autoPlay ? this._autoAITarget : b.y, dt, this.autoPlay?7.2:10.2);
@@ -151,10 +157,10 @@
         b.x+=b.vx*sdt; b.y+=b.vy*sdt;
         if(b.y<12){ b.y=12; b.vy=Math.abs(b.vy); }
         if(b.y>H-12){ b.y=H-12; b.vy=-Math.abs(b.vy); }
-        // left paddle (球向左时)
-        if(b.vx<0 && b.x-10< PW+8 && b.x> PW && Math.abs(b.y-this.you.y)<PH/2+10 && !letLeft){ bounce(1); }
+        // left paddle (球向左时)：以"球左缘碰到拍面前沿"触发；y 容差与真实拍面高度(±PH/2)一致，杜绝拍子挡着却漏球/没挡却弹
+        if(b.vx<0 && b.x-7.5<=PW+8 && b.x>PW-2 && Math.abs(b.y-this.you.y)<=PH/2 && !letLeft){ bounce(1); }
         // right paddle (球向右时)
-        if(b.vx>0 && b.x+10> W-PW-8 && b.x<W-PW && Math.abs(b.y-this.ai.y)<PH/2+10 && !letRight){ bounce(-1); }
+        if(b.vx>0 && b.x+7.5>=W-PW-8 && b.x<W-PW+2 && Math.abs(b.y-this.ai.y)<=PH/2 && !letRight){ bounce(-1); }
         // scoring
         if(b.x< -10){ this.aiS++; this.score('ai'); return; }
         else if(b.x> W+10){ this.youS++; this.score('you'); return; }
