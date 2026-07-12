@@ -32,7 +32,7 @@
   .card .val{font-size:20px;font-weight:800;color:var(--text);}
   .card.win .val{color:var(--accent);text-shadow:0 0 12px var(--accent-glow);}
   .card.streak .val{color:var(--accent2);text-shadow:0 0 12px #ffd76a55;}
-  .board-wrap{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+  .board-wrap{width:100%;aspect-ratio:5/6;max-height:62vh;display:flex;align-items:center;justify-content:center;
     border-radius:18px;position:relative;
     background:linear-gradient(180deg,rgba(17,26,43,.6),rgba(10,15,26,.4));
     border:1px solid rgba(128,144,168,.14);box-shadow:0 10px 40px rgba(0,0,0,.45),0 0 0 1px rgba(92,225,168,.04) inset;}
@@ -138,7 +138,7 @@ class G {
     this.streak = 0;
     this.best = parseInt(store.get('best_wordle') || '0', 10) || 0;
 
-    this._w = this.fitCanvas();
+    this.fitCanvas();
     this.buildKeyboard();
     this.bindEvents();
     this.reset();
@@ -151,11 +151,12 @@ class G {
   fitCanvas(){
     const canvas = this.canvas;
     const w = (canvas.clientWidth || canvas.width || 440);
+    const h = (canvas.clientHeight || canvas.height || 440);
     const dpr = window.devicePixelRatio || 1;
     canvas.width = w * dpr;
-    canvas.height = w * dpr;
+    canvas.height = h * dpr;
     if (this.ctx && this.ctx.setTransform) this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return w;
+    this._w = w; this._h = h;
   }
 
   computeFreq(){
@@ -205,7 +206,7 @@ class G {
       else if (k === 'Backspace'){ e.preventDefault(); this.backspace(); }
       else if (/^[a-zA-Z]$/.test(k)){ this.typeLetter(k.toUpperCase()); }
     });
-    window.addEventListener('resize', () => { this._w = this.fitCanvas(); });
+    window.addEventListener('resize', () => { this.fitCanvas(); });
     const bw = document.getElementById('board-wrap');
     if (bw) bw.addEventListener('pointerdown', (e) => { e.preventDefault(); }, { passive:false });
     const kb = document.getElementById('keyboard');
@@ -459,13 +460,17 @@ class G {
     return { color, scale };
   }
   render(){
-    const ctx = this.ctx, w = this._w;
-    ctx.clearRect(0, 0, w, w);
+    const ctx = this.ctx, w = this._w, h = this._h;
+    ctx.clearRect(0, 0, w, h);
     const cols = this.cols, rows = this.rows;
-    const gap = Math.max(4, w * 0.025);
-    const tile = (w - gap * (cols + 1)) / cols;
+    const gap = Math.max(4, Math.min(w, h) * 0.025);
+    // Fit the board to BOTH width and height so all 6 rows are always visible.
+    const tileW = (w - gap * (cols + 1)) / cols;
+    const tileH = (h - gap * (rows + 1)) / rows;
+    const tile = Math.min(tileW, tileH);
+    const boardW = tile * cols + gap * (cols + 1);
     const boardH = tile * rows + gap * (rows + 1);
-    const x0 = gap, y0 = (w - boardH) / 2;
+    const x0 = (w - boardW) / 2, y0 = (h - boardH) / 2;
     for (let r = 0; r < rows; r++){
       for (let c = 0; c < cols; c++){
         const x = x0 + c * (tile + gap), y = y0 + r * (tile + gap);
