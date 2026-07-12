@@ -59,7 +59,7 @@
     </div>
   </div>
   <div class="board-wrap" id="board-wrap">
-    <canvas id="cv" width="460" height="480"></canvas>
+    <canvas id="cv" width="500" height="500"></canvas>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Red Wins!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
   </div>
   <div class="controls">
@@ -74,7 +74,7 @@
   'use strict';
   const N=7, RED=1, BLUE=2;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
-  const W=canvas.width, H=canvas.height, SIZE=34;
+  const W=canvas.width, H=canvas.height, SIZE=37;
   const MX=(W - SIZE*Math.sqrt(3)*(N-0.5))/2, MY=(H - (SIZE*1.5*N+SIZE))/2;
   const NB=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
   const idx=(q,r)=>r*N+q;
