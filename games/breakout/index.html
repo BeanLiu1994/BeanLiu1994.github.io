@@ -124,29 +124,39 @@
       if(this.over||this.won) return;
       if(this.autoPlay) this.autoMove(dt);
       const b=this.ball; const f=dt/16.67;
-      b.x+=b.vx*f; b.y+=b.vy*f;
-      if(b.x<this.ballR){ b.x=this.ballR; b.vx*=-1; }
-      if(b.x>this.W-this.ballR){ b.x=this.W-this.ballR; b.vx*=-1; }
-      if(b.y<this.ballR){ b.y=this.ballR; b.vy*=-1; }
-      // paddle
-      const px=this.paddleX, py=this.paddleY, pw=this.paddleW;
-      if(b.y+this.ballR>=py && b.y-this.ballR<=py+PAD_H && b.x>=px-this.ballR && b.x<=px+pw+this.ballR && b.vy>0){
-        b.y=py-this.ballR; const hit=(b.x-(px+pw/2))/(pw/2); b.vx=hit*Math.abs(b.vx)*1.05+ (hit*1.4); b.vy=-Math.abs(b.vy);
-        const sp=Math.hypot(b.vx,b.vy); const max=this.W*0.022+7; if(sp>max){ b.vx*=max/sp; b.vy*=max/sp; }
-        // Auto: pick the NEXT bounce aim now so the orbit keeps changing.
-        if(this.autoPlay){ const mid=this.W/2; let left=0,right=0; for(const br of this.bricks){ if(br.alive){ if((br.x+br.w/2)<mid) left++; else right++; } } let dh=0; if(left+right>0){ const imb=(left-right)/(left+right); dh=Math.max(-0.8,Math.min(0.8,-imb*1.2)); if(Math.abs(dh)<0.4) dh=dh>=0?0.4:-0.4; } this.onBounce(dh); }
-        if(navigator.vibrate) navigator.vibrate(8);
-      }
-      // bricks
-      for(const br of this.bricks){ if(!br.alive) continue;
-        if(b.x+this.ballR>br.x && b.x-this.ballR<br.x+br.w && b.y+this.ballR>br.y && b.y-this.ballR<br.y+br.h){
-          br.alive=false; this.bricksLeft--; this.score+=10;
-          const fromLeft=Math.abs(b.x-(br.x)); const fromRight=Math.abs(b.x-(br.x+br.w));
-          const fromTop=Math.abs(b.y-br.y); const fromBot=Math.abs(b.y-(br.y+br.h));
-          const m=Math.min(fromLeft,fromRight,fromTop,fromBot);
-          if(m===fromLeft||m===fromRight) b.vx*=-1; else b.vy*=-1;
-          if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestBreak',this.best); }
-          break;
+      // Sub-step the movement: advance the ball in increments no larger than its
+      // radius and test collisions each sub-step. Without this, a fast ball (up to
+      // ~30px per frame vs 18px-tall bricks) can pass fully through a brick between
+      // two frames — the classic "tunneling" glitch where the ball穿墙.
+      const speed=Math.hypot(b.vx,b.vy);
+      const maxMove=speed*f;
+      const steps=Math.max(1,Math.ceil(maxMove/this.ballR));
+      const subdt=f/steps;
+      for(let s=0;s<steps;s++){
+        b.x+=b.vx*subdt; b.y+=b.vy*subdt;
+        if(b.x<this.ballR){ b.x=this.ballR; b.vx*=-1; }
+        if(b.x>this.W-this.ballR){ b.x=this.W-this.ballR; b.vx*=-1; }
+        if(b.y<this.ballR){ b.y=this.ballR; b.vy*=-1; }
+        // paddle
+        const px=this.paddleX, py=this.paddleY, pw=this.paddleW;
+        if(b.y+this.ballR>=py && b.y-this.ballR<=py+PAD_H && b.x>=px-this.ballR && b.x<=px+pw+this.ballR && b.vy>0){
+          b.y=py-this.ballR; const hit=(b.x-(px+pw/2))/(pw/2); b.vx=hit*Math.abs(b.vx)*1.05+ (hit*1.4); b.vy=-Math.abs(b.vy);
+          const sp=Math.hypot(b.vx,b.vy); const max=this.W*0.022+7; if(sp>max){ b.vx*=max/sp; b.vy*=max/sp; }
+          // Auto: pick the NEXT bounce aim now so the orbit keeps changing.
+          if(this.autoPlay){ const mid=this.W/2; let left=0,right=0; for(const br of this.bricks){ if(br.alive){ if((br.x+br.w/2)<mid) left++; else right++; } } let dh=0; if(left+right>0){ const imb=(left-right)/(left+right); dh=Math.max(-0.8,Math.min(0.8,-imb*1.2)); if(Math.abs(dh)<0.4) dh=dh>=0?0.4:-0.4; } this.onBounce(dh); }
+          if(navigator.vibrate) navigator.vibrate(8);
+        }
+        // bricks
+        for(const br of this.bricks){ if(!br.alive) continue;
+          if(b.x+this.ballR>br.x && b.x-this.ballR<br.x+br.w && b.y+this.ballR>br.y && b.y-this.ballR<br.y+br.h){
+            br.alive=false; this.bricksLeft--; this.score+=10;
+            const fromLeft=Math.abs(b.x-(br.x)); const fromRight=Math.abs(b.x-(br.x+br.w));
+            const fromTop=Math.abs(b.y-br.y); const fromBot=Math.abs(b.y-(br.y+br.h));
+            const m=Math.min(fromLeft,fromRight,fromTop,fromBot);
+            if(m===fromLeft||m===fromRight) b.vx*=-1; else b.vy*=-1;
+            if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestBreak',this.best); }
+            break;
+          }
         }
       }
       if(b.y-this.ballR>this.H){ this.lives--; if(this.lives<=0){ this.gameOver(); } else { this.resetBall(); } }
