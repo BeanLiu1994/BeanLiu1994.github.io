@@ -100,12 +100,20 @@
       for(let i=0;i<500;i++){ x+=dx*step; y+=dy*step; if(x<r){x=r;dx=-dx;} if(x>W-r){x=W-r;dx=-dx;} if(y<=topMargin+r) return {x,y};
         for(let row=0;row<MAXROWS;row++) for(let col=0;col<this.grid[row].length;col++){ if(this.grid[row][col]!=null){ const d=Math.hypot(centerX(row,col)-x,centerY(row)-y); if(d<2*r-3) return {x,y}; } } }
       return {x,y}; }
-    snap(x,y){ let row=Math.max(0,Math.round((y-topMargin-r)/rowH)); row=Math.min(MAXROWS-1,row); let col=Math.round((x-ox-(row%2?r:0))/(2*r)); col=Math.max(0,Math.min(this.grid[row].length-1,col));
-      if(this.grid[row][col]==null) return {row,col};
-      let best=null,bd=1e9; const cand=[[row,col],[row,col-1],[row,col+1],[row-1,col],[row-1,col-1],[row+1,col],[row+1,col-1],[row+1,col+1]];
-      for(const [rr,cc] of cand){ if(rr<0||rr>=MAXROWS||cc<0||cc>=this.grid[rr].length) continue; if(this.grid[rr][cc]==null){ const d=Math.hypot(centerX(rr,cc)-x,centerY(rr)-y); if(d<bd){bd=d;best={row:rr,col:cc};} } }
-      return best||{row,col}; }
+    snap(x,y){
+      // find nearest filled bubble to the contact point
+      let best=null,bd=1e9;
+      for(let row=0;row<MAXROWS;row++) for(let col=0;col<this.grid[row].length;col++){ if(this.grid[row][col]!=null){ const d=Math.hypot(centerX(row,col)-x,centerY(row)-y); if(d<bd){bd=d;best={row,col};} } }
+      if(!best) return {row:Math.max(0,Math.min(MAXROWS-1,Math.round((y-topMargin-r)/rowH))),col:Math.max(0,Math.min(COLS-1,Math.round((x-ox)/ (2*r))))};
+      // attach to the empty neighbour of that bubble nearest to the contact point
+      const cands=this.neighbors(best.row,best.col).filter(([rr,cc])=>this.grid[rr][cc]==null);
+      if(!cands.length) return best;
+      let pick=best,pd=1e9;
+      for(const [rr,cc] of cands){ const d=Math.hypot(centerX(rr,cc)-x,centerY(rr)-y); if(d<pd){pd=d;pick={row:rr,col:cc};} }
+      return pick;
+    }
     cluster(row,col,color){ const seen=new Set([row+','+col]); const stack=[[row,col]]; let n=0; while(stack.length){ const [rr,cc]=stack.pop(); n++; for(const [nr,nc] of this.neighbors(rr,cc)){ const k=nr+','+nc; if(seen.has(k)) continue; if(this.grid[nr][nc]===color){ seen.add(k); stack.push([nr,nc]); } } } return n; }
+    simCluster(row,col,color){ const prev=this.grid[row][col]; this.grid[row][col]=color; const n=this.cluster(row,col,color); this.grid[row][col]=prev; return n; }
     fire(angle){ if(this.over||this.proj) return; this.angle=angle; const dx=Math.sin(angle),dy=-Math.cos(angle); this.proj={x:shooterX,y:shooterY,dx,dy,color:this.current}; }
     updateProj(){ if(!this.proj) return; const step=7; this.proj.x+=this.proj.dx*step; this.proj.y+=this.proj.dy*step; if(this.proj.x<r){this.proj.x=r;this.proj.dx=-this.proj.dx;} if(this.proj.x>W-r){this.proj.x=W-r;this.proj.dx=-this.proj.dx;}
       if(this.proj.y<=topMargin+r){ this.land(); return; }
@@ -126,7 +134,23 @@
     }
     win(){ this.over=true; this.autoPlay=false; document.getElementById('win-msg').textContent='Board cleared · '+this.score+' pts'; document.getElementById('overlay-win').classList.add('active'); this.autoCont(); }
     lose(){ this.over=true; this.autoPlay=false; document.getElementById('lose-msg').textContent='Bubbles reached the floor'; document.getElementById('overlay-lose').classList.add('active'); this.autoCont(); }
-    bestAim(){ let best={ang:0,score:-1}; for(let a=-78;a<=78;a+=5){ const ang=a*Math.PI/180; const pt=this.march(ang); const cell=this.snap(pt.x,pt.y); if(!cell) continue; const cnt=this.cluster(cell.row,cell.col,this.current); let s=cnt; if(cnt>=3) s+=12; if(centerY(cell.row)>H-130) s-=6; if(s>best.score) best={ang,s}; } return best.ang; }
+    bestAim(){ let bestAng=-Math.PI/2, bestScore=-1e9;
+      for(let a=-78;a<=78;a+=1){ const ang=a*Math.PI/180; const pt=this.march(ang); const cell=this.snap(pt.x,pt.y); if(!cell) continue; if(this.grid[cell.row][cell.col]!=null) continue;
+        const cnt=this.simCluster(cell.row,cell.col,this.current);
+        let s=0;
+        if(cnt>=3) s=1000+cnt*25;                 // winning shot: clears a cluster immediately
+        else {                                       // build toward a future match
+          s=cnt*100;                               // bigger same-color group is better
+          let adjSame=0,adjAny=0;
+          for(const [nr,nc] of this.neighbors(cell.row,cell.col)){ const c=this.grid[nr][nc]; if(c==null) continue; adjAny++; if(c===this.current) adjSame++; }
+          s+=adjSame*60;                           // reward chaining potential
+          s+=adjAny*4;                            // attach into the existing mass (compactness)
+          s-=cell.row*1.2;                       // prefer reaching higher rows
+        }
+        if(centerY(cell.row)>H-150) s-=6;          // avoid dropping too low
+        s-=Math.abs(a)*0.03;                       // gentle center bias for final tie-break
+        if(s>bestScore || (s===bestScore && ang>bestAng)){ bestScore=s; bestAng=ang; } }
+      return bestAng; }
     autoCont(){ if(!this.autoActive) return; const self=this; this.contTimer=setTimeout(()=>{ if(!self.autoActive) return; self.restart(); self.startAuto(); },1400); }
     toggleAuto(){ if(this.autoPlay){ this.autoActive=false; this.stopAuto(); } else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoActive=true; this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoDelay=20; }
