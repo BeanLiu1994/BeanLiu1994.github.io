@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语音转文字 · Speech to Text</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  button.danger{background:var(--err);border-color:var(--err);color:#fff}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:12px;padding:16px}
+  textarea{flex:1;min-height:300px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;font-size:14px;line-height:1.7}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)} .status.live{color:var(--accent)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎙️ 语音转文字</h1>
+    <div class="sub">基于浏览器 Web Speech API · 纯本地识别</div>
+  </div>
+  <div class="toolbar">
+    <label class="indent">语言
+      <select id="lang">
+        <option value="zh-CN">中文（普通话）</option>
+        <option value="en-US">English (US)</option>
+        <option value="ja-JP">日本語</option>
+        <option value="ko-KR">한국어</option>
+        <option value="fr-FR">Français</option>
+        <option value="de-DE">Deutsch</option>
+        <option value="es-ES">Español</option>
+      </select>
+    </label>
+    <button id="bStart" class="primary">● 开始聆听</button>
+    <button id="bStop" class="danger">■ 停止</button>
+    <button id="bCopy">复制</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <div class="hint">点击「开始聆听」后对着麦克风说话，识别结果会实时追加到下方。需使用 HTTPS 或 localhost 环境，且浏览器支持语音识别（Chrome / Edge 体验最佳）。</div>
+  <textarea id="out" placeholder="识别结果将显示在这里…" spellcheck="false"></textarea>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const out=$('out'),st=$('st');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let rec=null;
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  if(!SR){
+    setStatus('✗ 当前浏览器不支持语音识别，请使用 Chrome 或 Edge。','err');
+    $('bStart').disabled=true; $('bStop').disabled=true;
+    return;
+  }
+  function make(){
+    rec=new SR();
+    rec.lang=$('lang').value;
+    rec.continuous=true; rec.interimResults=true;
+    rec.onresult=e=>{
+      let final='',interim='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const r=e.results[i];
+        if(r.isFinal) final+=r[0].transcript; else interim+=r[0].transcript;
+      }
+      if(final) out.value+=final;
+      setStatus('聆听中…（临时：'+(interim||'…').slice(0,40)+'）','live');
+    };
+    rec.onerror=e=>{ setStatus('识别错误：'+e.error,'err'); };
+    rec.onend=()=>{ setStatus('已停止','ok'); };
+  }
+  $('bStart').onclick=()=>{
+    if(!rec) make();
+    rec.lang=$('lang').value;
+    try{ rec.start(); setStatus('聆听中…请开始说话','live'); }
+    catch(e){ setStatus('无法启动：'+e.message,'err'); }
+  };
+  $('bStop').onclick=()=>{ if(rec) rec.stop(); };
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

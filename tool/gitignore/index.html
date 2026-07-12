@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.gitignore 生成器 · Gitignore Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .left{flex:1;min-width:300px;display:flex;flex-direction:column;gap:12px}
+  .right{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text]{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 12px;font-size:13px;outline:none}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:999px;
+    padding:6px 13px;font-size:13px;cursor:pointer;transition:.15s;user-select:none}
+  .chip:hover{border-color:var(--accent)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  textarea{flex:1;min-height:340px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:12px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📄 .gitignore 生成器</h1>
+    <div class="sub">选择所需模板，自动合并 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bAll">全选</button>
+    <button id="bNone">清空</button>
+    <button id="bCopy" class="primary">复制</button>
+    <button id="bDown">下载 .gitignore</button>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <div class="hint">勾选适用模板，下方实时生成合并后的 .gitignore。也可手动在右侧追加自定义规则。</div>
+    <input type="text" id="search" placeholder="搜索模板，例如 node / python / macos …">
+    <div class="chips" id="chips"></div>
+  </section>
+  <section class="right">
+    <div class="pane-head">.gitignore 预览</div>
+    <textarea id="out" spellcheck="false"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const chips=$('chips'),out=$('out'),st=$('st'),search=$('search');
+  const T={
+    'Node':"node_modules/\nnpm-debug.log*\nyarn-debug.log*\nyarn-error.log*\n.pnpm-store/\n.next/\n.nuxt/\n.dist/\n.cache/",
+    'Python':"__pycache__/\n*.py[cod]\n*.egg-info/\n.eggs/\n.venv/\nvenv/\nenv/\n.Python/\n.pytest_cache/\n.mypy_cache/\n.ipynb_checkpoints/",
+    'Java / Maven':"target/\n*.class\n*.jar\n*.war\n*.ear\n.idea/\n",
+    'Go':"bin/\ndist/\n*.test\n*.out\n",
+    'Rust':"target/\nCargo.lock\n",
+    'C / C++':"build/\n*.o\n*.obj\n*.a\n*.lib\n*.so\n*.dll\n*.exe\n",
+    'C# / .NET':"bin/\nobj/\n*.user\n.vs/",
+    'Ruby':"/.bundle/\n.bundle/\nvendor/bundle\n*.gem\n",
+    'PHP':"/vendor/\ncomposer.phar\n",
+    'Swift / Xcode':"DerivedData/\n.build/\n*.xcuserstate\nxcuserdata/\n",
+    'Android / Kotlin':".gradle/\nlocal.properties\n/build/\ncaptures/\n",
+    'macOS':".DS_Store\n.AppleDouble\n.LSOverride\n.Spotlight-V100\n",
+    'Windows':"Thumbs.db\nDesktop.ini\nehthumbs.db\n",
+    'Linux':"*~\n.directory\n.Trash-*\n",
+    'Visual Studio Code':".vscode/*\n!.vscode/settings.json\n*.code-workspace\n",
+    'IntelliJ':".idea/\n*.iml\n*.iws\nout/\n",
+    'Vim':"*.swp\n*.swo\n*~\.vim/\n",
+    'Sublime Text':"*.sublime-workspace\n*.sublime-project\n",
+    'Eclipse':".metadata/\n.project\n.classpath\n.settings/\n",
+    '日志 Logs':"*.log\nlogs/\n",
+    '环境变量 / 密钥':".env\n.env.*\n*.pem\n*.key\ncredentials.json\nsecrets.json\n",
+    '压缩包 Archives':"*.zip\n*.tar.gz\n*.tgz\n*.rar\n*.7z\n*.gz\n"
+  };
+  const sel=new Set();
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function render(){
+    const q=search.value.trim().toLowerCase();
+    chips.innerHTML='';
+    Object.keys(T).forEach(name=>{
+      if(q && !name.toLowerCase().includes(q)) return;
+      const c=document.createElement('div');
+      c.className='chip'+(sel.has(name)?' on':'');
+      c.textContent=name;
+      c.onclick=()=>{ if(sel.has(name)) sel.delete(name); else sel.add(name); render(); build(); };
+      chips.appendChild(c);
+    });
+    if(!chips.children.length) chips.innerHTML='<span class="hint">无匹配模板</span>';
+  }
+  function build(){
+    const parts=[];
+    let n=0;
+    sel.forEach(name=>{ parts.push('# ---- '+name+' ----','',T[name],''); n++; });
+    const head='# Generated by .gitignore Generator\n# 模板数: '+n+'\n\n';
+    const merged=head+parts.join('\n');
+    // keep any manual custom lines appended after marker
+    const marker='\n# ===== 自定义规则（可手动编辑） =====\n';
+    if(out.value.includes(marker)){
+      out.value=merged+marker+out.value.split(marker)[1];
+    } else {
+      out.value=merged+marker;
+    }
+    setStatus('✓ 已合并 '+n+' 个模板','ok');
+  }
+  $('bAll').onclick=()=>{ Object.keys(T).forEach(k=>sel.add(k)); render(); build(); };
+  $('bNone').onclick=()=>{ sel.clear(); render(); build(); };
+  search.oninput=render;
+  $('bCopy').onclick=async()=>{ if(!out.value.trim()){setStatus('没有内容','err');return;} try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('bDown').onclick=()=>{
+    const blob=new Blob([out.value],{type:'text/plain'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='.gitignore'; a.click();
+    URL.revokeObjectURL(a.href); setStatus('✓ 已下载 .gitignore','ok');
+  };
+  render(); build();
+})();
+</script>
+</body>
+</html>

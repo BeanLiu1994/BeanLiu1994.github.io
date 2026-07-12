@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>助记密码短语 · Passphrase Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input[type=number]{width:64px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:12px;padding:16px}
+  .controls{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .out{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;
+    font-size:22px;font-family:"SF Mono",Consolas,monospace;word-break:break-all;min-height:64px;display:flex;align-items:center}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+  .meta b{color:var(--text)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 助记密码短语</h1>
+    <div class="sub">Diceware 风格 · 易记且高强度 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bGen" class="primary">生成</button>
+    <button id="bCopy">复制</button>
+  </div>
+</header>
+<main>
+  <div class="controls">
+    <label class="indent">单词数 <input type="number" id="n" value="5" min="2" max="20"></label>
+    <label class="indent">分隔符
+      <select id="sep"><option value="-">-（连字符）</option><option value=".">.（点）</option><option value=" ">（空格）</option><option value="_">_（下划线）</option></select>
+    </label>
+    <label class="indent"><input type="checkbox" id="num"> 加数字</label>
+    <label class="indent"><input type="checkbox" id="sym"> 加符号</label>
+  </div>
+  <div class="out" id="out">点击「生成」</div>
+  <div class="meta">
+    <span>随机源：<b>crypto 安全随机数</b></span>
+    <span>词库大小：<b id="mSize">—</b></span>
+    <span>熵值：<b id="mEnt">—</b></span>
+    <span>估算强度：<b id="mStr">—</b></span>
+  </div>
+  <div class="hint">密码短语由随机常见单词拼接而成，比随机字符更易记忆、同等长度下同样安全。建议 ≥ 5 个单词。</div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const out=$('out'),st=$('st');
+  const WORDS=('apple bread cloud dance eagle flame green horse island jungle kite lemon maple '+
+    'night ocean pearl queen river sun tide union valley water xenon yellow zebra bridge castle '+
+    'diamond engine forest galaxy harbor ivory jade knight lemon meadow needle onion pumpkin '+
+    'quartz raven silver tiger umbrella violet willow xray yarn zebra amber beach comet coral '+
+    'delta ember feather geode harbor iris jet knit lotus moss nickel olive pine quartz ruby '+
+    'stone tulip urn vine willow yarn atlas bloom cedar dove echo frost glow haze iris jet keen '+
+    'lily mint nova oak pearl quest rose sage thorn ultra velvet willow yonder zenith acorn birch '+
+    'cove drift ember fern glade hill ink jet kelp lark moss nut oak pine quartz reed sage tide '+
+    'urn vine wave yarn zephyr beam cliff drift ember foam grain hemp iris jet kelp lagoon mist '+
+    'noble oak pearl quartz reed sage tide urn vine wave yarn zenith').split(/\s+/).filter(Boolean);
+  const SYM='!@#$%^&*?';
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function pick(){ const i=crypto.getRandomValues(new Uint32Array(1))[0]%WORDS.length; return WORDS[i]; }
+  function gen(){
+    const n=Math.max(2,Math.min(20,parseInt($('n').value)||5));
+    const sep=$('sep').value;
+    const parts=[];
+    for(let i=0;i<n;i++) parts.push(pick());
+    let phrase=parts.join(sep);
+    if($('num').checked) phrase+=Math.floor(crypto.getRandomValues(new Uint32Array(1))[0]%90+10);
+    if($('sym').checked) phrase+=SYM[crypto.getRandomValues(new Uint32Array(1))[0]%SYM.length];
+    out.textContent=phrase;
+    const size=WORDS.length;
+    const bits=(n*Math.log2(size) + ($('num').checked?6:0) + ($('sym').checked?3:0));
+    $('mSize').textContent=size;
+    $('mEnt').textContent=bits.toFixed(1)+' bit';
+    $('mStr').textContent= bits>=60?'很强':bits>=40?'较强':'一般';
+    setStatus('✓ 已生成 '+n+' 词密码短语','ok');
+  }
+  $('bGen').onclick=gen;
+  $('bCopy').onclick=async()=>{ if(out.textContent==='点击「生成」'){setStatus('请先生成','err');return;} try{ await navigator.clipboard.writeText(out.textContent); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  gen();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>决策转盘 · Decision Wheel</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .left{flex:1;min-width:280px;display:flex;flex-direction:column;gap:10px}
+  .right{flex:1;min-width:300px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:220px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;font-size:14px;line-height:1.6}
+  canvas{border-radius:50%;max-width:100%;background:var(--panel)}
+  .result{font-size:22px;font-weight:700;text-align:center;min-height:30px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  .palette{display:flex;flex-wrap:wrap;gap:6px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎯 决策转盘</h1>
+    <div class="sub">把选择交给运气 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bSpin" class="primary">🎡 开始转动</button>
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <div class="hint">每行一个选项；可加权重，例如「火锅:3」表示出现概率是默认的 3 倍。</div>
+    <textarea id="opts" placeholder="火锅&#10;日料&#10;川菜&#10;自助餐">火锅
+日料
+川菜
+自助餐</textarea>
+  </section>
+  <section class="right">
+    <canvas id="cv" width="320" height="320"></canvas>
+    <div class="result" id="res">点击「开始转动」</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const cv=$('cv'),ctx=cv.getContext('2d'),opts=$('opts'),res=$('res'),st=$('st');
+  const COLORS=['#4f9cff','#3ecf8e','#ff5d6c','#f7b955','#a78bfa','#22d3ee','#fb7185','#84cc16','#e879f9','#f59e0b'];
+  let rot=0, spinning=false;
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function parse(){
+    const items=[];
+    opts.value.split('\n').forEach(l=>{
+      const s=l.trim(); if(!s) return;
+      const i=s.lastIndexOf(':');
+      let label=s, w=1;
+      if(i>0){ const tail=s.slice(i+1).trim(); if(/^\d+(\.\d+)?$/.test(tail)){ label=s.slice(0,i).trim(); w=parseFloat(tail); } }
+      if(label) items.push({label, w:Math.max(0.001,w)});
+    });
+    return items;
+  }
+  function draw(items,rotation){
+    const cx=cv.width/2, cy=cv.height/2, r=cv.width/2-6;
+    ctx.clearRect(0,0,cv.width,cv.height);
+    const total=items.reduce((a,b)=>a+b.w,0);
+    let ang=rotation;
+    items.forEach((it,idx)=>{
+      const slice=it.w/total*Math.PI*2;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,ang,ang+slice);
+      ctx.closePath();
+      ctx.fillStyle=COLORS[idx%COLORS.length];
+      ctx.fill();
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.rotate(ang+slice/2);
+      ctx.fillStyle='#0f1115';
+      ctx.font='13px sans-serif';
+      ctx.textAlign='right';
+      ctx.fillText(it.label.slice(0,10), r-12, 4);
+      ctx.restore();
+      ang+=slice;
+    });
+    // pointer at top
+    ctx.beginPath();
+    ctx.moveTo(cx,cy-r-2); ctx.lineTo(cx-9,cy-r-16); ctx.lineTo(cx+9,cy-r-16);
+    ctx.closePath(); ctx.fillStyle='#fff'; ctx.fill();
+  }
+  function render(){ const items=parse(); if(items.length) draw(items,rot); else { ctx.clearRect(0,0,cv.width,cv.height); } }
+  function spin(){
+    const items=parse();
+    if(items.length<2){ setStatus('请至少输入 2 个选项','err'); return; }
+    if(spinning) return;
+    spinning=true;
+    const total=items.reduce((a,b)=>a+b.w,0);
+    // random target segment by weight
+    let pick=Math.random()*total, idx=0;
+    for(let i=0;i<items.length;i++){ pick-=items[i].w; if(pick<=0){ idx=i; break; } }
+    // center of chosen segment relative to rotation 0
+    let center=0; for(let i=0;i<idx;i++) center+=items[i].w/total*Math.PI*2;
+    center+=items[idx].w/total*Math.PI*2/2;
+    // pointer is at top = -PI/2 (i.e. angle 1.5PI). We want segment center at pointer after extra spins.
+    const turns=5+Math.floor(Math.random()*3);
+    const target=rot + turns*Math.PI*2 + ((1.5*Math.PI) - center) - (rot % (Math.PI*2));
+    const start=rot, dur=3200, t0=performance.now();
+    function frame(now){
+      const p=Math.min(1,(now-t0)/dur);
+      const e=1-Math.pow(1-p,3); // ease-out cubic
+      rot=start+e*target;
+      draw(items,rot);
+      if(p<1) requestAnimationFrame(frame);
+      else{
+        spinning=false;
+        res.textContent='🎉 '+items[idx].label;
+        setStatus('✓ 结果为：'+items[idx].label,'ok');
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  opts.oninput=render;
+  $('bSpin').onclick=spin;
+  $('bCopy').onclick=async()=>{ if(!res.textContent||res.textContent==='点击「开始转动」'){setStatus('还没有结果','err');return;} try{ await navigator.clipboard.writeText(res.textContent.replace('🎉 ','')); setStatus('✓ 已复制结果','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('bClear').onclick=()=>{ opts.value=''; res.textContent='点击「开始转动」'; render(); setStatus('已清空'); };
+  render();
+})();
+</script>
+</body>
+</html>

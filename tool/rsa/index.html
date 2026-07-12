@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSA 密钥与加解密 · RSA Tool</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:280px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:200px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:12px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 RSA 密钥与加解密</h1>
+    <div class="sub">Web Crypto · RSA-OAEP / SHA-256 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <label class="indent">密钥长度
+      <select id="bits"><option>2048</option><option>4096</option></select>
+    </label>
+    <button id="bGen" class="primary">生成密钥对</button>
+    <button id="bEnc">加密 ↓</button>
+    <button id="bDec">解密 ↑</button>
+    <button id="bCopyPub">复制公钥</button>
+    <button id="bCopyPriv">复制私钥</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">公钥 Public Key (PEM)</div>
+    <textarea id="pub" readonly placeholder="点击「生成密钥对」后显示…" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">私钥 Private Key (PEM)</div>
+    <textarea id="priv" readonly placeholder="请妥善保管私钥，切勿泄露…" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">明文 / 密文（Base64）</div>
+    <textarea id="data" placeholder="在此输入要加密的文本，或粘贴 Base64 密文进行解密…" spellcheck="false"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const pub=$('pub'),priv=$('priv'),data=$('data'),st=$('st');
+  let keys=null;
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function ab2b64(buf){let s='';const b=new Uint8Array(buf);for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
+  function b64toab(b64){const bin=atob(b64.replace(/\s+/g,''));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b.buffer;}
+  function pem(body,type){return '-----BEGIN '+type+'-----\n'+body.match(/.{1,64}/g).join('\n')+'\n-----END '+type+'-----\n';}
+  function unpem(p){return p.replace(/-----[^-]+-----/g,'').replace(/\s+/g,'');}
+  async function gen(){
+    try{
+      const len=parseInt($('bits').value,10);
+      keys=await crypto.subtle.generateKey(
+        {name:'RSA-OAEP',modulusLength:len,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},
+        true,['encrypt','decrypt']);
+      const spki=await crypto.subtle.exportKey('spki',keys.publicKey);
+      const pkcs8=await crypto.subtle.exportKey('pkcs8',keys.privateKey);
+      pub.value=pem(ab2b64(spki),'PUBLIC KEY');
+      priv.value=pem(ab2b64(pkcs8),'PRIVATE KEY');
+      setStatus('✓ 已生成 '+len+' 位 RSA 密钥对','ok');
+    }catch(e){ setStatus('✗ 生成失败：'+e.message,'err'); }
+  }
+  async function enc(){
+    if(!pub.value.trim()){setStatus('请先生成或粘贴公钥','err');return;}
+    if(!data.value){setStatus('请输入明文','err');return;}
+    try{
+      const k=await crypto.subtle.importKey('spki',b64toab(unpem(pub.value)),{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+      const ct=await crypto.subtle.encrypt({name:'RSA-OAEP'},k,new TextEncoder().encode(data.value));
+      data.value=ab2b64(ct);
+      setStatus('✓ 已加密（输出为 Base64 密文）','ok');
+    }catch(e){ setStatus('✗ 加密失败：'+e.message,'err'); }
+  }
+  async function dec(){
+    if(!priv.value.trim()){setStatus('请先生成或粘贴私钥','err');return;}
+    if(!data.value.trim()){setStatus('请输入 Base64 密文','err');return;}
+    try{
+      const k=await crypto.subtle.importKey('pkcs8',b64toab(unpem(priv.value)),{name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
+      const pt=await crypto.subtle.decrypt({name:'RSA-OAEP'},k,b64toab(data.value));
+      data.value=new TextDecoder().decode(pt);
+      setStatus('✓ 已解密','ok');
+    }catch(e){ setStatus('✗ 解密失败（密钥或密文有误）：'+e.message,'err'); }
+  }
+  $('bGen').onclick=gen; $('bEnc').onclick=enc; $('bDec').onclick=dec;
+  $('bCopyPub').onclick=async()=>{ if(!pub.value){setStatus('无公钥','err');return;} await navigator.clipboard.writeText(pub.value); setStatus('✓ 已复制公钥','ok'); };
+  $('bCopyPriv').onclick=async()=>{ if(!priv.value){setStatus('无私钥','err');return;} await navigator.clipboard.writeText(priv.value); setStatus('✓ 已复制私钥','ok'); };
+})();
+</script>
+</body>
+</html>

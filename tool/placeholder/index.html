@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>占位图生成 · Placeholder Image</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .left{flex:1;min-width:280px;display:flex;flex-direction:column;gap:12px}
+  .right{flex:1;min-width:280px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field span{font-size:12px;color:var(--muted)}
+  .field input{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;outline:none}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row .field{flex:1;min-width:120px}
+  .preview{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;justify-content:center;overflow:auto;max-height:420px}
+  canvas{max-width:100%}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  input[type=color]{width:46px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ 占位图生成</h1>
+    <div class="sub">类似 placehold.it 的本地版 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bDown" class="primary">下载 PNG</button>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <div class="row">
+      <div class="field"><span>宽度 (px)</span><input type="number" id="w" value="600" min="16" max="4000"></div>
+      <div class="field"><span>高度 (px)</span><input type="number" id="h" value="400" min="16" max="4000"></div>
+    </div>
+    <div class="row">
+      <div class="field"><span>背景色</span><input type="color" id="bg" value="#4f9cff"></div>
+      <div class="field"><span>文字色</span><input type="color" id="fg" value="#ffffff"></div>
+    </div>
+    <div class="field"><span>显示文字（留空则显示尺寸）</span><input type="text" id="txt" placeholder="例如 Hello"></div>
+    <div class="hint">常用于原型设计、Mock 数据、README 示例图。所有渲染在本地完成。</div>
+  </section>
+  <section class="right">
+    <div class="pane-head">预览</div>
+    <div class="preview"><canvas id="cv" width="600" height="400"></canvas></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const cv=$('cv'),ctx=cv.getContext('2d'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function draw(){
+    let w=Math.max(16,Math.min(4000,parseInt($('w').value)||600));
+    let h=Math.max(16,Math.min(4000,parseInt($('h').value)||400));
+    cv.width=w; cv.height=h;
+    ctx.fillStyle=$('bg').value; ctx.fillRect(0,0,w,h);
+    const label=$('txt').value.trim()||(w+' × '+h);
+    ctx.fillStyle=$('fg').value;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    let fs=Math.max(12,Math.min(w,h)/8);
+    ctx.font='600 '+fs+'px sans-serif';
+    // shrink if too wide
+    while(ctx.measureText(label).width>w*0.9 && fs>10){ fs-=2; ctx.font='600 '+fs+'px sans-serif'; }
+    ctx.fillText(label,w/2,h/2);
+    setStatus('✓ 已生成 '+w+'×'+h+' 占位图','ok');
+  }
+  ['w','h','bg','fg','txt'].forEach(id=>$(id).addEventListener('input',draw));
+  $('bDown').onclick=()=>{
+    const a=document.createElement('a');
+    a.href=cv.toDataURL('image/png');
+    a.download='placeholder_'+cv.width+'x'+cv.height+'.png'; a.click();
+    setStatus('✓ 已下载 PNG','ok');
+  };
+  draw();
+})();
+</script>
+</body>
+</html>
