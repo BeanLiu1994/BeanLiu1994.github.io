@@ -121,7 +121,7 @@
     restart(){
       this.stopAuto();
       this.score=0; this.lives=3; this.over=false;
-      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0; this.loiterT=0; this.hoverT=0; this.deepestY=0; this.trapped=false; this.ballLife=0; this._fallAssist=0; this._stuckFrames=0; this._lifeFrames=0;
+      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0; this._trapT=0; this.ballLife=0; this._fallAssist=0; this._lifeFrames=0;
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');
       this.updateUI();
@@ -158,6 +158,7 @@
       }
       const b=this.ball; if(!b.alive) return;
       this.ballLife=(this.ballLife||0)+dt;
+      this._lifeFrames=(this._lifeFrames||0)+dt;
       b.vy+=G*dt;
       const sp=Math.hypot(b.vx,b.vy); if(sp>MAXV){ b.vx*=MAXV/sp; b.vy*=MAXV/sp; }
       b.x+=b.vx*dt; b.y+=b.vy*dt;
@@ -179,40 +180,34 @@
           const dot=b.vx*nx+b.vy*ny; b.vx-=2*dot*nx; b.vy-=2*dot*ny;
           if(f.active){ b.vy-=7; b.vx+=(f.px<W/2?-1:1)*2.4; } else { b.vx*=0.96; b.vy*=0.96; } } }
       // drain: the ball is lost once it slips below the flipper line and is between
-      // the two pivots (i.e. it fell through the center gap). Also a stuck-orbit backstop.
+      // the two pivots (i.e. it fell through the center gap).
       const pivotY=this.flip[0].py;
       const belowFlippers = b.y > pivotY-6 && b.x>this.flip[0].px && b.x<this.flip[1].px;
       const atFloor = b.y > H-10;
+      // 夹缝水平卡死判定：球停在挡板线附近(挡板缝正上方)且近乎水平悬停 → 累计 ~1.25s 即解
       if(b.y > pivotY-34 && b.y < pivotY-6){
         if(Math.hypot(b.vx,b.vy) < 1.2) this._stuck=(this._stuck||0)+dt; else this._stuck=0;
       } else this._stuck=0;
-      // 防死循环：正常轨迹里球迟早落到底板/挡板缝；若卡在漏斗斜壁与挡板夹缝(重力被斜壁反复中和，
-      // 下不去)，用两层独立的、与物理加力无关的"帧计时兜底"确保任何球都能在限定时间内结束：
-      //  1) assist 阶段：age>2.5s 起渐进加温和下拽；
-      //  2) stuckFrames：trapped 且近水平悬停累计 → 强制塞到挡板缝中央 drain；
-      //  3) lifeFrames：球存活总帧独立硬上限 → 无条件强制 drain(封死一切漏判)。
-      this._fallAssist=(this._fallAssist||0);
-      this._lifeFrames=(this._lifeFrames||0)+dt;
-      const age=this.ballLife||0;
-      if(age>150){                  // ≈2.5s 还没落 → 渐进式把球往漏斗中央漏口引并下拽
-        this.trapped=true;
-        this._fallAssist=Math.min(2.2, this._fallAssist+0.03*dt);
-        b.vy += this._fallAssist*dt;                // 额外向下重力
-        b.vx += (W/2 - b.x) * 0.02 * dt;            // 同时把球往中央漏斗漏口推(消除横向环绕，更易进挡板缝)
+      const stuckTooLong=(this._stuck||0)>150;
+      // 防死循环兜底——只针对「真·被困」的球，绝不打扰正常轨迹：
+      // 球已被弹出很久、却始终没下沉到挡板区(一直滞留漏斗/弹珠台上部)，说明被困在某个
+      // orbit / 夹缝里出不去。此时才渐进把球轻推到中央漏斗漏口并下拽。「正常能上下弹跳」的
+      // 球会频繁越过 pivotY-140 这条线，_trapT 被不断清零，不会被误伤。
+      if(b.y < pivotY-140) this._trapT=(this._trapT||0)+dt; else this._trapT=0;
+      if(this._trapT>4){                                  // ≈4s 仍滞留上方 → 视为被困
+        this._fallAssist=Math.min(2.2, (this._fallAssist||0)+0.03*dt);
+        b.vy += this._fallAssist*dt;                     // 额外向下重力
+        b.vx += (W/2 - b.x) * 0.02 * dt;                // 把球往中央漏斗漏口推
         b.vx *= (1 - 0.012*dt);
         const s=Math.hypot(b.vx,b.vy); if(s<2.5){ const k=2.5/s; b.vx*=k; b.vy*=k; }
       }
-      const stuckTooLong=(this._stuck||0)>150;
-      // 卡死判定：trapped 状态下、球始终没真正落进挡板缝/底板(即停在挡板线 pivotY 之上)→
-      // 视为被困，累计到 ~1.25s 就把它塞到挡板缝解开。覆盖"挡板缝正上方 450 附近"的窄带锁死。
-      const hoveringHigh = this.trapped && b.y < pivotY;
-      if(hoveringHigh) this._stuckFrames=(this._stuckFrames||0)+dt; else this._stuckFrames=0;
-      const forceDrain = this._stuckFrames>75 || this._lifeFrames>390;        // ≈1.25s 卡死即解 或 ≈6.5s 绝对封顶
+      // 绝对兜底：任何球存活超过很久(≈30s)仍未结束才无条件漏球，正常玩几乎不会触发
+      const forceDrain = this._lifeFrames>1800;
       if(forceDrain){
-        b.x=W/2; b.y=pivotY+30; b.vx=0; b.vy=0;   // 塞到挡板缝下方中央 → 下一判定 belowFlippers 命中
+        b.x=W/2; b.y=pivotY+30; b.vx=0; b.vy=0;       // 塞到挡板缝下方中央 → 下一判定 belowFlippers 命中
       }
       if(belowFlippers || atFloor || b.y>H+R || stuckTooLong || forceDrain){
-        b.alive=false; this.lives--; this._stuck=0; this.loiterT=0; this.hoverT=0; this.deepestY=0; this.trapped=false; this.ballLife=0; this._fallAssist=0; this._stuckFrames=0; this._lifeFrames=0; this.updateUI();
+        b.alive=false; this.lives--; this._stuck=0; this._trapT=0; this._fallAssist=0; this._lifeFrames=0; this.ballLife=0; this.updateUI();
         if(this.lives<=0){ this.over=true; this.gameOver(); }
         else { this.sinceDrain=0; setTimeout(()=>{ if(this.over) return; this.ball=makeBall(); }, 600); }
       }
