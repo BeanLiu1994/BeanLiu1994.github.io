@@ -165,19 +165,54 @@
       while(prev[cur[0]+','+cur[1]] && prev[cur[0]+','+cur[1]].join(',')!==sk){ cur=prev[cur[0]+','+cur[1]]; }
       return {x:cur[0],y:cur[1]};
     }
+    // Multi-source BFS: threat[y][x] = minimum number of steps from the player
+    // cell to the nearest ghost (0 if a ghost stands there). Used by the auto
+    // hunter to stay out of reach instead of charging straight into a ghost.
+    ghostThreatMap(){
+      const threat=Array.from({length:MH},()=>Array(MW).fill(Infinity));
+      const q=[]; let head=0;
+      for(const g of this.ghosts){ threat[g.gy][g.gx]=0; q.push([g.gx,g.gy]); }
+      while(head<q.length){
+        const [x,y]=q[head++]; const d=threat[y][x];
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx=x+dx, ny=y+dy;
+          if(this.isFloor(nx,ny) && threat[ny][nx]>d+1){ threat[ny][nx]=d+1; q.push([nx,ny]); }
+        }
+      }
+      return threat;
+    }
     decidePlayer(){
       const p=this.player;
       if(p.req && this.isFloor(p.gx+p.req.x,p.gy+p.req.y)){ const d=p.req; p.req=null; return d; }
       if(this.autoPlay){
+        const fn=this.freeNeighbors(p.gx,p.gy);
+        if(!fn.length) return null;
+        const threat=this.ghostThreatMap();
+        const SAFE=3; // cells of clearance we treat as safe (player is faster, so it keeps its lead)
         const dot=this.bfsNext(p.gx,p.gy,(x,y)=>this.dots.has(x+','+y));
-        if(dot) return {x:dot.x-p.gx, y:dot.y-p.gy};
-        const fn=this.freeNeighbors(p.gx,p.gy); if(fn.length) return {x:fn[0].x-p.gx,y:fn[0].y-p.gy};
+        let safeBest=null, safeBestDist=Infinity, fleeBest=null, fleeBestScore=-Infinity;
+        for(const n of fn){
+          const thr=threat[n.y][n.x];
+          const toDot=dot ? (Math.abs(n.x-dot.x)+Math.abs(n.y-dot.y)) : 0;
+          // When a safe cell exists, keep making progress: pick the safe neighbour
+          // closest to the nearest dot so we never stall (stalling = eventual trap).
+          if(thr>=SAFE && toDot<safeBestDist){ safeBestDist=toDot; safeBest=n; }
+          // Otherwise flee: choose the neighbour farthest from any ghost with the
+          // most onward exits, keeping escape routes open.
+          const branch=this.freeNeighbors(n.x,n.y).length;
+          const fleeScore=thr*10+branch;
+          if(fleeScore>fleeBestScore){ fleeBestScore=fleeScore; fleeBest=n; }
+        }
+        const pick = safeBest || fleeBest;
+        return {x:pick.x-p.gx, y:pick.y-p.gy};
       }
       return null;
     }
     decideGhost(g){
       if(this.autoPlay){
-        if(Math.random()<0.25){ const fn=this.freeNeighbors(g.gx,g.gy); if(fn.length){ const r=fn[Math.floor(Math.random()*fn.length)]; return {x:r.x-g.gx, y:r.y-g.gy}; } }
+        // Auto ghosts are a little less relentless than full-chase so the auto
+        // hunter has a fair chance to dodge — manual play keeps a livelier chase.
+        if(Math.random()<0.45){ const fn=this.freeNeighbors(g.gx,g.gy); if(fn.length){ const r=fn[Math.floor(Math.random()*fn.length)]; return {x:r.x-g.gx, y:r.y-g.gy}; } }
         const t=this.bfsNext(g.gx,g.gy,(x,y)=>x===this.player.gx&&y===this.player.gy);
         if(t) return {x:t.x-g.gx, y:t.y-g.gy};
       }
