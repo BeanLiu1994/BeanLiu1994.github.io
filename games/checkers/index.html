@@ -74,6 +74,7 @@
 (function(){
   'use strict';
   const N=8,S=46,W=N*S,H=N*S,RED=1,BLACK=-1;
+  const DRAW_PLY=50; /* 连续无吃子/无升王的步数上限，超过判和，防止自动对弈死循环 */
   const canvas=document.getElementById('game');
   function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
   const ctx=fit();
@@ -112,11 +113,25 @@
   class Checkers{
     constructor(){ this.best=parseInt(localStorage.getItem('bestChk')||'0'); this.autoPlay=false; this.autoTimer=null; this.bindInput(); this.restart(); }
     initBoard(){ const b=Array.from({length:N},()=>new Array(N).fill(0)); for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if((r+c)%2===1){ if(r<3) b[r][c]=BLACK; else if(r>4) b[r][c]=RED; } } return b; }
-    restart(){ this.stopAuto(); this.board=this.initBoard(); this.turn=RED; this.over=false; this.winner=0; this.selected=null; this.legal=[]; this.lastMove=null;
+    restart(){ this.stopAuto(); this.board=this.initBoard(); this.turn=RED; this.over=false; this.winner=0; this.selected=null; this.legal=[]; this.lastMove=null; this.noProgress=0; this.posCount=new Map();
       document.getElementById('overlay-win').classList.remove('active'); this.draw(); }
-    checkWin(mover){ const opp=-mover; if(countP(this.board,opp)===0||genMoves(this.board,opp).length===0){ this.over=true; this.winner=mover; this.win(mover); return true; } return false; }
+    posKey(){ let s=''; for(let r=0;r<N;r++) for(let c=0;c<N;c++) s+=this.board[r][c]+','; return s+this.turn; }
+    checkWin(mover){ const opp=-mover; if(countP(this.board,opp)===0||genMoves(this.board,opp).length===0){ this.over=true; this.winner=mover; this.win(mover); return true; }
+      if(this.noProgress>=DRAW_PLY){ this.over=true; this.winner=0; this.drawResult('Draw','No progress — 50 plies without a capture or promotion.'); return true; }
+      const k=this.posKey(); const n=(this.posCount.get(k)||0)+1; this.posCount.set(k,n);
+      if(n>=3){ this.over=true; this.winner=0; this.drawResult('Draw','Threefold repetition — same position repeated 3 times.'); return true; }
+      return false; }
     win(mover){ const you = mover===RED; if(you){ this.best++; localStorage.setItem('bestChk',this.best); } document.getElementById('win-h').textContent= you?'You Win!':'Black Wins'; document.getElementById('win-msg').textContent= you?'Checkmate — nice game.':'The AI took the board.'; document.getElementById('overlay-win').classList.add('active'); this.stopAuto(); }
-    applyTurn(mv){ if(!mv){ this.over=true; this.winner=-this.turn; this.win(this.winner); return; } this.board=applyMove(this.board,mv); this.lastMove=mv; const mover=this.turn; this.turn=-this.turn; if(!this.checkWin(mover) && !this.autoPlay && this.turn===BLACK){ const self=this; setTimeout(()=>{ if(self.over||self.autoPlay) return; const m=chooseMove(self.board,BLACK,5); self.applyTurn(m); self.draw(); },550); } this.draw(); }
+    drawResult(title,msg){ document.getElementById('win-h').textContent=title; document.getElementById('win-msg').textContent=msg; document.getElementById('overlay-win').classList.add('active'); this.stopAuto(); }
+    applyTurn(mv){ if(!mv){ this.over=true; this.winner=-this.turn; this.win(this.winner); return; }
+      const before=this.board;
+      this.board=applyMove(this.board,mv); this.lastMove=mv; const mover=this.turn;
+      let prog=0; for(const [cr,cc] of mv.caps) if(before[cr][cc]!==0) prog++;
+      const fp=before[mv.from[0]][mv.from[1]];
+      const [lr,lc]=mv.lands[mv.lands.length-1]; const landed=this.board[lr][lc];
+      if((fp===RED||fp===BLACK)&&(landed===2||landed===-2)) prog++;
+      if(prog>0){ this.noProgress=0; this.posCount=new Map(); } else { this.noProgress++; }
+      this.turn=-this.turn; if(!this.checkWin(mover) && !this.autoPlay && this.turn===BLACK){ const self=this; setTimeout(()=>{ if(self.over||self.autoPlay) return; const m=chooseMove(self.board,BLACK,5); self.applyTurn(m); self.draw(); },550); } this.draw(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
