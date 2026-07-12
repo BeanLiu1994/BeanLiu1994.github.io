@@ -59,7 +59,7 @@
     </div>
   </div>
   <div class="board-wrap" id="board-wrap">
-    <canvas id="cv" width="420" height="600"></canvas>
+    <canvas id="cv" width="420" height="520"></canvas>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Great Shooting!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Keep Going</button></div></div>
   </div>
   <div class="controls">
@@ -72,7 +72,7 @@
 <script>
 (function(){
   'use strict';
-  const W=420, H=600, G=0.32, BR=12, RIM=22;
+  const W=420, H=520, G=0.32, BR=12, RIM=22;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
 
@@ -89,8 +89,8 @@
     saveBest(){ try{ localStorage.setItem('hoops_best', String(this.best)); }catch(e){} }
     restart(){
       this.stopAuto(); this.baskets=0; this.streak=0; this.shots=0; this.cool=0; this.over=false;
-      this.bx=70; this.by=H-50; this.ball={x:this.bx,y:this.by,vx:0,vy:0,alive:false};
-      this.hoopX=W*0.72; this.hoopY=H*0.32; this.hoopVx=1.1;
+      this.bx=70; this.by=H-42; this.ball={x:this.bx,y:this.by,vx:0,vy:0,alive:false};
+      this.hoopX=W*0.72; this.hoopY=H*0.38; this.hoopVx=1.1;
       document.getElementById('overlay-win').classList.remove('active');
       this.updateUI();
     }
@@ -127,8 +127,17 @@
     }
     draw(){
       ctx.clearRect(0,0,W,H);
+      // floor / launch platform
+      const floorY=H-14;
+      ctx.fillStyle='#1a2a3a'; ctx.fillRect(0,floorY,W,H-floorY);
+      ctx.strokeStyle='#3a5a7a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,floorY); ctx.lineTo(W,floorY); ctx.stroke();
+      // launcher pad (angled launch ramp)
+      const lx=this.bx, ly=this.by;
+      ctx.fillStyle='#2a3a4a'; ctx.beginPath(); ctx.moveTo(lx-28,ly); ctx.lineTo(lx+28,ly); ctx.lineTo(lx+20,floorY); ctx.lineTo(lx-20,floorY); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='#ff9f43'; ctx.lineWidth=2; ctx.shadowColor='#ff9f43'; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.moveTo(lx-24,ly); ctx.lineTo(lx+24,ly); ctx.stroke(); ctx.shadowBlur=0;
       // backboard
-      ctx.strokeStyle='#3a4a6a'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(W-30,80); ctx.lineTo(W-30,200); ctx.stroke();
+      ctx.strokeStyle='#3a4a6a'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(W-30,70); ctx.lineTo(W-30,180); ctx.stroke();
       // rim
       ctx.shadowColor='#ff9f43'; ctx.shadowBlur=14; ctx.strokeStyle='#ff9f43'; ctx.lineWidth=5;
       ctx.beginPath(); ctx.moveTo(this.hoopX-RIM,this.hoopY); ctx.lineTo(this.hoopX+RIM,this.hoopY); ctx.stroke(); ctx.shadowBlur=0;
