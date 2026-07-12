@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>书签工具生成器 · Bookmarklet Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:200px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  input.fld{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:9px 12px;font-size:14px}
+  .chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);cursor:pointer}
+  .opts{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}
+  #out{user-select:all}
+  .drop{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;background:var(--accent);color:#fff;
+    border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;margin-top:4px;cursor:grab}
+  .drop:active{cursor:grabbing}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔖 书签工具生成器</h1>
+    <div class="sub">把 JS 代码变成可拖拽的书签 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制书签链接</button>
+    <button id="bClear">清空</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>① 输入 JavaScript 代码</h2>
+    <textarea id="code" placeholder="例如：alert('Hello from bookmarklet!');">alert('当前页面标题：' + document.title);</textarea>
+    <div class="opts">
+      <label class="chk"><input type="checkbox" id="wrap" checked> 用 IIFE 包裹 (function(){ ... })()</label>
+      <label class="chk"><input type="checkbox" id="minify"> 压缩空白</label>
+    </div>
+  </section>
+  <section class="card">
+    <h2>② 书签名 &amp; 生成结果</h2>
+    <div class="row">
+      <input class="fld" id="title" value="我的书签" style="width:200px">
+      <span class="hint">把下面的链接拖到浏览器书签栏即可使用</span>
+    </div>
+    <div style="height:12px"></div>
+    <a class="drop" id="drop" href="#">⭐ 拖我到书签栏</a>
+    <div style="height:12px"></div>
+    <textarea id="out" readonly placeholder="生成的 javascript: 链接将显示在此…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function basicMinify(s){return s.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\n\s*/g,' ').replace(/\s*([{}();,=+\-*/])\s*/g,'$1').trim();}
+  function run(){
+    let code=$('code').value;
+    if(!code.trim()){ $('out').value=''; $('drop').href='#'; setStatus('等待输入代码…'); return; }
+    if($('minify').checked) code=basicMinify(code);
+    if($('wrap').checked) code='(function(){'+code+'})();';
+    const uri='javascript:'+encodeURIComponent(code).replace(/'/g,'%27').replace(/"/g,'%22');
+    $('out').value=uri;
+    $('drop').href=uri;
+    $('drop').textContent='⭐ '+$('title').value||'⭐ 拖我到书签栏';
+    setStatus('✓ 已生成书签（'+uri.length+' 字符）','ok');
+  }
+  ['code','title','wrap','minify'].forEach(id=>$(id).addEventListener('input',run));
+  $('bCopy').onclick=async()=>{ if(!$('out').value)return; try{await navigator.clipboard.writeText($('out').value);setStatus('✓ 已复制书签链接','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  $('bClear').onclick=()=>{ $('code').value='';$('out').value='';$('drop').href='#';$('code').focus();setStatus('已清空'); };
+  run();
+})();
+</script>
+</body>
+</html>

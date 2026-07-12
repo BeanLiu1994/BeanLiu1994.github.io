@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAC 地址生成器 · MAC Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  input[type=number]{width:80px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:14px}
+  select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px}
+  .chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);cursor:pointer}
+  .opts{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0}
+  textarea{width:100%;min-height:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:14px;line-height:1.8;resize:vertical;outline:none}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📡 MAC 地址生成器</h1>
+    <div class="sub">随机 / 厂商 OUI · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bGen" class="primary">生成</button>
+    <button id="bCopy">复制全部</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>设置</h2>
+    <div class="row">
+      <span style="font-size:13px;color:var(--muted)">数量</span>
+      <input type="number" id="count" min="1" max="200" value="5">
+      <span style="font-size:13px;color:var(--muted)">分隔符</span>
+      <select id="sep"><option value=":">冒号 :</option><option value="-">连字符 -</option><option value=".">点 .</option><option value="">无</option></select>
+      <span style="font-size:13px;color:var(--muted)">大小写</span>
+      <select id="case"><option value="upper">大写</option><option value="lower">小写</option></select>
+    </div>
+    <div class="opts">
+      <label class="chk"><input type="checkbox" id="vendor" checked> 使用真实厂商 OUI</label>
+      <label class="chk"><input type="checkbox" id="local"> 本地管理位 (LAA)</label>
+      <label class="chk"><input type="checkbox" id="uniq"> 去重</label>
+    </div>
+    <div class="hint">勾选「本地管理位」会设置第 2 个最低位为 1（本地管理地址），否则为全局唯一地址。</div>
+  </section>
+  <section class="card">
+    <h2>结果</h2>
+    <textarea id="out" readonly placeholder="生成的 MAC 地址将显示在此…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const OUIS=[
+    ['00:1A:2B','Cisco'],['3C:5A:B4','Google'],['A4:83:E7','Apple'],
+    ['F0:18:98','Samsung'],['DC:A6:32','Raspberry Pi'],['00:50:56','VMware'],
+    ['02:00:00','Private'],['BC:30:5B','Dell'],['50:EB:F6','Microsoft'],['AC:BC:32','Huawei']
+  ];
+  function hex(n){return n.toString(16).padStart(2,'0');}
+  function randByte(){return Math.floor(Math.random()*256);}
+  function fmt(bytes){
+    const sep=$('sep').value;
+    let s=bytes.map(b=>hex(b)).join(sep);
+    return $('case').value==='upper'?s.toUpperCase():s.toLowerCase();
+  }
+  function genOne(){
+    let bytes;
+    if($('vendor').checked){
+      const [oui,name]=OUIS[Math.floor(Math.random()*OUIS.length)];
+      const ob=oui.split(':').map(h=>parseInt(h,16));
+      bytes=[ob[0],ob[1],ob[2],randByte(),randByte(),randByte()];
+    } else {
+      bytes=[randByte(),randByte(),randByte(),randByte(),randByte(),randByte()];
+    }
+    if($('local').checked){ bytes[0]|=0x02; bytes[0]&=0xFE; }
+    else { bytes[0]&=0xFD; }
+    return fmt(bytes);
+  }
+  function run(){
+    let n=Math.min(200,Math.max(1,+$('count').value||1));
+    const set=new Set(); const out=[];
+    let guard=0;
+    while(out.length<n && guard<n*50+50){
+      const m=genOne(); guard++;
+      if($('uniq').checked){ if(set.has(m))continue; set.add(m); }
+      out.push(m);
+    }
+    $('out').value=out.join('\n');
+    setStatus('✓ 已生成 '+out.length+' 个 MAC 地址','ok');
+  }
+  ['count','sep','case','vendor','local','uniq'].forEach(id=>$(id).addEventListener('change',run));
+  $('bGen').onclick=run;
+  $('bCopy').onclick=async()=>{ if(!$('out').value)return; try{await navigator.clipboard.writeText($('out').value);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  run();
+})();
+</script>
+</body>
+</html>

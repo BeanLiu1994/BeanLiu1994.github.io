@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>圆角生成器 · Border Radius Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;flex:1;min-width:300px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .preview-wrap{display:flex;align-items:center;justify-content:center;min-height:260px;
+    background:
+      linear-gradient(45deg,#1b1f27 25%,transparent 25%),
+      linear-gradient(-45deg,#1b1f27 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#1b1f27 75%),
+      linear-gradient(-45deg,transparent 75%,#1b1f27 75%);
+    background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;
+    border-radius:10px}
+  #box{width:200px;height:200px;background:linear-gradient(135deg,var(--accent),#7c5cff);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;text-align:center;padding:10px}
+  .row{display:flex;align-items:center;gap:12px;margin:12px 0}
+  .row label{flex:0 0 110px;font-size:13px;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--accent)}
+  .row .val{flex:0 0 64px;text-align:right;font-family:"SF Mono",Consolas,monospace;font-size:14px}
+  .unit{display:flex;gap:8px;margin:6px 0 14px;flex-wrap:wrap}
+  .unit button{padding:5px 11px;font-size:12px}
+  .unit button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  textarea{width:100%;min-height:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;resize:vertical;outline:none}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:8px;cursor:pointer}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⬭ 圆角生成器</h1>
+    <div class="sub">border-radius · 实时预览 &amp; 复制 CSS · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bRandom">随机</button>
+    <button id="bCopy" class="primary">复制 CSS</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>预览</h2>
+    <div class="preview-wrap"><div id="box">圆角预览</div></div>
+    <label class="chk"><input type="checkbox" id="link" checked> 四角联动（统一数值）</label>
+    <div class="row"><label>左上 Top-Left</label><input type="range" id="tl" min="0" max="200" value="24"><span class="val" id="tlv">24px</span></div>
+    <div class="row"><label>右上 Top-Right</label><input type="range" id="tr" min="0" max="200" value="24"><span class="val" id="trv">24px</span></div>
+    <div class="row"><label>右下 Bottom-Right</label><input type="range" id="br" min="0" max="200" value="24"><span class="val" id="brv">24px</span></div>
+    <div class="row"><label>左下 Bottom-Left</label><input type="range" id="bl" min="0" max="200" value="24"><span class="val" id="blv">24px</span></div>
+    <div class="unit" id="unit">
+      <button data-u="px" class="active">px</button>
+      <button data-u="%">%</button>
+      <button data-u="em">em</button>
+      <button data-u="rem">rem</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>生成的 CSS</h2>
+    <textarea id="out" readonly></textarea>
+    <div style="height:12px"></div>
+    <div class="unit" id="fmt">
+      <button data-f="short" class="active">简写</button>
+      <button data-f="full">完整</button>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  let unit='px', fmt='short';
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function v(id){return +$(id).value;}
+  function uVal(x){return unit==='px'?x: (unit==='%'? +(x/2).toFixed(1) : (x/16).toFixed(2));}
+  function render(){
+    const tl=v('tl'),tr=v('tr'),br=v('br'),bl=v('bl');
+    $('tlv').textContent=uVal(tl)+unit; $('trv').textContent=uVal(tr)+unit;
+    $('brv').textContent=uVal(br)+unit; $('blv').textContent=uVal(bl)+unit;
+    const css=(fmt==='short')
+      ? (tl===tr&&tr===br&&br===bl)
+        ? `border-radius: ${uVal(tl)}${unit};`
+        : `border-radius: ${uVal(tl)}${unit} ${uVal(tr)}${unit} ${uVal(br)}${unit} ${uVal(bl)}${unit};`
+      : `border-top-left-radius: ${uVal(tl)}${unit};\n`+
+        `border-top-right-radius: ${uVal(tr)}${unit};\n`+
+        `border-bottom-right-radius: ${uVal(br)}${unit};\n`+
+        `border-bottom-left-radius: ${uVal(bl)}${unit};`;
+    $('out').value=css;
+    $('box').style.borderRadius=`${tl}px ${tr}px ${br}px ${bl}px`;
+  }
+  ['tl','tr','br','bl'].forEach(id=>{
+    $(id).addEventListener('input',()=>{
+      if($('link').checked){ const x=v(id); ['tl','tr','br','bl'].forEach(o=>{if(o!==id)$(o).value=x;}); }
+      render();
+    });
+  });
+  $('link').addEventListener('change',()=>{ if($('link').checked){const x=v('tl');['tr','br','bl'].forEach(o=>$(o).value=x);} render();});
+  $('unit').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    $('unit').querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); unit=b.dataset.u; render();
+  });
+  $('fmt').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    $('fmt').querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); fmt=b.dataset.f; render();
+  });
+  $('bRandom').onclick=()=>{
+    ['tl','tr','br','bl'].forEach(o=>$(o).value=Math.floor(Math.random()*201));
+    if($('link').checked){const x=v('tl');['tr','br','bl'].forEach(o=>$(o).value=x);}
+    render(); setStatus('✓ 已随机生成','ok');
+  };
+  $('bCopy').onclick=async()=>{ try{await navigator.clipboard.writeText($('out').value);setStatus('✓ 已复制 CSS','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  render();
+})();
+</script>
+</body>
+</html>

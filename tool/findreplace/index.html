@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>查找替换 · Find & Replace</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+  .field{flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted)}
+  input.fld{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;font-family:"SF Mono",Consolas,monospace;font-size:14px}
+  .opts{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+  .chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);cursor:pointer}
+  textarea{width:100%;min-height:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔁 查找替换</h1>
+    <div class="sub">支持区分大小写 / 正则 / 全词 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bAll" class="primary">全部替换</button>
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>查找 / 替换设置</h2>
+    <div class="controls">
+      <div class="field"><label>查找 Find</label><input class="fld" id="find" placeholder="要查找的文本或正则"></div>
+      <div class="field"><label>替换为 Replace</label><input class="fld" id="repl" placeholder="替换后的文本（可用 $1 $& 等）"></div>
+    </div>
+    <div class="opts">
+      <label class="chk"><input type="checkbox" id="optCs"> 区分大小写</label>
+      <label class="chk"><input type="checkbox" id="optRx"> 正则模式</label>
+      <label class="chk"><input type="checkbox" id="optWw"> 全词匹配</label>
+    </div>
+  </section>
+  <section class="card">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="input" placeholder="在此粘贴或输入文本…"></textarea>
+  </section>
+  <section class="card">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="output" readonly placeholder="替换结果将显示在此…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function escapeRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+  function buildRegex(){
+    let pat=$('find').value;
+    if(!pat) return null;
+    if($('optRx').checked){
+      try{ return new RegExp(pat, $('optCs').checked?'g':'gi'); }
+      catch(e){ setStatus('⚠ 正则错误：'+e.message,'err'); return false; }
+    }
+    let p=escapeRe(pat);
+    if($('optWw').checked) p='\\b'+p+'\\b';
+    return new RegExp(p, $('optCs').checked?'g':'gi');
+  }
+  function run(){
+    const src=$('input').value;
+    if(!src){ $('output').value=''; setStatus('等待输入…'); return; }
+    const rx=buildRegex();
+    if(rx===false) return;
+    if(rx===null){ $('output').value=src; setStatus('未输入查找内容'); return; }
+    const out=src.replace(rx,$('repl').value);
+    $('output').value=out;
+    const m=src.match(rx);
+    setStatus('✓ 共 '+(m?m.length:0)+' 处匹配，已替换','ok');
+  }
+  ['input','find','repl','optCs','optRx','optWw'].forEach(id=>$(id).addEventListener('input',run));
+  $('bAll').onclick=run;
+  $('bCopy').onclick=async()=>{ if(!$('output').value)return; try{await navigator.clipboard.writeText($('output').value);setStatus('✓ 已复制结果','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  $('bClear').onclick=()=>{ $('input').value='';$('output').value='';$('find').value='';$('repl').value='';$('input').focus();setStatus('已清空'); };
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>User-Agent 解析器 · UA Parser</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:6px}
+  .item{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .item .name{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .item .val{font-size:15px;margin-top:4px;word-break:break-all}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;background:var(--accent);color:#fff;margin-right:6px}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🕵️ User-Agent 解析器</h1>
+    <div class="sub">解析浏览器 / 系统 / 设备 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bMine" class="primary">填入当前浏览器 UA</button>
+    <button id="bCopy">复制结果</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>User-Agent 字符串</h2>
+    <textarea id="ua" placeholder="粘贴 User-Agent 字符串…"></textarea>
+    <div class="hint">留空并点击「填入当前浏览器 UA」可解析你正在使用的浏览器。</div>
+  </section>
+  <section class="card">
+    <h2>解析结果</h2>
+    <div id="badges"></div>
+    <div class="grid" id="out"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function parse(ua){
+    const r={ ua:ua };
+    // 浏览器
+    if(/Edg\//.test(ua)){ r.browser='Edge'; r.version=(ua.match(/Edg\/([\d.]+)/)||[])[1]; }
+    else if(/OPR\/|Opera/.test(ua)){ r.browser='Opera'; r.version=(ua.match(/(?:OPR|Opera)\/([\d.]+)/)||[])[1]; }
+    else if(/Firefox\//.test(ua)){ r.browser='Firefox'; r.version=(ua.match(/Firefox\/([\d.]+)/)||[])[1]; }
+    else if(/Chrome\//.test(ua)){ r.browser='Chrome'; r.version=(ua.match(/Chrome\/([\d.]+)/)||[])[1]; }
+    else if(/Safari\//.test(ua)){ r.browser='Safari'; r.version=(ua.match(/Version\/([\d.]+)/)||[])[1]; }
+    else if(/MSIE |Trident\//.test(ua)){ r.browser='Internet Explorer'; r.version=(ua.match(/(?:MSIE |rv:)([\d.]+)/)||[])[1]; }
+    else r.browser='未知';
+    // 引擎
+    if(/Gecko\//.test(ua)) r.engine='Gecko';
+    else if(/AppleWebKit\//.test(ua)) r.engine='WebKit';
+    else if(/Trident\//.test(ua)) r.engine='Trident';
+    else if(/Blink\//.test(ua)) r.engine='Blink';
+    else r.engine='未知';
+    // 操作系统
+    if(/Windows NT 10/.test(ua)) r.os='Windows 10/11';
+    else if(/Windows NT 6\.3/.test(ua)) r.os='Windows 8.1';
+    else if(/Windows NT 6\.2/.test(ua)) r.os='Windows 8';
+    else if(/Windows NT/.test(ua)) r.os='Windows';
+    else if(/iPhone|iPad|iPod/.test(ua)) r.os='iOS';
+    else if(/Mac OS X/.test(ua)){ r.os='macOS'; r.osVersion=(ua.match(/Mac OS X ([\d_\.]+)/)||[])[1]; }
+    else if(/Android/.test(ua)){ r.os='Android'; r.osVersion=(ua.match(/Android ([\d.]+)/)||[])[1]; }
+    else if(/Linux/.test(ua)) r.os='Linux';
+    else if(/CrOS/.test(ua)) r.os='Chrome OS';
+    else r.os='未知';
+    // 设备
+    if(/iPhone/.test(ua)) r.device='手机 (iPhone)';
+    else if(/iPad/.test(ua)) r.device='平板 (iPad)';
+    else if(/Android/.test(ua)) r.device=/Mobile/.test(ua)?'手机 (Android)':'平板 (Android)';
+    else if(/Mobile/.test(ua)) r.device='手机';
+    else r.device='桌面';
+    // 机器人
+    r.bot=/bot|crawler|spider|slurp|mediapartners/i.test(ua);
+    return r;
+  }
+  function run(){
+    const ua=$('ua').value.trim();
+    if(!ua){ $('out').innerHTML='';$('badges').innerHTML=''; setStatus('等待输入…'); return; }
+    const r=parse(ua);
+    const fields=[
+      ['浏览器 Browser', r.browser+(r.version?' '+r.version:'')],
+      ['内核 Engine', r.engine],
+      ['操作系统 OS', r.os+(r.osVersion?' '+r.osVersion.replace(/_/g,'.'):'')],
+      ['设备类型 Device', r.device],
+      ['是否爬虫 Bot', r.bot?'是':'否'],
+      ['长度 Length', ua.length+' 字符'],
+    ];
+    $('out').innerHTML=fields.map(([k,v])=>`<div class="item"><div class="name">${k}</div><div class="val">${v}</div></div>`).join('');
+    $('badges').innerHTML=`<span class="badge">${r.browser}</span><span class="badge">${r.os}</span><span class="badge">${r.device}</span>`+
+      (r.bot?'<span class="badge" style="background:var(--err)">BOT</span>':'');
+    setStatus('✓ 解析完成','ok');
+  }
+  function copyResult(){
+    const ua=$('ua').value.trim(); if(!ua)return;
+    const r=parse(ua);
+    const txt=Object.entries(r).map(([k,v])=>k+': '+v).join('\n');
+    navigator.clipboard.writeText(txt).then(()=>setStatus('✓ 已复制解析结果','ok'),()=>setStatus('复制失败','err'));
+  }
+  $('ua').addEventListener('input',run);
+  $('bMine').onclick=()=>{ $('ua').value=navigator.userAgent; run(); setStatus('✓ 已填入当前浏览器 UA','ok'); };
+  $('bCopy').onclick=copyResult;
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

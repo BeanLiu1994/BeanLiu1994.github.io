@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配色明暗生成器 · Color Shades Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  input[type=color]{width:52px;height:38px;border:1px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer}
+  input[type=text]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:9px 12px;font-family:"SF Mono",Consolas,monospace;font-size:14px;width:120px;text-transform:uppercase}
+  input[type=range]{accent-color:var(--accent)}
+  .scale{display:flex;gap:0;flex-wrap:wrap;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+  .sw{width:11.11%;min-width:60px;flex:1;height:96px;display:flex;flex-direction:column;justify-content:flex-end;
+    padding:8px;cursor:pointer;transition:.15s;position:relative}
+  .sw:hover{transform:scale(1.04);z-index:2;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+  .sw .hex{font-family:"SF Mono",Consolas,monospace;font-size:12px;font-weight:600}
+  .sw .lab{font-size:10px;opacity:.75}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌗 配色明暗生成器</h1>
+    <div class="sub">基于基色生成渐亮 / 渐暗色阶 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>基色</h2>
+    <div class="row">
+      <input type="color" id="pick" value="#4f9cff">
+      <input type="text" id="hex" value="#4F9CFF" maxlength="7">
+      <label style="font-size:13px;color:var(--muted)">步数 
+        <input type="range" id="steps" min="5" max="13" value="9" style="vertical-align:middle">
+        <span id="stepsv">9</span>
+      </label>
+      <button id="bRand">随机基色</button>
+    </div>
+    <div class="hint">点击任意色块即可复制其 HEX 值。</div>
+  </section>
+  <section class="card">
+    <h2>色阶（由深到浅）</h2>
+    <div class="scale" id="scale"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function clamp(x){return Math.max(0,Math.min(255,Math.round(x)));}
+  function hex2rgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
+    return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+  function rgb2hex(r,g,b){return '#'+[r,g,b].map(x=>clamp(x).toString(16).padStart(2,'0')).join('').toUpperCase();}
+  function mix(hex,target,amt){const [r,g,b]=hex2rgb(hex);return rgb2hex(r+(target[0]-r)*amt,g+(target[1]-g)*amt,b+(target[2]-b)*amt);}
+  function luminance(hex){const [r,g,b]=hex2rgb(hex).map(c=>{c/=255;return c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4);});
+    return .2126*r+.7152*g+.0722*b;}
+  function textOn(hex){return luminance(hex)>0.45?'#0f1115':'#ffffff';}
+  function render(){
+    let base=$('hex').value.trim();
+    if(!/^#?[0-9a-fA-F]{6}$/.test(base)){setStatus('⚠ 请输入合法 HEX（如 #4F9CFF）','err');return;}
+    if(base[0]!=='#')base='#'+base;
+    $('pick').value=base.toLowerCase();
+    const n=+$('steps').value; $('stepsv').textContent=n;
+    const scale=$('scale'); scale.innerHTML='';
+    const white=[255,255,255], black=[0,0,0];
+    for(let i=0;i<n;i++){
+      const t=i/(n-1);
+      // 前半段向白色混合（变亮），后半段向黑色混合（变暗），中间为基色
+      const cssCol = t<0.5 ? mix(base,white,t*2) : mix(base,black,(t-0.5)*2);
+      const el=document.createElement('div'); el.className='sw';
+      el.style.background=cssCol; el.style.color=textOn(cssCol);
+      el.innerHTML=`<div class="hex">${cssCol}</div><div class="lab">${Math.round(t*100)}%</div>`;
+      el.onclick=async()=>{try{await navigator.clipboard.writeText(cssCol);setStatus('✓ 已复制 '+cssCol,'ok');}catch(e){setStatus('复制失败：'+e.message,'err');}};
+      scale.appendChild(el);
+    }
+    setStatus('✓ 已生成 '+n+' 级色阶','ok');
+  }
+  $('pick').addEventListener('input',()=>{$('hex').value=$('pick').value.toUpperCase();render();});
+  $('hex').addEventListener('input',render);
+  $('steps').addEventListener('input',render);
+  $('bRand').onclick=()=>{const c='#'+Array.from({length:3},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join('');$('hex').value=c.toUpperCase();render();};
+  render();
+})();
+</script>
+</body>
+</html>

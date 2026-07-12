@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS 压缩器 · CSS Minifier</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:10px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:320px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .stats{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:4px}
+  .stats b{color:var(--ok)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🗜️ CSS 压缩器</h1>
+    <div class="sub">删除注释与冗余空白 · 纯本地 · 不上传</div>
+  </div>
+  <div class="toolbar">
+    <button id="bMin" class="primary">压缩</button>
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入 CSS</div>
+    <textarea id="input" placeholder="在此粘贴 CSS…">.card {
+  padding: 16px;
+  background: #171a21; /* 主面板 */
+  border-radius: 12px;
+}"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">压缩结果</div>
+    <textarea id="output" readonly placeholder="压缩后的 CSS 将显示在此…"></textarea>
+    <div class="stats" id="stats"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function minify(css){
+    // 1. 删除 /* */ 注释（保留 /*! 重要注释 */ 可选，这里统一删除普通注释）
+    css=css.replace(/\/\*[\s\S]*?\*\//g,'');
+    // 2. 去除换行与多余空白
+    css=css.replace(/\s+/g,' ');
+    // 3. 移除选择器与 { } ; : , > ~ + 周围的空格
+    css=css.replace(/\s*([{}:;,])\s*/g,'$1');
+    css=css.replace(/\s+([>~+])\s+/g,'$1');
+    // 4. 移除最后一个分号
+    css=css.replace(/;}/g,'}');
+    // 5. 移除 0 后单位（0px -> 0），但保留 0% / 0deg 等关键单位
+    css=css.replace(/([\s:(,)])0(px|em|rem|pt|pc|ex|ch|vh|vw|vmin|vmax|fr)\b/gi,'$10');
+    // 6. 合并 rgb() 空格
+    css=css.replace(/rgb\(\s*([^)]+?)\s*\)/g,(m,p)=>'rgb('+p.replace(/\s+/g,',')+')');
+    // 7. 去除首尾空白
+    return css.trim();
+  }
+  function run(){
+    const src=$('input').value;
+    if(!src.trim()){ $('output').value=''; $('stats').textContent=''; setStatus('等待输入…'); return; }
+    try{
+      const out=minify(src);
+      $('output').value=out;
+      const o=src.length, n=out.length;
+      const pct=o? (100*(o-n)/o).toFixed(1):0;
+      $('stats').innerHTML=`原始 <b>${o}</b> B → 压缩 <b>${n}</b> B · 减少 <b>${pct}%</b>`;
+      setStatus('✓ 压缩完成','ok');
+    }catch(e){ setStatus('⚠ 处理出错：'+e.message,'err'); }
+  }
+  $('input').addEventListener('input',run);
+  $('bMin').onclick=run;
+  $('bCopy').onclick=async()=>{ if(!$('output').value)return; try{await navigator.clipboard.writeText($('output').value);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  $('bClear').onclick=()=>{ $('input').value='';$('output').value='';$('stats').textContent='';$('input').focus();setStatus('已清空'); };
+  run();
+})();
+</script>
+</body>
+</html>

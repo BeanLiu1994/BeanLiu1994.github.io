@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文字转图片 · Text to Image</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--ok);border-color:var(--ok);color:#06281c;font-weight:600}
+  a.btn{display:inline-flex;align-items:center;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:7px 13px;font-size:13px;text-decoration:none;cursor:pointer;transition:.15s}
+  a.btn:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;flex:1;min-width:300px}
+  .card h2{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:140px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;resize:vertical;outline:none}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}
+  .row label{font-size:13px;color:var(--muted);min-width:64px}
+  input[type=color]{width:44px;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer}
+  input[type=number],select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px}
+  input[type=range]{accent-color:var(--accent)}
+  .preview{display:flex;align-items:center;justify-content:center;background:
+      linear-gradient(45deg,#1b1f27 25%,transparent 25%),linear-gradient(-45deg,#1b1f27 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#1b1f27 75%),linear-gradient(-45deg,transparent 75%,#1b1f27 75%);
+    background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;border-radius:10px;padding:14px}
+  #cv{max-width:100%;height:auto;border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ 文字转图片</h1>
+    <div class="sub">生成金句卡片 / 海报 · 纯本地导出 PNG</div>
+  </div>
+  <div class="toolbar">
+    <button id="bDl" class="primary">下载 PNG</button>
+    <a class="btn" href="../../">🏠 首页</a>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>内容与样式</h2>
+    <textarea id="text" placeholder="输入文字，支持多行…">保持热爱
+奔赴山海</textarea>
+    <div class="row"><label>字号</label><input type="range" id="fs" min="16" max="120" value="56"><span id="fsv">56</span></div>
+    <div class="row"><label>宽度</label><input type="number" id="w" value="800" min="200" max="2000"><label>内边距</label><input type="number" id="pd" value="60" min="0" max="300"></div>
+    <div class="row"><label>背景</label><input type="color" id="bg" value="#0f1115"><label>文字</label><input type="color" id="fg" value="#4f9cff"></div>
+    <div class="row"><label>对齐</label>
+      <select id="align"><option value="center">居中</option><option value="left">左对齐</option><option value="right">右对齐</option></select>
+      <label>字体</label>
+      <select id="ff"><option value="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">无衬线</option><option value="Georgia,'Times New Roman',serif">衬线</option><option value="'Courier New',monospace">等宽</option></select>
+    </div>
+  </section>
+  <section class="card">
+    <h2>预览</h2>
+    <div class="preview"><canvas id="cv" width="800" height="420"></canvas></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  const cv=$('cv'), ctx=cv.getContext('2d');
+  function wrap(text,font,maxW){
+    ctx.font=font;
+    const lines=[];
+    text.split('\n').forEach(para=>{
+      if(para===''){lines.push('');return;}
+      let line='';
+      for(const ch of para){
+        const test=line+ch;
+        if(ctx.measureText(test).width>maxW && line){ lines.push(line); line=ch; }
+        else line=test;
+      }
+      lines.push(line);
+    });
+    return lines;
+  }
+  function render(){
+    const text=$('text').value;
+    const fs=+$('fs').value, w=+$('w').value, pd=+$('pd').value;
+    const font=`${fs}px ${$('ff').value}`;
+    ctx.font=font;
+    const innerW=w-pd*2;
+    const lines=wrap(text,font,innerW);
+    const lh=fs*1.35;
+    const h=Math.max(120, lines.length*lh+pd*2);
+    cv.width=w; cv.height=h;
+    ctx.fillStyle=$('bg').value; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle=$('fg').value; ctx.font=font; ctx.textBaseline='middle';
+    const align=$('align').value;
+    ctx.textAlign=align;
+    const x = align==='center'? w/2 : align==='right'? w-pd : pd;
+    const startY = h/2 - (lines.length-1)*lh/2;
+    lines.forEach((ln,i)=>ctx.fillText(ln,x,startY+i*lh));
+    setStatus('✓ '+w+'×'+h+' · '+lines.length+' 行','ok');
+  }
+  function dl(){
+    const a=document.createElement('a');
+    a.download='text-image.png'; a.href=cv.toDataURL('image/png'); a.click();
+    setStatus('✓ 已导出 PNG','ok');
+  }
+  ['text','fs','w','pd','bg','fg','align','ff'].forEach(id=>$(id).addEventListener('input',render));
+  $('fs').addEventListener('input',()=>$('fsv').textContent=$('fs').value);
+  $('bDl').onclick=dl;
+  render();
+})();
+</script>
+</body>
+</html>
