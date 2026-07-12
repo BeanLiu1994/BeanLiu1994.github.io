@@ -97,7 +97,7 @@
       this.reset();
     }
     updateUI(){ document.getElementById('score-you').textContent=this.youS; document.getElementById('score-ai').textContent=this.aiS; document.getElementById('rally-stat').textContent='Rally: '+this.rally; }
-    aiMovePaddle(p,target,dt){ const sp=7.2*dt; if(p.y<target) p.y=Math.min(target,p.y+sp); else p.y=Math.max(target,p.y-sp); p.y=Math.max(PH/2,Math.min(H-PH/2,p.y)); }
+    aiMovePaddle(p,target,dt,spd){ const sp=(spd||7.2)*dt; if(p.y<target) p.y=Math.min(target,p.y+sp); else p.y=Math.max(target,p.y-sp); p.y=Math.max(PH/2,Math.min(H-PH/2,p.y)); }
     step(dt){
       if(this.over) return;
       const b=this.ball;
@@ -112,33 +112,30 @@
         this._aiErr = Math.max(-PH*0.45*boost, Math.min(PH*0.45*boost, this._aiErr*0.96));
         this._autoAITarget = b.y + this._aiErr; // AI 也带误差
       }
-      this.aiMovePaddle(this.ai, this.autoPlay ? this._autoAITarget : b.y, dt);
-      this.aiMovePaddle(this.you, this.targetY, dt);
-      // ball
-      b.x+=b.vx*dt; b.y+=b.vy*dt;
-      if(b.y<12){ b.y=12; b.vy=Math.abs(b.vy); }
-      if(b.y>H-12){ b.y=H-12; b.vy=-Math.abs(b.vy); }
-      // 击球反弹：保持连续速度(仅按击球点偏移重新计算角度)，不再每拍重设随机角；
-      // 仅在自动模式下加极小抖动避免极端死水平，手动模式完全由玩家手感决定
-      const bounce=(dir)=>{ // dir: -1 表示球改向右(击中左拍)、+1 表示改向左(击中右拍)
-        const paddleY=(dir<0)?this.you.y:this.ai.y;
-        const off=(b.y-paddleY)/(PH/2); // -1..1：打在拍下缘/上缘
-        const MAXA=Math.PI/3.2;        // 最大偏转(约 56°，避免过水平也避免过垂直)
-        let ang=off*MAXA;              // 连续：打点越偏，出射角越斜
-        if(this.autoPlay){            // 自动模式仅加极小抖动(±0.05rad)，破极少出现的真水平直线
-          ang += (Math.random()*2-1)*0.05;
-        }
+      // 手动模式挡板跟球更跟手(10.2/帧)；自动演示挡板限速低一些，配合游走误差更"human"
+      this.aiMovePaddle(this.ai, this.autoPlay ? this._autoAITarget : b.y, dt, this.autoPlay?7.2:10.2);
+      this.aiMovePaddle(this.you, this.targetY, dt, 10.2);
+      // 自动演示的"轮转漏球"：领先方每接若干球故意漏一拍→球穿过得分，比分稳推、比赛必然收敛
+      let letLeft=false, letRight=false;
+      if(this.autoPlay && this._autoLet===1) letLeft=true; else if(this.autoPlay && this._autoLet===-1) letRight=true;
+      // 击球反弹：连续角度(按击球点偏移计算) + 夹紧到 ±MAXA，杜绝过斜乱飞；
+      // 仅在自动模式加极小抖动(±0.05rad)破极端死水平；手动模式完全由玩家手感决定
+      const bounce=(dir)=>{ // dir: +1 球改向右(击中左拍)、-1 球改向左(击中右拍)
+        const paddleY=(dir>0)?this.you.y:this.ai.y;
+        let off=(b.y-paddleY)/(PH/2); // 越界也夹到 [-1,1]，避免拍边命中时角度过斜
+        off=Math.max(-1,Math.min(1,off));
+        const MAXA=Math.PI/3.8;       // 最大偏转约 47°(夹紧，避免过水平也避免过垂直)
+        let ang=off*MAXA;             // 连续：打点越偏，出射角越斜
+        if(this.autoPlay){ ang += (Math.random()*2-1)*0.05; } // 仅自动破极少真水平直线
         // 速度上限随 rally 增长而缓降：长局球略慢，让挡板误差真正转化成失分、保证比赛收敛
         const spCap = Math.max(5.2, SPMAX - Math.max(0,this.rally-20)*0.06);
         let sp=Math.min(Math.hypot(b.vx,b.vy)+0.25, spCap);
         b.vx=dir*Math.cos(ang)*sp; b.vy=Math.sin(ang)*sp; // 水平分=cos、垂直分=sin
-        // 把球放回所击拍同侧的前方内侧：左拍命中(dir>0,球向右)→放左侧；右拍命中(dir<0,球向左)→放右侧。
-        // (修复前条件写反：左拍命中却被放到右侧 x≈390，导致球每拍横穿全场“乱跳/不连续”)
+        // 球放回所击拍同侧前方内侧：左拍命中(dir>0,球向右)→放左侧；右拍命中(dir<0,球向左)→放右侧。
         b.x=(dir>0)?PW+8+10:W-PW-8-10; this.rally++; this.updateUI();
         if(this.autoPlay){ // 真实击球数累计，达阈值则安排领先方下次漏球
           this._autoHits++;
           const diff=Math.abs(this.youS-this.aiS);
-          // 任一方接近 win(>=6) 或全局回合过久 → 压低阈值快速收尾，杜绝偶发长局
           const nearEnd = (this.youS>=6||this.aiS>=6);
           const stale = this.rally>400?5 : this.rally>800?4 : 14;
           const every=nearEnd?4:Math.max(4, Math.min(stale, 14-diff*2));
@@ -148,16 +145,20 @@
           }
         }
       };
-      // 自动演示的"轮转漏球"：领先方每接若干球故意漏一拍→球穿过得分，比分稳推、比赛必然收敛
-      let letLeft=false, letRight=false;
-      if(this.autoPlay && this._autoLet===1) letLeft=true; else if(this.autoPlay && this._autoLet===-1) letRight=true;
-      // left paddle
-      if(b.vx<0 && b.x-10< PW+8 && b.x> PW && Math.abs(b.y-this.you.y)<PH/2+10 && !letLeft){ bounce(1); }
-      // right paddle
-      if(b.vx>0 && b.x+10> W-PW-8 && b.x<W-PW && Math.abs(b.y-this.ai.y)<PH/2+10 && !letRight){ bounce(-1); }
-      // scoring
-      if(b.x< -10){ this.aiS++; this.score('ai'); }
-      else if(b.x> W+10){ this.youS++; this.score('you'); }
+      // ball：子步进，避免大 dt 单帧穿墙/穿挡板，手感更稳
+      const dist=Math.hypot(b.vx,b.vy)*dt; const steps=Math.max(1,Math.ceil(dist/6)); const sdt=dt/steps;
+      for(let s=0;s<steps;s++){
+        b.x+=b.vx*sdt; b.y+=b.vy*sdt;
+        if(b.y<12){ b.y=12; b.vy=Math.abs(b.vy); }
+        if(b.y>H-12){ b.y=H-12; b.vy=-Math.abs(b.vy); }
+        // left paddle (球向左时)
+        if(b.vx<0 && b.x-10< PW+8 && b.x> PW && Math.abs(b.y-this.you.y)<PH/2+10 && !letLeft){ bounce(1); }
+        // right paddle (球向右时)
+        if(b.vx>0 && b.x+10> W-PW-8 && b.x<W-PW && Math.abs(b.y-this.ai.y)<PH/2+10 && !letRight){ bounce(-1); }
+        // scoring
+        if(b.x< -10){ this.aiS++; this.score('ai'); return; }
+        else if(b.x> W+10){ this.youS++; this.score('you'); return; }
+      }
     }
     score(who){ this.updateUI();
       if(this.youS>=WIN || this.aiS>=WIN){ this.over=true; this.finish(); }
