@@ -96,16 +96,27 @@
     restart(){
       this.stopAuto();
       this.W=fitCanvas(); this.H=this.W*1.4;
-      this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.011+6.2);
-      this.bird={y:this.H*0.42, vy:0, x:this.W*0.28, r:this.W*0.035+9};
-      this.pipes=[]; this.spawnTimer=0; this.spawnGap=this.W*0.62+96;
-      this.score=0; this.passed=0; this.over=false; this.started=false;
+      this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.007+5.2);
+      this.bird={y:this.H*0.5, vy:0, x:this.W*0.28, r:this.W*0.035+9};
+      this.pipes=[]; this.spawnGap=900; this.spawnTimer=this.spawnGap;
+      this.score=0; this.passed=0; this.over=false; this.started=false; this.autoPipe=null;
       document.getElementById('overlay-lose').classList.remove('active');
       this.updateUI(); this.loop();
     }
     spawnPipe(){
-      const gap=this.H*0.26; const margin=this.H*0.12;
-      const gy=margin+Math.random()*(this.H-2*margin-gap);
+      const gap=this.H*0.30; const margin=this.H*0.12;
+      let gy;
+      if(this.pipes.length===0){
+        // first pipe: bias toward the middle so the opening frame is fair
+        gy=this.H*0.5 - gap*0.5 + (Math.random()-0.5)*this.H*0.12;
+      } else {
+        // keep the gap height change gentle vs the previous pipe
+        const prev=this.pipes[this.pipes.length-1].gapY;
+        const maxStep=this.H*0.22;
+        const lo=Math.max(margin, prev-maxStep);
+        const hi=Math.min(this.H-margin-gap, prev+maxStep);
+        gy=lo+Math.random()*(hi-lo);
+      }
       this.pipes.push({x:this.W+10, w:this.W*0.06+22, gapY:gy, gap:gap, passed:false});
     }
     flap(){ if(this.over) return; if(!this.started){ this.started=true; } this.bird.vy=this.flapV; if(navigator.vibrate) navigator.vibrate(6); }
@@ -125,26 +136,41 @@
           if(!p.passed && p.x+p.w<this.bird.x-this.bird.r){ p.passed=true; this.score++; this.passed++; if(this.score>this.best){ this.best=this.score; localStorage.setItem('bestFlap',this.best); } }
         }
         this.pipes=this.pipes.filter(p=>p.x+p.w>-10);
-        // collision
+        // collision — ceiling / ground
         if(this.bird.y-this.bird.r<0){ this.bird.y=this.bird.r; this.bird.vy=0; }
         if(this.bird.y+this.bird.r>this.H){ this.gameOver('You hit the ground'); return; }
+        // collision — pipes (circle vs rectangle, matches the round bird visually)
         for(const p of this.pipes){
           if(bs>p.x && this.bird.x-this.bird.r<p.x+p.w){
-            if(this.bird.y-this.bird.r<p.gapY || this.bird.y+this.bird.r>p.gapY+p.gap){ this.gameOver('You hit a pipe'); return; }
+            if(this.circleRect(this.bird.x,this.bird.y,this.bird.r, p.x,0,p.w,p.gapY) ||
+               this.circleRect(this.bird.x,this.bird.y,this.bird.r, p.x,p.gapY+p.gap,p.w,this.H-(p.gapY+p.gap))){
+              this.gameOver('You hit a pipe'); return;
+            }
           }
         }
         this.updateUI();
       }
     }
+    circleRect(cx,cy,cr, rx,ry,rw,rh){
+      const nx=Math.max(rx,Math.min(cx,rx+rw));
+      const ny=Math.max(ry,Math.min(cy,ry+rh));
+      const dx=cx-nx, dy=cy-ny;
+      return dx*dx+dy*dy < cr*cr;
+    }
     autoFlap(){
       if(!this.pipes.length) return;
-      // next pipe ahead of bird
-      let np=null; for(const p of this.pipes){ if(p.x+p.w>this.bird.x-this.bird.r){ np=p; break; } }
+      // Nearest pipe the bird hasn't fully cleared yet (switch to the next one a
+      // little early so there's time to climb/descend to its gap height).
+      let np=null;
+      for(const p of this.pipes){ if(p.x+p.w > this.bird.x-this.bird.r*2){ np=p; break; } }
       if(!np) return;
-      const center=np.gapY+np.gap/2;
-      // flap if bird is below center by a margin OR falling fast below center
-      const below=this.bird.y - center;
-      if(below> this.H*0.02 && this.bird.vy>=-1){ this.flap(); }
+      // Hover in a band just below the gap centre. Flap only when we sink below
+      // the band's lower edge; if we're above the centre (or near it) we let
+      // gravity pull us down — this prevents the bird from flapping itself into
+      // the upper pipe and keeps the oscillation well inside the gap.
+      const band=this.bird.r*1.2;
+      const target=np.gapY + np.gap*0.5;
+      if(this.bird.y > target + band) this.flap();
     }
     gameOver(msg){
       this.over=true; this.stopLoop(); if(this.autoPlay) this.stopAuto();
@@ -186,7 +212,7 @@
       const wrap=document.getElementById('board-wrap');
       wrap.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.over) return; this.flap(); });
       document.addEventListener('keydown',(e)=>{ if(e.key===' '||e.key==='ArrowUp'||e.key==='w'){ e.preventDefault(); if(this.over) return; this.flap(); } });
-      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.H=this.W*1.4; this.bird.r=this.W*0.035+9; this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.011+6.2); this.draw(); });
+      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.H=this.W*1.4; this.bird.r=this.W*0.035+9; this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.007+5.2); this.draw(); });
     }
   }
   window.game=new Flappy();
