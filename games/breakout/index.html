@@ -100,6 +100,7 @@
       this.W=fitCanvas(); this.H=this.W*1.35;
       this.paddleW=Math.max(56,this.W*0.18); this.paddleX=this.W/2-this.paddleW/2; this.paddleY=this.H-PAD_H-14;
       this.ballR=this.W*0.018+4;
+      this.phase=0; this.phaseDir=1; this.lastHitDesired=0;
       this.resetBall();
       this.bricks=[]; this.bricksLeft=0;
       const gw=this.W*0.92, ox=(this.W-gw)/2, gap=4;
@@ -132,6 +133,8 @@
       if(b.y+this.ballR>=py && b.y-this.ballR<=py+PAD_H && b.x>=px-this.ballR && b.x<=px+pw+this.ballR && b.vy>0){
         b.y=py-this.ballR; const hit=(b.x-(px+pw/2))/(pw/2); b.vx=hit*Math.abs(b.vx)*1.05+ (hit*1.4); b.vy=-Math.abs(b.vy);
         const sp=Math.hypot(b.vx,b.vy); const max=this.W*0.022+7; if(sp>max){ b.vx*=max/sp; b.vy*=max/sp; }
+        // Auto: pick the NEXT bounce aim now so the orbit keeps changing.
+        if(this.autoPlay){ const mid=this.W/2; let left=0,right=0; for(const br of this.bricks){ if(br.alive){ if((br.x+br.w/2)<mid) left++; else right++; } } let dh=0; if(left+right>0){ const imb=(left-right)/(left+right); dh=Math.max(-0.8,Math.min(0.8,-imb*1.2)); if(Math.abs(dh)<0.4) dh=dh>=0?0.4:-0.4; } this.onBounce(dh); }
         if(navigator.vibrate) navigator.vibrate(8);
       }
       // bricks
@@ -150,14 +153,68 @@
       if(this.bricksLeft===0){ this.won=true; if(this.autoPlay) this.stopAuto(); document.getElementById('overlay-win').classList.add('active'); }
       this.updateUI();
     }
+    // Predict the x where the ball will return to paddle level by simulating
+    // its flight (reflecting off side walls and the top). Bricks are ignored in
+    // the prediction — close enough to aim the paddle, and stable when the ball
+    // would otherwise get stuck bouncing straight up.
+    predictLanding(){
+      let x=this.ball.x, y=this.ball.y, vx=this.ball.vx, vy=this.ball.vy;
+      const r=this.ballR;
+      for(let i=0;i<6000;i++){
+        x+=vx; y+=vy;
+        if(x<r){ x=r; vx=-Math.abs(vx); }
+        else if(x>this.W-r){ x=this.W-r; vx=Math.abs(vx); }
+        if(y<r){ y=r; vy=Math.abs(vy); }
+        if(y>=this.paddleY) return x;
+      }
+      return x;
+    }
+    // Called once per paddle contact: nudge the aim so the orbit never closes.
+    onBounce(targetHit){
+      // Advance a slowly rotating phase each bounce; convert it to a sweep offset.
+      this.phase += this.phaseDir*0.16;
+      if(this.phase>0.75){ this.phase=0.75; this.phaseDir=-1; }
+      else if(this.phase<-0.75){ this.phase=-0.75; this.phaseDir=1; }
+      // Blend the brick-imbalance aim with the rotating phase so we both target
+      // uncovered bricks and keep changing the angle to avoid a periodic loop.
+      const blended=Math.max(-0.85,Math.min(0.85, targetHit*0.5 + this.phase));
+      this.lastHitDesired=Math.abs(blended)<0.18 ? (blended>=0?0.18:-0.18) : blended; // never vertical
+    }
     autoMove(dt){
-      const target=this.ball.x-this.paddleW/2;
-      const speed=this.W*0.03+4;
+      const landing=this.predictLanding();
+      const mid=this.W/2;
+      // Count remaining bricks on each side; bias the aim toward the richer side.
+      let left=0, right=0;
+      for(const br of this.bricks){ if(br.alive){ if((br.x+br.w/2)<mid) left++; else right++; } }
+      let desiredHit; // signed contact offset: <0 sends ball left, >0 sends it right
+      if(left+right===0){ desiredHit=0; }
+      else {
+        const imb=(left-right)/(left+right);       // >0 when more bricks on the left
+        desiredHit=Math.max(-0.8, Math.min(0.8, -imb*1.2));
+        if(Math.abs(desiredHit)<0.4) desiredHit=desiredHit>=0?0.4:-0.4; // avoid a vertical deadlock
+      }
+      // Use the rotating blended aim decided at the last bounce (set in onBounce),
+      // but keep tracking the predicted landing so the paddle is always under the ball.
+      const aim=this.lastHitDesired!==undefined?this.lastHitDesired:desiredHit;
+      // Desired paddle CENTER so the ball contacts at `aim`.
+      let centerTarget=landing - aim*(this.paddleW/2);
+      centerTarget=Math.max(this.paddleW/2, Math.min(this.W-this.paddleW/2, centerTarget));
+      // Guarantee a real angle even if clamping cut off the offset.
+      let finalHit=(landing-centerTarget)/(this.paddleW/2);
+      if(Math.abs(finalHit)<0.3){
+        const dir=aim>=0?1:-1;
+        const c2=Math.max(this.paddleW/2, Math.min(this.W-this.paddleW/2, landing-dir*0.3*(this.paddleW/2)));
+        centerTarget=c2;
+      }
+      const leftTarget=centerTarget-this.paddleW/2;
+      const speed=this.W*0.04+5;
       const f=dt/16.67;
-      const diff=target-this.paddleX;
+      const diff=leftTarget-this.paddleX;
       const step=Math.max(-speed*f, Math.min(speed*f, diff));
       this.paddleX+=step;
       this.paddleX=Math.max(0, Math.min(this.W-this.paddleW, this.paddleX));
+      const dirTxt=aim<0?'←':(aim>0?'→':'↑');
+      const st=document.getElementById('ai-status'); if(st) st.textContent='AI: aim '+dirTxt+' · L'+left+'/R'+right;
     }
     gameOver(){
       this.over=true; this.stopLoop(); if(this.autoPlay) this.stopAuto();
