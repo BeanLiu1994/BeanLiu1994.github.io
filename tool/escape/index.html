@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>字符串转义 · String Escape</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  select,button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover,select:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:320px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔣 字符串转义</h1>
+    <div class="sub">纯本地运行 · JSON / JS / Unicode / HTML 转义</div>
+  </div>
+  <div class="toolbar">
+    <select id="mode">
+      <option value="json">JSON 字符串</option>
+      <option value="unicode">Unicode \uXXXX</option>
+      <option value="js">JS 字符串</option>
+      <option value="html">HTML 实体</option>
+    </select>
+    <button id="bEnc" class="primary">转义 →</button>
+    <button id="bDec">← 反转义</button>
+    <button id="bCopy">复制</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入</div>
+    <textarea id="in" spellcheck="false" placeholder="在此输入文本…"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">结果</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="结果…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">选择模式并转义…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st'),mode=$('mode');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function jsonEnc(s){return JSON.stringify(s).slice(1,-1);}
+  function jsonDec(s){return JSON.parse('"'+s.replace(/(^")|("$)/g,'')+'"');}
+  function uniEnc(s){let r='';for(const ch of s){const c=ch.codePointAt(0);
+    if(c>0xffff){const h=c-0x10000;r+='\\u'+(0xd800+(h>>10)).toString(16).padStart(4,'0')+'\\u'+(0xdc00+(h&0x3ff)).toString(16).padStart(4,'0');}
+    else r+='\\u'+c.toString(16).padStart(4,'0');}return r;}
+  function uniDec(s){return s.replace(/\\u\{([0-9a-fA-F]+)\}/g,(m,h)=>String.fromCodePoint(parseInt(h,16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g,(m,h)=>String.fromCharCode(parseInt(h,16)));}
+  function jsEnc(s){return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"')
+    .replace(/\n/g,'\\n').replace(/\r/g,'\\r').replace(/\t/g,'\\t');}
+  function jsDec(s){return s.replace(/\\n/g,'\n').replace(/\\r/g,'\r').replace(/\\t/g,'\t')
+    .replace(/\\'/g,"'").replace(/\\"/g,'"').replace(/\\\\/g,'\\');}
+  function htmlEnc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+  function htmlDec(s){const t=document.createElement('textarea');t.innerHTML=s;return t.value;}
+  const M={json:[jsonEnc,jsonDec],unicode:[uniEnc,uniDec],js:[jsEnc,jsDec],html:[htmlEnc,htmlDec]};
+  function go(enc){
+    if(!inp.value){setStatus('请输入内容','err');return;}
+    try{ out.value=M[mode.value][enc?0:1](inp.value); setStatus('✓ '+(enc?'已转义':'已反转义'),'ok'); }
+    catch(e){ setStatus('✗ 失败：'+e.message,'err'); }
+  }
+  $('bEnc').onclick=()=>go(true);
+  $('bDec').onclick=()=>go(false);
+  $('bCopy').onclick=async()=>{ if(!out.value){setStatus('没有内容','err');return;}
+    try{await navigator.clipboard.writeText(out.value);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败','err');} };
+  $('bClear').onclick=()=>{inp.value='';out.value='';setStatus('已清空');};
+})();
+</script>
+</body>
+</html>

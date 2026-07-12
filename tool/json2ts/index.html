@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON 转 TypeScript · JSON to TS</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  label.inline{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  input[type=text]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;width:120px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:340px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧩 JSON 转 TypeScript</h1>
+    <div class="sub">纯本地运行 · 自动推断嵌套接口</div>
+  </div>
+  <div class="toolbar">
+    <label class="inline">根名 <input id="rootName" type="text" value="Root"></label>
+    <button id="bGo" class="primary">生成接口</button>
+    <button id="bCopy">复制</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">JSON 输入</div>
+    <textarea id="in" spellcheck="false" placeholder='{"id":1,"name":"Ann","tags":["a"],"info":{"age":20}}'></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">TypeScript 输出</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="interface 将显示在这里…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">粘贴 JSON 后点击生成…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const interfaces={}; let order=[];
+  function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+  function pascal(name){return name.replace(/(^|[_\-\s]+)([a-zA-Z0-9])/g,(m,a,b)=>b.toUpperCase()).replace(/[^a-zA-Z0-9]/g,'')||'T';}
+  function typeOf(val,keyName){
+    if(val===null) return 'any';
+    if(Array.isArray(val)){
+      if(val.length===0) return 'any[]';
+      const types=[...new Set(val.map(v=>typeOf(v,singular(keyName))))];
+      return (types.length===1?types[0]:'('+types.join(' | ')+')')+'[]';
+    }
+    const t=typeof val;
+    if(t==='object'){ return buildInterface(val,pascal(keyName)); }
+    if(t==='number') return 'number';
+    if(t==='boolean') return 'boolean';
+    return 'string';
+  }
+  function singular(n){return n.replace(/s$/,'')||'Item';}
+  function buildInterface(obj,name){
+    let body='';
+    for(const k in obj){
+      const safe=/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)?k:JSON.stringify(k);
+      body+='  '+safe+': '+typeOf(obj[k],k)+';\n';
+    }
+    // dedupe by body; assign unique name
+    let finalName=name; let i=1;
+    while(interfaces[finalName] && interfaces[finalName]!==body){ finalName=name+(++i); }
+    if(!interfaces[finalName]){ interfaces[finalName]=body; order.push(finalName); }
+    return finalName;
+  }
+  function run(){
+    let data;
+    try{ data=JSON.parse(inp.value); }
+    catch(e){ setStatus('✗ JSON 解析失败：'+e.message,'err'); return; }
+    for(const k in interfaces) delete interfaces[k]; order=[];
+    const rootName=pascal($('rootName').value||'Root');
+    let result='';
+    if(Array.isArray(data)){
+      const t=typeOf(data,rootName);
+      result='type '+rootName+' = '+t+';\n\n';
+    }else if(typeof data==='object'&&data!==null){
+      buildInterface(data,rootName);
+    }else{
+      out.value='type '+rootName+' = '+typeOf(data,rootName)+';';
+      setStatus('✓ 已生成','ok'); return;
+    }
+    let code='';
+    for(const name of order){ code+='interface '+name+' {\n'+interfaces[name]+'}\n\n'; }
+    out.value=(result+code).trim();
+    setStatus('✓ 已生成 '+order.length+' 个接口','ok');
+  }
+  $('bGo').onclick=run;
+  $('bCopy').onclick=async()=>{ if(!out.value){setStatus('没有内容','err');return;}
+    try{await navigator.clipboard.writeText(out.value);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败','err');} };
+  $('bClear').onclick=()=>{inp.value='';out.value='';setStatus('已清空');};
+})();
+</script>
+</body>
+</html>

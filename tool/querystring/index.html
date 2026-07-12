@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL 查询参数解析 · Query String</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:20px;max-width:900px;width:100%;margin:0 auto}
+  label{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  input.url{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-size:14px;outline:none;font-family:"SF Mono",Consolas,monospace}
+  input.url:focus{border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--border);font-size:13px}
+  th{color:var(--muted);font-weight:500}
+  td input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;font-family:"SF Mono",Consolas,monospace}
+  .del{background:transparent;border:none;color:var(--err);cursor:pointer;font-size:16px}
+  .base{color:var(--accent);word-break:break-all;font-family:"SF Mono",Consolas,monospace;font-size:13px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔗 URL 查询参数解析</h1>
+    <div class="sub">纯本地运行 · 拆分 / 编辑 / 重建 URL 参数</div>
+  </div>
+  <div class="toolbar">
+    <button id="bAdd">+ 添加参数</button>
+    <button id="bBuild" class="primary">重建 URL</button>
+    <button id="bCopy">复制 URL</button>
+  </div>
+</header>
+<main>
+  <div>
+    <label>输入 URL 或查询串</label>
+    <input class="url" id="in" placeholder="https://example.com/path?a=1&b=hello%20world&tags=x&tags=y">
+  </div>
+  <div>
+    <label>基础地址</label>
+    <div class="base" id="base">—</div>
+  </div>
+  <div>
+    <label>参数</label>
+    <table><thead><tr><th style="width:38%">键</th><th style="width:52%">值（已解码）</th><th></th></tr></thead>
+    <tbody id="tb"></tbody></table>
+  </div>
+</main>
+<div class="status" id="st">粘贴 URL 自动解析…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),tb=$('tb'),baseEl=$('base'),st=$('st');
+  let base='';
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function addRow(k,v){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><input class="k" value=""></td><td><input class="v" value=""></td><td><button class="del">✕</button></td>';
+    tr.querySelector('.k').value=k; tr.querySelector('.v').value=v;
+    tr.querySelector('.del').onclick=()=>{tr.remove();};
+    tb.appendChild(tr);
+  }
+  function parse(){
+    tb.innerHTML='';
+    let s=inp.value.trim();
+    if(!s){baseEl.textContent='—';setStatus('粘贴 URL 自动解析…');return;}
+    let qs=s, b='';
+    const qi=s.indexOf('?');
+    if(qi>=0){ b=s.slice(0,qi); qs=s.slice(qi+1); }
+    else if(!s.includes('=')){ b=s; qs=''; }
+    else { qs=s.replace(/^\?/,''); }
+    // strip hash
+    const hi=qs.indexOf('#'); if(hi>=0) qs=qs.slice(0,hi);
+    base=b; baseEl.textContent=b||'（无，仅参数）';
+    let count=0;
+    if(qs){
+      qs.split('&').forEach(pair=>{
+        if(!pair) return;
+        const eq=pair.indexOf('=');
+        let k=eq>=0?pair.slice(0,eq):pair, v=eq>=0?pair.slice(eq+1):'';
+        try{k=decodeURIComponent(k.replace(/\+/g,' '));}catch(e){}
+        try{v=decodeURIComponent(v.replace(/\+/g,' '));}catch(e){}
+        addRow(k,v); count++;
+      });
+    }
+    setStatus('✓ 解析出 '+count+' 个参数','ok');
+  }
+  function build(){
+    const rows=tb.querySelectorAll('tr'); const parts=[];
+    rows.forEach(r=>{
+      const k=r.querySelector('.k').value, v=r.querySelector('.v').value;
+      if(k==='') return;
+      parts.push(encodeURIComponent(k)+'='+encodeURIComponent(v));
+    });
+    const url=base+(parts.length?'?'+parts.join('&'):'');
+    inp.value=url; setStatus('✓ 已重建 URL','ok');
+  }
+  inp.addEventListener('input',parse);
+  $('bAdd').onclick=()=>addRow('','');
+  $('bBuild').onclick=build;
+  $('bCopy').onclick=async()=>{ if(!inp.value){setStatus('没有内容','err');return;}
+    try{await navigator.clipboard.writeText(inp.value);setStatus('✓ 已复制 URL','ok');}catch(e){setStatus('复制失败','err');} };
+})();
+</script>
+</body>
+</html>

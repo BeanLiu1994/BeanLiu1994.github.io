@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时间长度换算 · Duration Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;flex-direction:column;gap:20px;padding:24px;max-width:760px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
+  label{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  .human{font-size:22px;color:var(--ok);text-align:center;font-family:"SF Mono",Consolas,monospace;min-height:30px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .unit{display:flex;align-items:center;gap:10px}
+  .unit span{flex:0 0 70px;color:var(--muted);font-size:13px}
+  .unit input{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:10px;font-size:15px;outline:none;font-family:"SF Mono",Consolas,monospace}
+  .unit input:focus{border-color:var(--accent)}
+  .parse{display:flex;gap:10px;flex-wrap:wrap}
+  .parse input{flex:1;min-width:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;outline:none}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:#fff}
+  .h{color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>⏳ 时间长度换算</h1>
+  <div class="sub">纯本地运行 · 单位互换 · 人性化显示</div>
+</header>
+<main>
+  <div class="card">
+    <label>人性化</label>
+    <div class="human" id="human">—</div>
+  </div>
+  <div class="card">
+    <label>各单位（修改任意一个自动同步）</label>
+    <div class="grid">
+      <div class="unit"><span>周</span><input data-u="604800" type="number"></div>
+      <div class="unit"><span>天</span><input data-u="86400" type="number"></div>
+      <div class="unit"><span>小时</span><input data-u="3600" type="number"></div>
+      <div class="unit"><span>分钟</span><input data-u="60" type="number"></div>
+      <div class="unit"><span>秒</span><input data-u="1" type="number"></div>
+      <div class="unit"><span>毫秒</span><input data-u="0.001" type="number"></div>
+    </div>
+  </div>
+  <div class="card">
+    <label>解析文本（如 1d 2h 30m）</label>
+    <div class="parse">
+      <input id="txt" placeholder="1d 2h 30m 15s / 90min / 1.5h">
+      <button id="doParse">解析</button>
+    </div>
+    <div class="h">支持 w/d/h/m/s/ms、周/天/时/分/秒 及组合</div>
+  </div>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inputs=document.querySelectorAll('.grid input');
+  function setAll(seconds){
+    inputs.forEach(i=>{ const u=+i.dataset.u; let v=seconds/u; i.value=Number.isFinite(v)?parseFloat(v.toPrecision(12)):''; });
+    human(seconds);
+  }
+  function human(s){
+    if(!(s>0)){$('human').textContent='—';return;}
+    let rem=Math.round(s), parts=[];
+    const units=[['周',604800],['天',86400],['小时',3600],['分',60],['秒',1]];
+    for(const [name,sec] of units){ const n=Math.floor(rem/sec); if(n>0){parts.push(n+name);rem-=n*sec;} }
+    $('human').textContent=parts.length?parts.join(' '):(s+' 秒');
+  }
+  inputs.forEach(i=>i.addEventListener('input',()=>{
+    const v=parseFloat(i.value); if(!Number.isFinite(v)){return;}
+    setAll(v*(+i.dataset.u));
+  }));
+  const MAP={w:604800,week:604800,周:604800,d:86400,day:86400,天:86400,日:86400,
+    h:3600,hr:3600,hour:3600,时:3600,小时:3600,m:60,min:60,minute:60,分:60,分钟:60,
+    s:1,sec:1,second:1,秒:1,ms:0.001,毫秒:0.001};
+  function parse(){
+    const t=$('txt').value.trim(); if(!t)return;
+    let total=0,matched=false;
+    const re=/([\d.]+)\s*(ms|毫秒|w|week|周|d|day|天|日|h|hr|hour|时|小时|m|min|minute|分钟|分|s|sec|second|秒)/gi;
+    let mm;
+    while((mm=re.exec(t))){ const n=parseFloat(mm[1]); const u=MAP[mm[2].toLowerCase()]??MAP[mm[2]]; if(u){total+=n*u;matched=true;} }
+    if(!matched){ const n=parseFloat(t); if(Number.isFinite(n)){total=n;matched=true;} }
+    if(matched) setAll(total);
+  }
+  $('doParse').onclick=parse;
+  $('txt').addEventListener('keydown',e=>{if(e.key==='Enter')parse();});
+  setAll(3600);
+})();
+</script>
+</body>
+</html>

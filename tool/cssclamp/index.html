@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS clamp 计算器 · Fluid Size</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;flex-direction:column;gap:20px;padding:24px;max-width:760px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  label{display:block;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-bottom:8px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:11px;font-size:16px;outline:none;font-family:"SF Mono",Consolas,monospace}
+  input:focus{border-color:var(--accent)}
+  .out{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;
+    font-family:"SF Mono",Consolas,monospace;font-size:16px;color:var(--ok);word-break:break-all;line-height:1.6}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;margin-top:12px}
+  button:hover{border-color:var(--accent);color:#fff}
+  .h{color:var(--muted);font-size:13px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📏 CSS clamp() 计算器</h1>
+  <div class="sub">纯本地运行 · 生成响应式流式字号 / 间距</div>
+</header>
+<main>
+  <div class="card">
+    <div class="grid">
+      <div><label>最小视口 (px)</label><input id="minVp" type="number" value="360"></div>
+      <div><label>最大视口 (px)</label><input id="maxVp" type="number" value="1280"></div>
+      <div><label>最小尺寸 (px)</label><input id="minSz" type="number" value="16"></div>
+      <div><label>最大尺寸 (px)</label><input id="maxSz" type="number" value="24"></div>
+      <div><label>根字号 (px)</label><input id="rootFz" type="number" value="16"></div>
+    </div>
+    <div class="h">在最小视口时取最小尺寸，在最大视口时取最大尺寸，中间线性过渡。</div>
+  </div>
+  <div class="card">
+    <label>生成的 CSS</label>
+    <div class="out" id="out">—</div>
+    <button id="copy">复制</button>
+  </div>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('out');
+  function render(){
+    const minVp=+$('minVp').value,maxVp=+$('maxVp').value;
+    const minSz=+$('minSz').value,maxSz=+$('maxSz').value,root=+$('rootFz').value||16;
+    if(!(maxVp>minVp)){st.textContent='最大视口需大于最小视口';return;}
+    // slope in px per px viewport
+    const slope=(maxSz-minSz)/(maxVp-minVp);
+    const slopeVw=slope*100; // vw
+    // intercept in px: value = slope*vw_px + b => at minVp: minSz = slope*minVp + b
+    const bPx=minSz-slope*minVp;
+    const bRem=bPx/root;
+    const minRem=minSz/root, maxRem=maxSz/root;
+    const pref=slopeVw.toFixed(4)+'vw + '+bRem.toFixed(4)+'rem';
+    const lo=Math.min(minRem,maxRem).toFixed(4), hi=Math.max(minRem,maxRem).toFixed(4);
+    st.textContent='clamp('+lo+'rem, '+pref+', '+hi+'rem);';
+  }
+  ['minVp','maxVp','minSz','maxSz','rootFz'].forEach(id=>$(id).addEventListener('input',render));
+  $('copy').onclick=async()=>{try{await navigator.clipboard.writeText(st.textContent);$('copy').textContent='✓ 已复制';setTimeout(()=>$('copy').textContent='复制',1200);}catch(e){}};
+  render();
+})();
+</script>
+</body>
+</html>

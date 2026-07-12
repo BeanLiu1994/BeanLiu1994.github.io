@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基础代谢 / 热量计算器 · BMR & TDEE</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;flex-direction:column;gap:20px;padding:24px;max-width:760px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px}
+  input,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:11px;font-size:16px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:11px;cursor:pointer;font-size:14px}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .big{font-size:44px;font-weight:700;color:var(--ok);text-align:center;font-family:"SF Mono",Consolas,monospace}
+  .lbl{text-align:center;color:var(--muted);font-size:13px;margin-top:2px}
+  .rows{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .r{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+  .r b{color:var(--accent);font-family:"SF Mono",Consolas,monospace}
+  .note{color:var(--muted);font-size:12px;margin-top:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔥 基础代谢 / 热量计算器</h1>
+  <div class="sub">纯本地运行 · Mifflin-St Jeor 公式 · BMR & 每日消耗 TDEE</div>
+</header>
+<main>
+  <div class="card">
+    <label>性别</label>
+    <div class="seg" id="sex"><button data-v="m" class="on">男</button><button data-v="f">女</button></div>
+    <div class="grid" style="margin-top:16px">
+      <div><label>年龄（岁）</label><input id="age" type="number" value="28"></div>
+      <div><label>体重（kg）</label><input id="wt" type="number" value="65"></div>
+      <div><label>身高（cm）</label><input id="ht" type="number" value="172"></div>
+      <div><label>活动水平</label>
+        <select id="act">
+          <option value="1.2">久坐（几乎不运动）</option>
+          <option value="1.375">轻度（每周1-3次）</option>
+          <option value="1.55" selected>中度（每周3-5次）</option>
+          <option value="1.725">高强度（每周6-7次）</option>
+          <option value="1.9">极高（体力劳动/运动员）</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="big" id="bmr">—</div>
+    <div class="lbl">基础代谢 BMR (kcal/天)</div>
+    <div class="rows">
+      <div class="r"><span>每日总消耗 TDEE</span><b id="tdee">—</b></div>
+      <div class="r"><span>减脂建议（-20%）</span><b id="cut">—</b></div>
+      <div class="r"><span>增肌建议（+15%）</span><b id="bulk">—</b></div>
+    </div>
+    <div class="note">结果仅供参考，非医疗建议。</div>
+  </div>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let sex='m';
+  function render(){
+    const age=+$('age').value,wt=+$('wt').value,ht=+$('ht').value,act=+$('act').value;
+    if(!(age>0&&wt>0&&ht>0)){$('bmr').textContent='—';return;}
+    let bmr=10*wt+6.25*ht-5*age+(sex==='m'?5:-161);
+    bmr=Math.round(bmr);
+    const tdee=Math.round(bmr*act);
+    $('bmr').textContent=bmr;
+    $('tdee').textContent=tdee+' kcal';
+    $('cut').textContent=Math.round(tdee*0.8)+' kcal';
+    $('bulk').textContent=Math.round(tdee*1.15)+' kcal';
+  }
+  document.querySelectorAll('#sex button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#sex button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); sex=b.dataset.v; render();
+  });
+  ['age','wt','ht','act'].forEach(id=>$(id).addEventListener('input',render));
+  render();
+})();
+</script>
+</body>
+</html>

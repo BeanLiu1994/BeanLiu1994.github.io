@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown 表格生成器 · MD Table</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button,select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover,select:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:20px;max-width:960px;width:100%;margin:0 auto}
+  .grid-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px}
+  table{border-collapse:collapse;width:100%}
+  td{border:1px solid var(--border);padding:0}
+  td input{width:100%;min-width:110px;background:var(--panel);color:var(--text);border:none;padding:10px;font-size:13px;outline:none}
+  td input:focus{background:#1e222c}
+  td.hd input{color:var(--accent);font-weight:600}
+  .out{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;
+    font-family:"SF Mono",Consolas,monospace;font-size:13px;color:var(--text);white-space:pre;overflow:auto;line-height:1.6}
+  .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📋 Markdown 表格生成器</h1>
+    <div class="sub">纯本地运行 · 填表即生成 Markdown</div>
+  </div>
+  <div class="toolbar">
+    <button id="addRow">+ 行</button>
+    <button id="addCol">+ 列</button>
+    <button id="delRow">− 行</button>
+    <button id="delCol">− 列</button>
+    <select id="align"><option value="l">左对齐</option><option value="c">居中</option><option value="r">右对齐</option></select>
+    <button id="copy">复制 Markdown</button>
+  </div>
+</header>
+<main>
+  <div class="label">编辑（第一行为表头）</div>
+  <div class="grid-wrap"><table id="tbl"></table></div>
+  <div class="label">Markdown 输出</div>
+  <div class="out" id="out">—</div>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let rows=3, cols=3;
+  const data=[['姓名','年龄','城市'],['张三','28','北京'],['李四','32','上海']];
+  const tbl=$('tbl');
+  function get(r,c){return (data[r]&&data[r][c])||'';}
+  function set(r,c,v){ if(!data[r])data[r]=[]; data[r][c]=v; }
+  function render(){
+    tbl.innerHTML='';
+    for(let r=0;r<rows;r++){
+      const tr=document.createElement('tr');
+      for(let c=0;c<cols;c++){
+        const td=document.createElement('td'); if(r===0)td.className='hd';
+        const inp=document.createElement('input');
+        inp.value=get(r,c); inp.placeholder=r===0?'表头':'';
+        inp.oninput=()=>{set(r,c,inp.value);build();};
+        td.appendChild(inp); tr.appendChild(td);
+      }
+      tbl.appendChild(tr);
+    }
+    build();
+  }
+  function build(){
+    const al=$('align').value;
+    const sep={l:':---',c:':--:',r:'---:'}[al];
+    let md='';
+    const header=[]; for(let c=0;c<cols;c++)header.push(get(0,c)||' ');
+    md+='| '+header.join(' | ')+' |\n';
+    md+='| '+Array(cols).fill(sep).join(' | ')+' |\n';
+    for(let r=1;r<rows;r++){
+      const row=[]; for(let c=0;c<cols;c++)row.push((get(r,c)||' ').replace(/\|/g,'\\|'));
+      md+='| '+row.join(' | ')+' |\n';
+    }
+    $('out').textContent=md.trim();
+  }
+  $('addRow').onclick=()=>{rows++;render();};
+  $('addCol').onclick=()=>{cols++;render();};
+  $('delRow').onclick=()=>{if(rows>2){rows--;render();}};
+  $('delCol').onclick=()=>{if(cols>1){cols--;render();}};
+  $('align').onchange=build;
+  $('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('out').textContent);$('copy').textContent='✓ 已复制';setTimeout(()=>$('copy').textContent='复制 Markdown',1200);}catch(e){}};
+  render();
+})();
+</script>
+</body>
+</html>

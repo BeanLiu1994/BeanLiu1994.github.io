@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>人民币金额大写 · RMB Uppercase</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:20px;max-width:820px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  label{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:14px;font-size:22px;outline:none;font-family:"SF Mono",Consolas,monospace}
+  input:focus{border-color:var(--accent)}
+  .result{font-size:24px;line-height:1.7;word-break:break-all;min-height:40px;color:var(--ok);font-weight:600}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+  .chip:hover{border-color:var(--accent);color:#fff}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>💴 人民币金额大写</h1>
+    <div class="sub">纯本地运行 · 支持到分 · 财务规范格式</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <label>输入金额（元）</label>
+    <input id="in" type="text" inputmode="decimal" placeholder="例如 12345.67" autofocus>
+    <div class="row">
+      <span class="chip" data-v="1234567.89">1234567.89</span>
+      <span class="chip" data-v="100">100</span>
+      <span class="chip" data-v="0.05">0.05</span>
+      <span class="chip" data-v="10086.5">10086.5</span>
+    </div>
+  </div>
+  <div class="card">
+    <label>中文大写</label>
+    <div class="result" id="out">—</div>
+  </div>
+</main>
+<div class="status" id="st">输入金额自动转换…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  const DIGIT=['零','壹','贰','叁','肆','伍','陆','柒','捌','玖'];
+  const UNIT=['','拾','佰','仟'];
+  const BIG=['','万','亿','兆'];
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function fourToCn(n){ // n: 0-9999
+    let s='',zero=false,str=String(n);
+    const len=str.length;
+    for(let i=0;i<len;i++){
+      const d=+str[i], pos=len-1-i;
+      if(d===0){ zero=true; }
+      else{ if(zero){s+='零';zero=false;} s+=DIGIT[d]+UNIT[pos]; }
+    }
+    return s;
+  }
+  function convert(v){
+    v=v.replace(/[,\s]/g,'');
+    if(v==='') return null;
+    if(!/^-?\d*(\.\d*)?$/.test(v)) return {err:'请输入有效数字'};
+    let neg=v.startsWith('-'); if(neg)v=v.slice(1);
+    let [ip='0',fp='']=v.split('.');
+    ip=ip.replace(/^0+(?=\d)/,'')||'0';
+    fp=(fp+'00').slice(0,2);
+    if(ip.length>16) return {err:'数值过大'};
+    const jiao=+fp[0]||0, fen=+fp[1]||0;
+    // integer part
+    let intCn='';
+    if(ip==='0'){ intCn=''; }
+    else{
+      const groups=[]; let t=ip;
+      while(t.length>0){ groups.unshift(t.slice(-4)); t=t.slice(0,-4); }
+      for(let i=0;i<groups.length;i++){
+        const g=+groups[i], pos=groups.length-1-i;
+        if(g===0){
+          if(intCn && !intCn.endsWith('零')) intCn+='零';
+        }else{
+          let cn=fourToCn(g);
+          // leading zero between groups
+          if(i>0 && g<1000 && intCn && !intCn.endsWith('零')) intCn+='零';
+          intCn+=cn+BIG[pos];
+        }
+      }
+      intCn=intCn.replace(/零+$/,'')+'元';
+    }
+    let dec='';
+    if(jiao===0 && fen===0){ dec=ip==='0'?'':'整'; }
+    else{
+      if(jiao>0) dec+=DIGIT[jiao]+'角';
+      else if(fen>0 && ip!=='0') dec+='零';
+      if(fen>0) dec+=DIGIT[fen]+'分';
+    }
+    let res=intCn+dec;
+    if(ip==='0'){ res=(dec||'零元整'); }
+    if(res==='') res='零元整';
+    return {text:(neg?'负':'')+res};
+  }
+  function run(){
+    const r=convert(inp.value);
+    if(r===null){ out.textContent='—'; setStatus('输入金额自动转换…'); return; }
+    if(r.err){ out.textContent='—'; setStatus('✗ '+r.err,'err'); return; }
+    out.textContent=r.text; setStatus('✓ 转换成功','ok');
+  }
+  inp.addEventListener('input',run);
+  document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{inp.value=c.dataset.v;run();});
+  $('bCopy').onclick=async()=>{ if(out.textContent==='—'){setStatus('没有可复制内容','err');return;}
+    try{await navigator.clipboard.writeText(out.textContent);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败','err');} };
+  $('bClear').onclick=()=>{inp.value='';out.textContent='—';setStatus('已清空');inp.focus();};
+})();
+</script>
+</body>
+</html>

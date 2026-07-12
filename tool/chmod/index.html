@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linux 权限计算器 · chmod</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:20px;padding:24px;max-width:720px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:12px;text-align:center;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-size:13px;font-weight:500}
+  th.role{text-align:left}
+  td.role{text-align:left;color:var(--accent);font-weight:600}
+  input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent);cursor:pointer}
+  .out{display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:center}
+  .big{font-size:48px;font-weight:700;font-family:"SF Mono",Consolas,monospace}
+  .octal{color:var(--ok)} .sym{color:var(--accent)}
+  .cmd{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;
+    font-family:"SF Mono",Consolas,monospace;font-size:16px;color:var(--text);text-align:center;margin-top:8px}
+  .in{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px}
+  .in input{width:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:10px;font-size:20px;text-align:center;font-family:"SF Mono",Consolas,monospace;outline:none}
+  .lbl{color:var(--muted);font-size:13px}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 Linux 权限计算器</h1>
+    <div class="sub">纯本地运行 · 勾选 ⇄ 八进制 ⇄ chmod 命令</div>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <table>
+      <thead><tr><th class="role">身份</th><th>读 r (4)</th><th>写 w (2)</th><th>执行 x (1)</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="out">
+      <div class="big octal" id="oct">755</div>
+      <div class="big sym" id="sym">rwxr-xr-x</div>
+    </div>
+    <div class="in">
+      <span class="lbl">输入八进制</span>
+      <input id="octIn" maxlength="4" value="755">
+      <button id="apply">应用</button>
+    </div>
+    <div class="cmd" id="cmd">chmod 755 file</div>
+  </div>
+</main>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const roles=[['所有者 u','u'],['所属组 g','g'],['其他 o','o']];
+  const bits=[4,2,1];
+  const state=[[1,1,1],[1,0,1],[1,0,1]];
+  const tb=$('tb');
+  roles.forEach((r,ri)=>{
+    const tr=document.createElement('tr');
+    let html='<td class="role">'+r[0]+'</td>';
+    for(let ci=0;ci<3;ci++) html+='<td><input type="checkbox" data-r="'+ri+'" data-c="'+ci+'"></td>';
+    tr.innerHTML=html; tb.appendChild(tr);
+  });
+  const boxes=tb.querySelectorAll('input');
+  function render(){
+    let oct='',sym='';
+    for(let ri=0;ri<3;ri++){
+      let n=0;
+      for(let ci=0;ci<3;ci++){ if(state[ri][ci]) n+=bits[ci]; }
+      oct+=n;
+      sym+=(state[ri][0]?'r':'-')+(state[ri][1]?'w':'-')+(state[ri][2]?'x':'-');
+    }
+    $('oct').textContent=oct; $('sym').textContent=sym;
+    $('cmd').textContent='chmod '+oct+' file';
+    boxes.forEach(b=>{ b.checked=!!state[+b.dataset.r][+b.dataset.c]; });
+    $('octIn').value=oct;
+  }
+  boxes.forEach(b=>b.onchange=()=>{ state[+b.dataset.r][+b.dataset.c]=b.checked?1:0; render(); });
+  $('apply').onclick=()=>{
+    let v=$('octIn').value.trim();
+    if(!/^[0-7]{3,4}$/.test(v)) return;
+    if(v.length===4) v=v.slice(1);
+    for(let ri=0;ri<3;ri++){ const n=+v[ri]; state[ri]=[n&4?1:0,n&2?1:0,n&1?1:0]; }
+    render();
+  };
+  $('octIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('apply').click();});
+  $('cmd').onclick=async()=>{try{await navigator.clipboard.writeText($('cmd').textContent);}catch(e){}};
+  render();
+})();
+</script>
+</body>
+</html>
