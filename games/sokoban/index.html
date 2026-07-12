@@ -142,7 +142,7 @@
 
   class Sokoban{
     constructor(){ this.best=parseInt(localStorage.getItem('bestSok')||'0'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this._winPending=false; this._winFiring=false; this._confetti=[]; this._celebrateUntil=0; this._celebrateTimer=null; this.bindInput(); this.loadLevel(0); }
-    loadLevel(i,keepAuto){ if(!keepAuto) this.stopAuto(); this.lvl=i; const rows=LEVELS[i]; CH=rows.length; CW=Math.max(...rows.map(r=>r.length)); CELL=Math.min(46,Math.floor(430/CW)); W=CW*CELL; H=CH*CELL; ctx=fit();
+    loadLevel(i,keepAuto){ if(!keepAuto) this.stopAuto(); this._walking=false; this._walkPath=null; this._walkIdx=0; this.lvl=i; const rows=LEVELS[i]; CH=rows.length; CW=Math.max(...rows.map(r=>r.length)); CELL=Math.min(46,Math.floor(430/CW)); W=CW*CELL; H=CH*CELL; ctx=fit();
       const p=parse(rows); this.walls=p.walls; this.goals=p.goals; this.boxes=p.boxes; this.player=p.player; this.boxes.forEach(b=>{b.fromR=b.r;b.fromC=b.c;}); this.player.fromR=this.player.r; this.player.fromC=this.player.c; this.over=false; this.solution=null; this.solIdx=0; this.history=[];
       document.getElementById('overlay-win').classList.remove('active'); this.tween=1; this.startLoop(); this.draw(); this.updateUndoBtn(); }
     restart(){ this.stopAuto(); this.loadLevel(0); }
@@ -180,15 +180,54 @@
       this.player={r:nr,c:nc,fromR:this.player.r,fromC:this.player.c}; this.tween=0; this.tweenStart=performance.now(); this.draw(); this.updateUndoBtn(); this._checkWin(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over){ this.loadLevel(0); } this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUndoBtn(); this._autoSolveIfNeeded(); }
-    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; this.updateUndoBtn(); }
-    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
-      const mv=this.solution[this.solIdx++]; this._stepDuringAuto=true;
-      this.boxes.forEach(b=>{ b.fromR=b.r; b.fromC=b.c; }); // 同 move：先对齐所有箱子动画起点，避免未推动的箱子回放旧动画
-      this.player={r:mv.box.r,c:mv.box.c,fromR:this.player.r,fromC:this.player.c}; const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c); if(bi>=0){ this.boxes[bi]={r:mv.to.r,c:mv.to.c,fromR:mv.box.r,fromC:mv.box.c}; }
-      this.tween=0; this.tweenStart=performance.now(); this.draw(); this.updateUndoBtn();
+    stopAuto(){ this.autoPlay=false; this._walking=false; this._walkPath=null; this._walkIdx=0; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; this.updateUndoBtn(); }
+    // BFS 最短步行路径（不推箱，仅走路），从 from 到 to，避开墙和当前箱子
+    _bfsPath(from,to){
+      if(from.r===to.r&&from.c===to.c) return [];
+      const blocked=new Set(this.boxes.map(b=>b.r+','+b.c));
+      const seen=new Set([from.r+','+from.c]); const q=[[from]];
+      while(q.length){ const path=q.shift(); const cur=path[path.length-1];
+        for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){ const nr=cur.r+dr,nc=cur.c+dc,k=nr+','+nc;
+          if(this.walls.has(k)||blocked.has(k)||seen.has(k)) continue; seen.add(k);
+          const np=path.concat([{r:nr,c:nc}]); if(nr===to.r&&nc===to.c) return np.slice(1); q.push(np);
+        }
+      }
+      return null;
+    }
+    // 步行一步动画
+    _walkStep(){
+      if(!this.autoPlay||this.over||!this._walkPath){ this._walking=false; return; }
+      if(this._walkIdx>=this._walkPath.length){ this._walking=false; this._doPush(this._pendingPush); return; }
+      const step=this._walkPath[this._walkIdx];
+      this.player={r:step.r,c:step.c,fromR:this.player.r,fromC:this.player.c};
+      this.tween=0; this.tweenStart=performance.now(); this._walkIdx++;
+      this.autoTimer=setTimeout(()=>this._walkStep(),170);
+    }
+    // 执行一步推箱（前提：玩家已到达 mv.from）
+    _doPush(mv){
+      this._stepDuringAuto=true;
+      this.boxes.forEach(b=>{ b.fromR=b.r; b.fromC=b.c; });
+      this.player={r:mv.box.r,c:mv.box.c,fromR:this.player.r,fromC:this.player.c};
+      const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c);
+      if(bi>=0){ this.boxes[bi]={r:mv.to.r,c:mv.to.c,fromR:mv.box.r,fromC:mv.box.c}; }
+      this.tween=0; this.tweenStart=performance.now();
       this._stepDuringAuto=false; this.updateUndoBtn();
       if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
-      this.autoTimer=setTimeout(()=>this.autoStep(),460); }
+      this.autoTimer=setTimeout(()=>this.autoStep(),480);
+    }
+    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
+      const mv=this.solution[this.solIdx]; // peek，不立即自增：先走路再推箱
+      // 玩家还没站到推箱位置 → 先 BFS 走过去，到了再推
+      if(this.player.r!==mv.from.r||this.player.c!==mv.from.c){
+        const path=this._bfsPath(this.player, mv.from);
+        if(!path||path.length===0){ this.solIdx++; this.autoTimer=setTimeout(()=>this.autoStep(),200); return; }
+        this._walkPath=path; this._walkIdx=0; this._walking=true; this._pendingPush=mv;
+        this._walkStep(); return;
+      }
+      // 已在推箱位置 → 直接推
+      this.solIdx++; this._pendingPush=null;
+      this._doPush(mv);
+    }
     startLoop(){ this.stopLoop(); this.running=true; const loop=()=>{ if(!this.running) return; this.draw(); this.rafId=requestAnimationFrame(loop); }; this.rafId=requestAnimationFrame(loop); }
     stopLoop(){ this.running=false; if(this.rafId){ cancelAnimationFrame(this.rafId); this.rafId=null; } }
     bindInput(){ document.addEventListener('keydown',(e)=>{ if(this.autoPlay||this.over) return;
