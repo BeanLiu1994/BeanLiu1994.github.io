@@ -133,10 +133,10 @@
       if(this.phase==='charge') this._curPower=this.chargePower(now);
       // 自动模式：游移到接近靶心且蓄力功率处于低区时按下，功率到目标(小幅)时松开
       if(this.autoPlay && !this.dart && !this.over){
-        this._aiCool-=dt;
-        const near = Math.hypot(this.aim.x-CX, this.aim.y-CY) < 40;
+        this._aiCool-=dt; // 注意 dt 是“帧”单位(~1/帧@60fps)，冷却也按帧计
+        const near = Math.hypot(this.aim.x-CX, this.aim.y-CY) < 58;
         if(this.phase!=='charge' && near && this._aiCool<=0){ this.phase='charge'; this._chargeStart=now; }
-        else if(this.phase==='charge'){ const p=this.chargePower(now); if(p>=0.22){ this.release(); this._aiCool=380; } }
+        else if(this.phase==='charge'){ const p=this.chargePower(now); if(p>=0.22){ this.release(); this._aiCool=42; } } // ~0.7s/镖，连续投掷
       }
       if(this.dart){ this.dart.p+=0.06*dt; if(this.dart.p>=1) this.land(); }
       for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].t-=0.04*dt; if(this.flashes[i].t<=0) this.flashes.splice(i,1); }
