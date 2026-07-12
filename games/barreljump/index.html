@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#2a0608" />
+<title> barrels 跳跃 · Barrel Jump</title>
+<style>
+  :root { --bg:#2a0608; --surface:#33100c; --board:#1e0705; --text:#ffe9e0; --muted:#c89080; --accent:#ff5d6a; --accent-glow:#ff5d6a55; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3a1008 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #1e0604 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ff5d6a,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .pad { display:flex; gap:8px; margin-top:10px; }
+  .pad button { flex:1; padding:12px 0; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:1.1rem; font-weight:700; cursor:pointer; transition:all .15s; }
+  .pad button:active { transform:scale(0.95); background:#ffffff14; }
+  .controls { display:flex; gap:8px; margin-top:8px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#2a0608; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#2a0608; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>滚桶跳跃</h1><div class="sub">B A R R E L &nbsp; J U M P</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Floor</div><div class="value" id="floor">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="560"></canvas></div>
+  <div class="pad">
+    <button onclick="game.input('left')">◀</button>
+    <button onclick="game.input('up')">▲</button>
+    <button onclick="game.input('down')">▼</button>
+    <button onclick="game.input('right')">▶</button>
+    <button onclick="game.input('jump')">⤒</button>
+  </div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">用方向键移动/爬梯、跳起越过滚桶；爬到最顶层即过关</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const floorEl=document.getElementById('floor'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const R=6;
+  class BarrelJump {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.over=false; this.time=0; this.lives=3;
+      this.best=parseInt(localStorage.getItem('barrelBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.33; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.margin=w*0.06; this.rowGap=(this.H-2*this.margin)/(R-1); }
+    platY(r){ return this.margin+r*this.rowGap; }
+    ladderX(col){ return this.margin+col*(this.W-2*this.margin); }
+    buildLadders(){ this.ladders=[]; for(let low=0;low<R-1;low++){ const n=2+Math.floor(Math.random()*2); const cols=[0.2,0.5,0.8]; const shuffled=cols.slice().sort(()=>Math.random()-0.5); for(let i=0;i<n;i++) this.ladders.push({lower:low, col:shuffled[i]}); } }
+    spawnBarrel(){ const r=0; const col=Math.random(); this.barrels.push({x:this.ladderX(col), r, vx:(Math.random()<.5?-1:1)*100, falling:false, y:this.platY(0)}); }
+    restart(){ this.stopAuto(); this.over=false; this.lives=3; this.floor=0; floorEl.textContent=0;
+      this.buildLadders(); this.barrels=[]; this.spawnT=0.6;
+      this.px=this.W/2; this.pr=R-1; this.climbing=false; this.climbT=0; this.climbFrom=0; this.climbTo=0; this.jumping=false; this.jumpT=0;
+      this.vx=0; this.updateY(); }
+    updateY(){ const base=this.platY(this.pr); if(this.climbing){ this.py=base+(this.platY(this.climbTo)-base)*this.climbT; } else if(this.jumping){ const prog=this.jumpT/0.6; this.py=base-Math.sin(prog*Math.PI)*this.rowGap*0.55; } else this.py=base; }
+    ladderAt(col, pr){ return this.ladders.find(l=>Math.abs(l.col-col)<0.06 && l.lower===pr-1); }
+    ladderDownAt(col, pr){ return this.ladders.find(l=>Math.abs(l.col-col)<0.06 && l.lower===pr); }
+    input(a){ if(this.autoPlay||this.over) return; this.handleInput(a); }
+    handleInput(a){ if(this.climbing){ if(a==='up'){ this.climbT=Math.min(1,this.climbT+0.06); } else if(a==='down'){ this.climbT=Math.max(0,this.climbT-0.06); } if(this.climbT>=1){ this.pr=this.climbTo; this.climbing=false; this.updateY(); } else if(this.climbT<=0&&this.climbTo>this.pr){ this.pr=this.climbFrom; this.climbing=false; this.updateY(); } return; }
+      if(a==='left'){ this.vx=-150; } else if(a==='right'){ this.vx=150; } else if(a==='jump'){ if(!this.jumping){ this.jumping=true; this.jumpT=0; } }
+      else if(a==='up'){ const col=(this.px-this.margin)/(this.W-2*this.margin); if(this.pr>0 && this.ladderAt(col,this.pr)){ this.climbing=true; this.climbFrom=this.pr; this.climbTo=this.pr-1; this.climbT=0; } }
+      else if(a==='down'){ const col=(this.px-this.margin)/(this.W-2*this.margin); if(this.pr<R-1 && this.ladderDownAt(col,this.pr)){ this.climbing=true; this.climbFrom=this.pr; this.climbTo=this.pr+1; this.climbT=0; } } }
+    autoControl(){ if(this.pr===0){ this.win(); return; }
+      // pick ladder to upper platform, safest
+      const cands=this.ladders.filter(l=>l.lower===this.pr-1);
+      let best=null,bestScore=-1e9; for(const l of cands){ const lx=this.ladderX(l.col); let danger=0; for(const b of this.barrels){ if(b.r===this.pr){ const d=Math.abs(b.x-lx); if(d<70) danger+=(70-d); } }
+        const score=-Math.abs(this.px-lx)-danger*0.5; if(score>bestScore){ bestScore=score; best=l; } }
+      if(!best) best=cands[0];
+      const lx=this.ladderX(best.col);
+      if(Math.abs(this.px-lx)<6){ if(!this.climbing){ this.climbing=true; this.climbFrom=this.pr; this.climbTo=this.pr-1; this.climbT=0; } }
+      else { this.vx=(lx>this.px)?150:-150; }
+      // jump over nearby barrel on same platform
+      if(!this.climbing && !this.jumping){ for(const b of this.barrels){ if(b.r===this.pr){ const dx=b.x-this.px; if(Math.abs(dx)<46 && (b.vx*dx>0)){ this.jumping=true; this.jumpT=0; break; } } } }
+    }
+    win(){ this.floor++; if(this.floor>this.best){ this.best=this.floor; localStorage.setItem('barrelBest',String(this.best)); bestEl.textContent=this.best; } floorEl.textContent=this.floor; statusEl.textContent='🏆 到达顶层！第 '+this.floor+' 层'; if(this.autoPlay){ this.buildLadders(); this.barrels=[]; this.spawnT=0.6; this.px=this.W/2; this.pr=R-1; this.climbing=false; this.jumping=false; this.updateY(); } }
+    hit(){ this.lives--; if(this.lives<=0){ this.over=true; statusEl.textContent='💥 游戏结束，到达第 '+this.floor+' 层'; if(this.autoPlay) this._autoNext(); }
+      else { statusEl.textContent='被滚桶撞到！剩余 '+this.lives; this.px=this.W/2; this.pr=R-1; this.climbing=false; this.jumping=false; this.updateY(); } }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    update(dt){ this.time+=dt; if(this.over) return;
+      if(this.climbing){ this.updateY(); }
+      else { if(!this.jumping){ this.px+=this.vx*dt; if(this.px<this.margin){ this.px=this.margin; this.vx=0; } if(this.px>this.W-this.margin){ this.px=this.W-this.margin; this.vx=0; } }
+        else { this.jumpT+=dt; if(this.jumpT>=0.6){ this.jumping=false; } this.updateY(); } }
+      // barrels
+      this.spawnT-=dt; if(this.spawnT<=0){ this.spawnBarrel(); this.spawnT=Math.max(0.7,1.8-this.floor*0.1)+Math.random()*0.6; }
+      for(const b of this.barrels){ if(b.falling){ b.y+=280*dt; const ty=this.platY(b.r+1); if(b.y>=ty){ b.y=ty; b.r++; b.falling=false; b.vx=(Math.random()<.5?-1:1)*100; } }
+        else { b.x+=b.vx*dt; if(b.x<this.margin){ b.x=this.margin; b.vx*=-1; } if(b.x>this.W-this.margin){ b.x=this.W-this.margin; b.vx*=-1; }
+          // maybe drop at a down-ladder
+          const col=(b.x-this.margin)/(this.W-2*this.margin); if(b.r<R-1 && this.ladderDownAt(col,b.r) && Math.random()<dt*0.7){ b.falling=true; } } }
+      // collision
+      if(!this.jumping && !this.climbing){ for(const b of this.barrels){ if(b.r===this.pr && Math.abs(b.x-this.px)<22){ this.hit(); break; } } }
+      if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.08; this.autoControl(); } }
+      if(this.pr===0 && !this.climbing) this.win(); }
+    draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      for(let r=0;r<R;r++){ const y=this.platY(r); ctx.strokeStyle='#ffd54a'; ctx.lineWidth=4; ctx.shadowColor='#ffd54a'; ctx.shadowBlur=8; ctx.beginPath(); ctx.moveTo(this.margin,y); ctx.lineTo(W-this.margin,y); ctx.stroke(); ctx.shadowBlur=0; }
+      for(const l of this.ladders){ const x=this.ladderX(l.col); const y1=this.platY(l.lower), y2=this.platY(l.lower+1); ctx.strokeStyle='#4dfff0'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(x-7,y1); ctx.lineTo(x-7,y2); ctx.moveTo(x+7,y1); ctx.lineTo(x+7,y2); ctx.stroke(); for(let yy=y1; yy<y2; yy+=10){ ctx.beginPath(); ctx.moveTo(x-7,yy); ctx.lineTo(x+7,yy); ctx.stroke(); } }
+      for(const b of this.barrels){ const y=b.falling?b.y:this.platY(b.r); ctx.save(); ctx.shadowColor='#ff9f4d'; ctx.shadowBlur=10; ctx.fillStyle='#ff9f4d'; ctx.beginPath(); ctx.arc(b.x,y-10,11,0,7); ctx.fill(); ctx.restore(); ctx.strokeStyle='#2a0608'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(b.x,y-10,11,0,7); ctx.moveTo(b.x-8,y-10); ctx.lineTo(b.x+8,y-10); ctx.stroke(); }
+      // player
+      const px=this.px, py=this.climbing?this.py:(this.platY(this.pr)-(this.jumping?Math.sin(this.jumpT/0.6*Math.PI)*this.rowGap*0.55:0));
+      ctx.save(); ctx.shadowColor='#4dff91'; ctx.shadowBlur=12; ctx.fillStyle='#4dff91'; ctx.beginPath(); ctx.arc(px,py-26,8,0,7); ctx.fill(); ctx.fillRect(px-6,py-18,12,18); ctx.restore();
+      // goal
+      ctx.save(); ctx.shadowColor='#ff6bd0'; ctx.shadowBlur=12; ctx.fillStyle='#ff6bd0'; ctx.font='bold 22px Segoe UI'; ctx.textAlign='center'; ctx.fillText('★', W/2, this.platY(0)-22); ctx.restore();
+      ctx.fillStyle='#ffe9e0'; ctx.font='bold 13px Segoe UI'; ctx.textAlign='left'; ctx.fillText('♥'+this.lives+'  Floor '+this.floor, 6, 16);
+      if(this.over){ ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=18; ctx.fillStyle='#ff5d6a'; ctx.font='bold '+(W*0.08)+'px Segoe UI'; ctx.textAlign='center'; ctx.fillText('GAME OVER', W/2, H/2); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.floor*100+Math.round((R-1-this.pr)/(R-1)*50); this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.1; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new BarrelJump();
+})();
+</script>
+</body>
+</html>

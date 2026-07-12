@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#04201f" />
+<title>霓虹分球 · Neon Ball Sort</title>
+<style>
+  :root { --bg:#04201f; --surface:#0a2624; --board:#071a19; --text:#e6fffb; --muted:#6faeab; --accent:#4dfff0; --accent-glow:#4dfff055; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0a302e 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #08241f 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4dfff0,#4d9fff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04201f; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04201f; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹分球</h1><div class="sub">N E O N &nbsp; B A L L &nbsp; S O R T</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="340"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点一根管子选中，再点另一根把顶球倒过去；同色填满即过关</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const solvedEl=document.getElementById('solved'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const COLORS=['#4dfff0','#ff5d6a','#ffd54a','#b06bff','#4dff91','#ff9f4d','#ff6bd0','#4d9fff'];
+  const CAP=4;
+  class BallSort {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=-1; this.moves=0; this.solved=0; this.time=0; this.anim=null; this.seen=new Set(); this.lastMove='';
+      this.best=parseInt(localStorage.getItem('ballsortBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onTap(e));
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,440)); const d=window.devicePixelRatio||1; this.W=w; canvas.width=w*d; canvas.height=w*0.81*d; ctx.setTransform(d,0,0,d,0,0); this.H=w*0.81; }
+    newPuzzle(){ const nColors=5, nEmpty=2, n=nColors+nEmpty; this.tubes=[]; const balls=[];
+      for(let c=0;c<nColors;c++) for(let k=0;k<CAP;k++) balls.push(COLORS[c]);
+      for(let i=balls.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=balls[i]; balls[i]=balls[j]; balls[j]=t; }
+      for(let i=0;i<n;i++) this.tubes.push(balls.slice(i*CAP,i*CAP+CAP));
+      // light scramble: a few valid shuffles to make it non-trivial but easy
+      for(let s=0;s<8;s++){ const a=Math.floor(Math.random()*n), b=Math.floor(Math.random()*n); if(a!==b&&this.canMove(a,b)) this.doMoveRaw(a,b); }
+      this.sel=-1; this.anim=null; this.seen=new Set(); this.lastMove=''; }
+    top(i){ const t=this.tubes[i]; return t.length?t[t.length-1]:null; }
+    canMove(a,b){ if(a===b) return false; const ta=this.tubes[a], tb=this.tubes[b]; if(!ta.length||tb.length>=CAP) return false; const tbTop=this.top(b); return tbTop===null||tbTop===this.top(a); }
+    doMoveRaw(a,b){ if(!this.canMove(a,b)) return false; this.tubes[b].push(this.tubes[a].pop()); return true; }
+    win(){ return this.tubes.every(t=>t.length===0||(t.length===CAP&&t.every(v=>v===t[0]))); }
+    layout(){ const n=this.tubes.length; const pad=this.W*0.06; const gap=(this.W-2*pad)/(n-1); const tw=Math.min(gap*0.6, this.W*0.12); const x0=pad; const baseY=this.H*0.9; const th=this.H*0.62; return {n,x0,gap,tw,baseY,th}; }
+    onTap(e){ e.preventDefault(); if(this.autoPlay||this.anim) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left; const L=this.layout();
+      let hit=-1; for(let i=0;i<L.n;i++){ const cx=L.x0+i*L.gap; if(Math.abs(x-cx)<=L.tw/2+6){ hit=i; break; } }
+      if(hit<0) return; if(this.sel<0){ if(this.tubes[hit].length){ this.sel=hit; statusEl.textContent='已选第 '+(hit+1)+' 根，再点目标管'; } }
+      else if(this.sel===hit){ this.sel=-1; statusEl.textContent='已取消选择'; }
+      else { if(this.canMove(this.sel,hit)){ this.doMove(this.sel,hit); this.sel=-1; } else { this.sel=hit; } } }
+    doMove(a,b){ const ball=this.top(a); this.tubes[b].push(this.tubes[a].pop()); this.moves++; this.lastMove=a+'>'+b; const L=this.layout();
+      const ax=L.x0+a*L.gap, bx=L.x0+b*L.gap; this.anim={fromX:ax,toX:bx,ball,t:0,dur:0.18};
+      if(this.win()){ this.solved++; if(this.solved>this.best){ this.best=this.solved; localStorage.setItem('ballsortBest',String(this.best)); bestEl.textContent=this.best; } statusEl.textContent='✓ 完成！已通关 '+this.solved+' 局'; } }
+    bestMove(){ const n=this.tubes.length; const cands=[];
+      for(let a=0;a<n;a++){ if(!this.tubes[a].length) continue; const ball=this.top(a);
+        for(let b=0;b<n;b++){ if(!this.canMove(a,b)) continue; const tb=this.tubes[b]; let sc=0;
+          if(tb.length+1===CAP&&tb.every(v=>v===ball)) sc+=1000; else if(tb.length>0) sc+=10+tb.length;
+          else { const distinct=new Set(this.tubes[a]).size; sc+=(distinct===1)?-100:1; }
+          cands.push({a,b,sc}); } }
+      cands.sort((x,y)=>y.sc-x.sc);
+      for(const c of cands){ if((c.a+'>'+c.b)===this.lastMove) continue; return [c.a,c.b]; }
+      return cands.length?[cands[0].a,cands[0].b]:null; }
+    stateKey(){ return this.tubes.map(t=>t.join('.')).join('|'); }
+    autoStep(){ if(this.win()){ this.solved++; if(this.solved>this.best){ this.best=this.solved; localStorage.setItem('ballsortBest',String(this.best)); bestEl.textContent=this.best; } this.newPuzzle(); return; }
+      const key=this.stateKey(); if(this.seen.has(key)){ this.newPuzzle(); return; } this.seen.add(key); if(this.seen.size>400) this.seen.clear();
+      const mv=this.bestMove(); if(mv){ this.doMove(mv[0],mv[1]); } else this.newPuzzle(); }
+    update(dt){ this.time+=dt; if(this.anim){ this.anim.t+=dt; if(this.anim.t>=this.anim.dur) this.anim=null; }
+      if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0&&!this.anim){ this._autoCd=0.34; this.autoStep(); } } }
+    drawTube(L,i){ const cx=L.x0+i*L.gap; const x=cx-L.tw/2; const h=L.th; const y=L.baseY-h;
+      ctx.save(); ctx.shadowColor='#00000080'; ctx.shadowBlur=8; ctx.fillStyle='#0c3330'; ctx.beginPath();
+      const r=Math.min(10,L.tw/2); ctx.moveTo(x+r,y); ctx.lineTo(x+L.tw-r,y); ctx.lineTo(x+L.tw,y+r); ctx.lineTo(x+L.tw,y+h-r); ctx.arcTo(x+L.tw,y+h,x+L.tw-r,y+h,r); ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath(); ctx.fill(); ctx.restore();
+      const br=L.tw*0.78; const step=h/CAP; const t=this.tubes[i];
+      for(let k=0;k<t.length;k++){ const cy=y+h-step*(k+0.5); ctx.save(); ctx.shadowColor=t[k]; ctx.shadowBlur=10; ctx.fillStyle=t[k]; ctx.beginPath(); ctx.arc(cx,cy,br/2,0,7); ctx.fill(); ctx.restore(); }
+      if(this.sel===i){ ctx.strokeStyle='#ffffff'; ctx.lineWidth=2; ctx.strokeRect(x-2,y-2,L.tw+4,h+4); } }
+    draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H); const L=this.layout();
+      for(let i=0;i<L.n;i++) this.drawTube(L,i);
+      if(this.anim){ const p=this.anim.t/this.anim.dur; const x=this.anim.fromX+(this.anim.toX-this.anim.fromX)*p; const y=L.baseY-L.th-Math.sin(p*Math.PI)*L.th*0.5;
+        ctx.save(); ctx.shadowColor=this.anim.ball; ctx.shadowBlur=14; ctx.fillStyle=this.anim.ball; ctx.beginPath(); ctx.arc(x,y,L.tw*0.39/2*0.78*1.3,0,7); ctx.fill(); ctx.restore(); } }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.solved*1000+this.moves; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    restart(){ this.stopAuto(); this.moves=0; this.sel=-1; this.anim=null; this.seen=new Set(); this.newPuzzle(); solvedEl.textContent=0; statusEl.textContent='点一根管子选中，再点另一根把顶球倒过去'; }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new BallSort();
+})();
+</script>
+</body>
+</html>

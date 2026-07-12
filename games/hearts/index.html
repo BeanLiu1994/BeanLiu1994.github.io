@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1f0a14" />
+<title>霓虹红心 · Neon Hearts</title>
+<style>
+  :root { --bg:#1f0a14; --surface:#2a0e1c; --board:#180610; --text:#ffe6f0; --muted:#c890a8; --accent:#ff6b9a; --accent-glow:#ff6b9a55; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3a1030 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #1c0610 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ff6b9a,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1f0a14; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1f0a14; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹红心</h1><div class="sub">N E O N &nbsp; H E A R T S</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Round</div><div class="value" id="round">1</div></div>
+      <div class="score-card best"><div class="label">My Pts</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="430" height="500"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">避开红心与黑桃 Q；点你合法的牌出牌（自动会替其他三家出）</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const roundEl=document.getElementById('round'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const SUITS=['♠','♥','♦','♣']; const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const isHeart=c=>c.suit===1; const isQS=c=>c.rank===11&&c.suit===0;
+  const penalty=c=>(isHeart(c)?1:0)+(isQS(c)?13:0);
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  class Hearts {
+    constructor(){ this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.best=parseInt(localStorage.getItem('heartsBest')||'0');
+      this.fit(); window.addEventListener('resize',()=>this.fit()); canvas.addEventListener('pointerdown',e=>this.onTap(e)); this.newGame(); this.fit();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop); }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||430,470)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.16; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
+    newGame(){ const deck=[]; for(let s=0;s<4;s++) for(let r=0;r<13;r++) deck.push({rank:r,suit:s}); shuffle(deck); this.hands=[[],[],[],[]]; for(let i=0;i<52;i++) this.hands[i%4].push(deck[i]);
+      this.trick=[]; this.leadSuit=-1; this.heartsBroken=false; this.turn=0; this.tricksLeft=13; this.trickNo=0; }
+    legal(P){ const h=this.hands[P]; if(this.trick.length===0){ const nh=h.filter(c=>!isHeart(c)); if(this.heartsBroken||nh.length===0) return h.slice(); return nh; }
+      const ls=this.leadSuit; const fol=h.filter(c=>c.suit===ls); return fol.length?fol:h.slice(); }
+    bestInTrick(){ let best=-1,bp=-1; for(const t of this.trick){ if(t.card.suit===this.leadSuit&&t.card.rank>bp){ bp=t.card.rank; best=t.player; } } return best; }
+    choose(P){ const leg=this.legal(P); const h=this.hands[P]; const idxs=leg.map(c=>h.indexOf(c));
+      if(this.trick.length===0){ // lead: avoid hearts & QS
+        const safe=leg.filter(c=>!isHeart(c)&&!isQS(c)); const pool=safe.length?safe:leg; let pick=pool[0]; for(const c of pool) if(c.rank>pick.rank) pick=c; return h.indexOf(pick); }
+      const curBest=this.bestInTrick(); const winners=idxs.filter(i=>{ const c=h[i]; return c.suit===this.leadSuit&&(curBest<0||c.rank>this.trick.find(t=>t.player===curBest).card.rank); });
+      const losers=idxs.filter(i=>!winners.includes(i));
+      if(losers.length){ let pick=losers[0]; for(const i of losers) if(h[i].rank>h[pick].rank) pick=i; return pick; }
+      // must win: minimize penalty
+      let pick=winners[0]; for(const i of winners) if(penalty(h[i])<penalty(h[pick])) pick=i; return pick; }
+    play(P,idx){ const c=this.hands[P].splice(idx,1)[0]; if(this.trick.length===0) this.leadSuit=c.suit; this.trick.push({player:P,card:c}); if(isHeart(c)) this.heartsBroken=true; this.turn=(P+1)%4; }
+    resolve(){ const w=this.bestInTrick(); if(w<0){ // all off-suit (shouldn't happen on lead suit) fallback
+        this.turn=(this.trick[0].player+1)%4; } else { let pts=0; for(const t of this.trick) pts+=penalty(t.card); this.pen[w]=(this.pen[w]||0)+pts; this.turn=w; }
+      this.trick=[]; this.leadSuit=-1; this.tricksLeft--; this.trickNo++;
+      if(this.tricksLeft===0){ this.round++; if((this.pen[0]||0)>this.best){ this.best=this.pen[0]; localStorage.setItem('heartsBest',String(this.best)); } this.newGame(); } }
+    autoStep(){ if(this.trick.length===4){ this.resolve(); return; }
+      const P=this.turn; const idx=this.choose(P); this.play(P,idx); }
+    onTap(e){ e.preventDefault(); if(this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left,y=e.clientY-r.top;
+      if(this.turn!==0) return; const n=this.hands[0].length; const cw=this.W*0.1, gap=this.W/(n+1);
+      for(let i=0;i<n;i++){ const cx=gap*(i+1), cy=this.H*0.86; if(Math.abs(x-cx)<cw/2&&Math.abs(y-cy)<this.H*0.1){ const leg=this.legal(0); if(leg.includes(this.hands[0][i])){ this.play(0,i); } return; } } }
+    update(dt){ roundEl.textContent=this.round; bestEl.textContent=this.pen[0]||0;
+      if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.55; this.autoStep(); } } }
+    drawCard(x,y,w,h,card,small){ ctx.save(); ctx.shadowColor='#00000060'; ctx.shadowBlur=4; ctx.fillStyle='#f4f4f8'; this.rr(x,y,w,h,5); ctx.fill(); ctx.restore();
+      if(card){ const red=(card.suit===1||card.suit===2); ctx.fillStyle=red?'#ff5d6a':'#1a2a3a'; ctx.font='bold '+(h*(small?0.34:0.3))+'px Segoe UI'; ctx.textAlign='left'; ctx.fillText(RANKS[card.rank], x+3, y+h*0.34); ctx.textAlign='right'; ctx.fillText(SUITS[card.suit], x+w-3, y+h*0.9); } }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // other players
+      const pos=[{x:W/2,y:H*0.1,name:'北'},{x:W*0.12,y:H*0.42,name:'西'},{x:W*0.88,y:H*0.42,name:'东'}];
+      ctx.fillStyle='#c890a8'; ctx.font='bold 13px Segoe UI'; ctx.textAlign='center';
+      for(let i=0;i<3;i++){ const p=pos[i]; ctx.fillText(p.name+' '+(this.pen[i+1]||0)+' ('+this.hands[i+1].length+')', p.x, p.y); }
+      // trick cards
+      const tc=[{x:W/2,y:H*0.34},{x:W*0.32,y:H*0.46},{x:W*0.68,y:H*0.46},{x:W/2,y:H*0.58}];
+      for(let i=0;i<this.trick.length;i++){ const p=tc[this.trick[i].player]; this.drawCard(p.x-W*0.05,p.y-W*0.07,W*0.1,H*0.14,this.trick[i].card,true); }
+      // your hand
+      const n=this.hands[0].length; const cw=W*0.1, gap=W/(n+1); const leg=this.turn===0?this.legal(0):[];
+      for(let i=0;i<n;i++){ const cx=gap*(i+1), cy=H*0.86; const card=this.hands[0][i]; const ok=leg.includes(card);
+        ctx.globalAlpha=(this.turn===0&&!ok)?0.4:1; this.drawCard(cx-cw/2,cy-H*0.09,cw,H*0.18,card,true); ctx.globalAlpha=1; }
+      ctx.fillStyle='#ffe6f0'; ctx.textAlign='center'; ctx.font='bold 13px Segoe UI'; ctx.fillText('第 '+this.round+' 局 · 剩 '+this.tricksLeft+' 墩 · 红心'+(this.heartsBroken?'已破':'未破'), W/2, H*0.74); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.round*100+(13-this.tricksLeft); this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    restart(){ this.stopAuto(); this.round=1; this.pen=[0,0,0,0]; this.newGame(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.4; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Hearts();
+})();
+</script>
+</body>
+</html>

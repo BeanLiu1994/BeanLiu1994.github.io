@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06120a" />
+<title>方块拼合 · Neon Block Fit</title>
+<style>
+  :root { --bg:#06120a; --surface:#0d1f14; --board:#0a1a10; --text:#e6fff0; --muted:#7fae8f; --accent:#4dff91; --accent-glow:#4dff9155; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0e2a1a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #062a20 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4dff91,#4dfff0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .tray { display:flex; gap:8px; margin-top:10px; }
+  .tray canvas { width:33.33%; border-radius:10px; background:var(--board); transition:box-shadow .2s; }
+  .tray canvas.sel { box-shadow:0 0 0 2px var(--accent), 0 0 16px var(--accent-glow); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06120a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06120a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>方块拼合</h1><div class="sub">N E O N &nbsp; B L O C K &nbsp; F I T</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="board" width="420" height="420"></canvas></div>
+  <div class="tray">
+    <canvas id="p0" width="130" height="92"></canvas>
+    <canvas id="p1" width="130" height="92"></canvas>
+    <canvas id="p2" width="130" height="92"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点选下方方块，再点棋盘空格放置；填满整行/整列即可消除</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('board'), ctx=canvas.getContext('2d');
+  const tray=[0,1,2].map(i=>({c:document.getElementById('p'+i), x:document.getElementById('p'+i).getContext('2d')}));
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const COLORS=['#4dff91','#4d9fff','#ff5d6a','#ffd54a','#b06bff','#4dfff0','#ff9f4d','#ff6bd0'];
+  const N=10;
+  function norm(cells){ let mr=1e9,mc=1e9; for(const c of cells){ if(c[0]<mr)mr=c[0]; if(c[1]<mc)mc=c[1]; } return cells.map(c=>[c[0]-mr,c[1]-mc]); }
+  function rot(cells){ return norm(cells.map(c=>[c[1],-c[0]])); }
+  function key(cells){ return cells.map(c=>c[0]+','+c[1]).sort().join(';'); }
+  const BASE=[
+    [[0,0]],
+    [[0,0],[0,1]],
+    [[0,0],[0,1],[0,2]],
+    [[0,0],[0,1],[0,2],[0,3]],
+    [[0,0],[0,1],[0,2],[0,3],[0,4]],
+    [[0,0],[0,1],[1,0],[1,1]],
+    [[0,0],[1,0],[2,0],[2,1]],
+    [[0,1],[1,0],[1,1],[1,2]],
+    [[0,0],[0,1],[0,2],[1,1]],
+    [[0,0],[1,0],[1,1]],
+    [[0,0],[0,1],[1,0]],
+  ];
+  const LIB=[]; const seen=new Set();
+  for(const b of BASE){ let cur=b; for(let r=0;r<4;r++){ const k=key(cur); if(!seen.has(k)){ seen.add(k); LIB.push(norm(cur)); } cur=rot(cur); } }
+  function rndShape(){ return LIB[Math.floor(Math.random()*LIB.length)]; }
+  function pick(){ return COLORS[Math.floor(Math.random()*COLORS.length)]; }
+  class BlockFit {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=-1; this.over=false; this.time=0; this.flash=[];
+      this.best=parseInt(localStorage.getItem('blockfitBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onBoard(e));
+      for(let i=0;i<3;i++) tray[i].c.addEventListener('pointerdown',e=>this.onTray(e,i));
+      this.restart();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||420,440)); const d=window.devicePixelRatio||1; this.W=w; this.cell=w/N; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.drawTray(); }
+    rr(x,y,w,h,rad){ ctx.beginPath(); ctx.moveTo(x+rad,y); ctx.arcTo(x+w,y,x+w,y+h,rad); ctx.arcTo(x+w,y+h,x,y+h,rad); ctx.arcTo(x,y+h,x,y,rad); ctx.arcTo(x,y,x+w,y,rad); ctx.closePath(); }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; this.sel=-1; this.time=0; this.flash=[];
+      this.grid=Array.from({length:N},()=>Array(N).fill(0));
+      this.trayP=[rndShape(),rndShape(),rndShape()]; this.trayC=[pick(),pick(),pick()];
+      scoreEl.textContent=0; this.drawTray(); statusEl.textContent='点选下方方块，再点棋盘空格放置'; }
+    fits(p,R,C){ for(const dc of p){ const r=R+dc[0],c=C+dc[1]; if(r<0||r>=N||c<0||c>=N||this.grid[r][c]) return false; } return true; }
+    canPlaceAny(p){ for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(this.fits(p,r,c)) return true; return false; }
+    clearLines(){ let cleared=0; const full=new Set();
+      for(let r=0;r<N;r++){ if(this.grid[r].every(v=>v)) for(let c=0;c<N;c++) full.add(r+','+c); }
+      for(let c=0;c<N;c++){ let f=true; for(let r=0;r<N;r++) if(!this.grid[r][c]){f=false;break;} if(f) for(let r=0;r<N;r++) full.add(r+','+c); }
+      if(full.size){ for(const k of full){ const p=k.split(','); this.grid[+p[0]][+p[1]]=0; } cleared=full.size/N; this.flash.push({cells:[...full],t:0.35}); }
+      return cleared; }
+    tryPlace(slot,R,C){ if(this.over||slot<0||!this.trayP[slot]) return false; const p=this.trayP[slot]; if(!this.fits(p,R,C)) return false;
+      const col=this.trayC[slot]; for(const dc of p) this.grid[R+dc[0]][C+dc[1]]=col;
+      this.score+=p.length; const lines=this.clearLines(); if(lines) this.score+=Math.round(lines*lines*10);
+      this.trayP[slot]=null; this.trayC[slot]=null; this.sel=-1; this.drawTray();
+      if(this.trayP.every(x=>x===null)){ this.trayP=[rndShape(),rndShape(),rndShape()]; this.trayC=[pick(),pick(),pick()]; this.drawTray(); }
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('blockfitBest',String(this.best)); bestEl.textContent=this.best; }
+      scoreEl.textContent=this.score;
+      if(!this.anyMove()) this.gameOver(); return true; }
+    anyMove(){ for(let s=0;s<3;s++){ if(this.trayP[s]&&this.canPlaceAny(this.trayP[s])) return true; } return false; }
+    gameOver(){ this.over=true; statusEl.textContent='💥 无处可放！本局得分 '+this.score; if(this.autoPlay) this._autoNext(); }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    linesIf(p,R,C){ const g=this.grid.map(row=>row.slice()); for(const dc of p) g[R+dc[0]][C+dc[1]]=1; let lines=0;
+      for(let r=0;r<N;r++) if(g[r].every(v=>v)) lines++;
+      for(let c=0;c<N;c++){ let f=true; for(let r=0;r<N;r++) if(!g[r][c]){f=false;break;} if(f) lines++; } return lines; }
+    adjIf(p,R,C){ let a=0; for(const dc of p){ const r=R+dc[0],c=C+dc[1]; for(const n of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){ if(n[0]>=0&&n[0]<N&&n[1]>=0&&n[1]<N&&this.grid[n[0]][n[1]]) a++; } } return a; }
+    autoStep(){ let best=null;
+      for(let s=0;s<3;s++){ const p=this.trayP[s]; if(!p) continue;
+        for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(!this.fits(p,r,c)) continue;
+          const lines=this.linesIf(p,r,c), adj=this.adjIf(p,r,c); const sc=lines*lines*12+adj*0.5+(lines>0?100:0);
+          if(!best||sc>best.sc) best={s,r,c,sc}; } }
+      if(best) this.tryPlace(best.s,best.r,best.c); else this.gameOver(); }
+    update(dt){ this.time+=dt; for(const f of this.flash) f.t-=dt; this.flash=this.flash.filter(f=>f.t>0);
+      if(this.autoPlay&&!this.over){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.28; this.autoStep(); } } }
+    onTray(e,i){ e.preventDefault(); if(this.over||this.autoPlay) return; if(this.trayP[i]){ this.sel=(this.sel===i?-1:i); this.drawTray(); } }
+    onBoard(e){ e.preventDefault(); if(this.over||this.autoPlay||this.sel<0) return; const r=canvas.getBoundingClientRect();
+      const x=e.clientX-r.left, y=e.clientY-r.top; const c=Math.floor(x/this.cell), row=Math.floor(y/this.cell);
+      if(c>=0&&c<N&&row>=0&&row<N) this.tryPlace(this.sel,row,c); }
+    draw(){ const W=this.W; ctx.clearRect(0,0,W,W);
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const x=c*this.cell,y=r*this.cell;
+        ctx.fillStyle='#ffffff08'; this.rr(x+1,y+1,this.cell-2,this.cell-2,6); ctx.fill();
+        const v=this.grid[r][c]; if(v){ ctx.save(); ctx.shadowColor=v; ctx.shadowBlur=10; ctx.fillStyle=v; this.rr(x+2,y+2,this.cell-4,this.cell-4,7); ctx.fill(); ctx.restore(); } }
+      for(const f of this.flash){ ctx.save(); ctx.globalAlpha=Math.max(0,Math.min(1,f.t/0.35))*0.6;
+        for(const k of f.cells){ const p=k.split(','); const x=+p[1]*this.cell,y=+p[0]*this.cell; ctx.fillStyle='#ffffff'; this.rr(x+2,y+2,this.cell-4,this.cell-4,7); ctx.fill(); } ctx.restore(); } }
+    drawTray(){ if(!this.trayP) return; for(let i=0;i<3;i++){ const t=tray[i]; const w=t.c.width,h=t.c.height; t.x.clearRect(0,0,w,h); const p=this.trayP[i]; t.c.classList.toggle('sel',this.sel===i);
+      if(!p) continue; const col=this.trayC[i]; const cs=Math.min(w,h)*0.2; const offx=(w-p[0].length*cs)/2, offy=(h-p.length*cs)/2;
+      for(const dc of p){ const x=offx+dc[1]*cs, y=offy+dc[0]*cs; t.x.save(); t.x.shadowColor=col; t.x.shadowBlur=8; t.x.fillStyle=col; t.x.beginPath(); if(t.x.roundRect) t.x.roundRect(x+2,y+2,cs-4,cs-4,5); else t.x.rect(x+2,y+2,cs-4,cs-4); t.x.fill(); t.x.restore(); } } }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.score; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=this.score; this._autoCd=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new BlockFit();
+})();
+</script>
+</body>
+</html>

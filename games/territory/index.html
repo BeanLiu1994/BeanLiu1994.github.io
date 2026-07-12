@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a2a1a" />
+<title>矢量领地 · Vector Territory</title>
+<style>
+  :root { --bg:#0a2a1a; --surface:#0e3322; --board:#071a12; --text:#e6fff0; --muted:#7fc8a0; --accent:#4dff91; --accent-glow:#4dff9155; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0e3a26 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #06241a 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4dff91,#4dfff0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06120a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06120a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>矢量领地</h1><div class="sub">V E C T O R &nbsp; T E R R I T O R Y</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Level</div><div class="value" id="level">1</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">1</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="432" height="288"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点边缘向里切一块区域（避开红色火花），占满 80% 即过关</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const levelEl=document.getElementById('level'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  class Territory {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.time=0; this.level=1;
+      this.best=parseInt(localStorage.getItem('territoryBest')||'1'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onTap(e));
+      this.newLevel(); this.fit();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||432,480)); const d=window.devicePixelRatio||1; this.W=w; this.GW=24; this.GH=16; this.cell=w/this.GW; this.H=this.cell*this.GH; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
+    newLevel(){ const GW=this.GW,GH=this.GH; this.claimed=Array.from({length:GH},()=>Array(GW).fill(false));
+      for(let r=0;r<GH;r++) for(let c=0;c<GW;c++) if(r===0||r===GH-1||c===0||c===GW-1) this.claimed[r][c]=true;
+      this.countClaimed();
+      this.border=[]; for(let c=1;c<GW-1;c++){ this.border.push({r:0,c,edge:'top'}); this.border.push({r:GH-1,c,edge:'bottom'}); }
+      for(let r=1;r<GH-1;r++){ this.border.push({r,c:0,edge:'left'}); this.border.push({r,c:GW-1,edge:'right'}); }
+      this.spark={x:GW/2+(Math.random()-0.5)*5, y:GH/2+(Math.random()-0.5)*5, vx:(Math.random()<.5?-1:1)*5, vy:(Math.random()<.5?-1:1)*4};
+      this.flash=[]; }
+    countClaimed(){ let n=0; for(let r=0;r<this.GH;r++) for(let c=0;c<this.GW;c++) if(this.claimed[r][c]) n++; this.claimedN=n; this.fraction=n/(this.GW*this.GH); }
+    rectFor(b){ const GW=this.GW,GH=this.GH; const d=3,w=3; let cells=[];
+      if(b.edge==='top'){ const c0=Math.max(1,b.c-1),c1=Math.min(GW-2,b.c+1); for(let r=0;r<d;r++) for(let c=c0;c<=c1;c++) cells.push([r,c]); }
+      else if(b.edge==='bottom'){ const c0=Math.max(1,b.c-1),c1=Math.min(GW-2,b.c+1); for(let r=GH-d;r<GH;r++) for(let c=c0;c<=c1;c++) cells.push([r,c]); }
+      else if(b.edge==='left'){ const r0=Math.max(1,b.r-1),r1=Math.min(GH-2,b.r+1); for(let c=0;c<d;c++) for(let r=r0;r<=r1;r++) cells.push([r,c]); }
+      else { const r0=Math.max(1,b.r-1),r1=Math.min(GH-2,b.r+1); for(let c=GW-d;c<GW;c++) for(let r=r0;r<=r1;r++) cells.push([r,c]); }
+      return cells; }
+    safe(cells){ const sc=Math.round(this.spark.x), sr=Math.round(this.spark.y); for(const cc of cells){ if(Math.abs(cc[0]-sr)<=1&&Math.abs(cc[1]-sc)<=1) return false; } return true; }
+    doCut(b){ const cells=this.rectFor(b); if(!this.safe(cells)) return false; let any=false; for(const cc of cells){ if(!this.claimed[cc[0]][cc[1]]){ this.claimed[cc[0]][cc[1]]=true; any=true; } } if(!any) return false;
+      this.countClaimed(); this.flash.push({cells:cells.slice(),t:0.4});
+      if(this.fraction>=0.8){ this.level++; if(this.level>this.best){ this.best=this.level; localStorage.setItem('territoryBest',String(this.best)); bestEl.textContent=this.best; } this.newLevel(); }
+      return true; }
+    autoControl(){ let best=null; for(const b of this.border){ const cells=this.rectFor(b); if(!this.safe(cells)) continue; let u=0; for(const cc of cells) if(!this.claimed[cc[0]][cc[1]]) u++; if(u===0) continue; if(!best||u>best.u) best={b,u}; }
+      if(best) this.doCut(best.b); }
+    onTap(e){ e.preventDefault(); if(this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left,y=e.clientY-r.top;
+      let best=null,bd=1e9; for(const b of this.border){ const cxp=(b.c+0.5)*this.cell, cyp=(b.r+0.5)*this.cell; const dd=Math.hypot(cxp-x,cyp-y); if(dd<bd){bd=dd;best=b;} }
+      if(best){ if(!this.doCut(best)) statusEl.textContent='太危险（火花附近），换一处切'; } }
+    update(dt){ this.time+=dt; for(const f of this.flash) f.t-=dt; this.flash=this.flash.filter(f=>f.t>0);
+      const sp=this.spark; sp.x+=sp.vx*dt; sp.y+=sp.vy*dt;
+      if(sp.x<1||sp.x>=this.GW-1){ sp.vx*=-1; sp.x=Math.max(1,Math.min(this.GW-2,sp.x)); }
+      if(sp.y<1||sp.y>=this.GH-1){ sp.vy*=-1; sp.y=Math.max(1,Math.min(this.GH-2,sp.y)); }
+      const ci=Math.floor(sp.x), cj=Math.floor(sp.y);
+      if(ci>=0&&ci<this.GW&&cj>=0&&cj<this.GH&&this.claimed[cj][ci]){ sp.vx*=-1; sp.vy*=-1; sp.x+=sp.vx*dt*2; sp.y+=sp.vy*dt*2; }
+      if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.35; this.autoControl(); } } }
+    draw(){ const W=this.W,cs=this.cell; ctx.clearRect(0,0,W,this.H);
+      for(let r=0;r<this.GH;r++) for(let c=0;c<this.GW;c++){ const x=c*cs,y=r*cs; if(this.claimed[r][c]){ ctx.fillStyle='#13301f'; ctx.fillRect(x,y,cs,cs); ctx.fillStyle='#4dff91'; ctx.globalAlpha=0.45; ctx.fillRect(x+1,y+1,cs-2,cs-2); ctx.globalAlpha=1; } else { ctx.fillStyle='#0a1410'; ctx.fillRect(x,y,cs,cs); } }
+      for(const f of this.flash){ ctx.globalAlpha=Math.max(0,Math.min(1,f.t/0.4)); ctx.fillStyle='#ffffff'; for(const cc of f.cells) ctx.fillRect(cc[1]*cs,cc[0]*cs,cs,cs); ctx.globalAlpha=1; }
+      const sx=this.spark.x*cs, sy=this.spark.y*cs; ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=14; ctx.fillStyle='#ff5d6a'; ctx.beginPath(); ctx.arc(sx,sy,cs*0.42,0,7); ctx.fill(); ctx.restore();
+      ctx.fillStyle='#e6fff0'; ctx.font='bold 13px Segoe UI'; ctx.textAlign='left'; ctx.fillText('占比 '+Math.round(this.fraction*100)+'%  Lv'+this.level, 6, 16);
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.level*1000+Math.round(this.fraction*1000); this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    restart(){ this.stopAuto(); this.level=1; this.newLevel(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Territory();
+})();
+</script>
+</body>
+</html>

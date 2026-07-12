@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06121f" />
+<title>弹珠推挤 · Marble Push</title>
+<style>
+  :root { --bg:#06121f; --surface:#0a1a2c; --board:#07111c; --text:#e6f3ff; --muted:#7fa8c8; --accent:#4d9fff; --accent-glow:#4d9fff55; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0a2040 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #06182a 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4d9fff,#4dff91); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06121f; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06121f; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>弹珠推挤</h1><div class="sub">M A R B L E &nbsp; P U S H</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">You</div><div class="value" id="you">0</div></div>
+      <div class="score-card"><div class="label">AI</div><div class="value" id="ai">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="420"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点选己方绿珠，再点相邻空位推动（把红珠挤出场外 6 颗即胜）</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const youEl=document.getElementById('you'), aiEl=document.getElementById('ai'), statusEl=document.getElementById('status');
+  const DIRS=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+  const key=(q,r)=>q+','+r;
+  const inBoard=(q,r)=>Math.abs(q)<=4&&Math.abs(r)<=4&&Math.abs(q+r)<=4;
+  class Abalone {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.over=false; this.time=0; this.sel=null;
+      this.cells=[]; for(let q=-4;q<=4;q++) for(let r=-4;r<=4;r++) if(inBoard(q,r)) this.cells.push({q,r});
+      this.best=parseInt(localStorage.getItem('abaloneBest')||'0'); this.bestWon=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onTap(e));
+      this.newGame(); this.fit();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,460)); const d=window.devicePixelRatio||1; this.W=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0);
+      const S=w*0.052; let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9; const pts={};
+      for(const c of this.cells){ const x=S*Math.sqrt(3)*(c.q+c.r/2), y=S*1.5*c.r; pts[key(c.q,c.r)]={x,y}; minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y); }
+      const pad=w*0.06; const sc=(w-2*pad)/Math.max(maxx-minx,maxy-miny); this.pts={}; for(const k in pts){ this.pts[k]={x:(pts[k].x-minx)*sc+pad, y:(pts[k].y-miny)*sc+pad}; } }
+    newGame(){ this.over=false; this.turn=1; this.off={1:0,2:0}; this.sel=null; this.board={};
+      for(const c of this.cells) this.board[key(c.q,c.r)]=0;
+      const p1=[]; for(let r=4;r>=1;r--){ const lo=-4, hi=-r; for(let q=lo;q<=hi;q++) p1.push({q,r}); }
+      for(const c of p1){ this.board[key(c.q,c.r)]=1; this.board[key(-c.q,-c.r)]=2; }
+      youEl.textContent=0; aiEl.textContent=0; }
+    genMoves(P){ const moves=[];
+      for(const c of this.cells){ if(this.board[key(c.q,c.r)]!==P) continue;
+        for(const d of DIRS){ let rear={q:c.q,r:c.r}; while(inBoard(rear.q-d[0],rear.r-d[1])&&this.board[key(rear.q-d[0],rear.r-d[1])]===P) rear={q:rear.q-d[0],r:rear.r-d[1]};
+          const run=[rear]; let cur=rear; while(run.length<3){ const nx={q:cur.q+d[0],r:cur.r+d[1]}; if(inBoard(nx.q,nx.r)&&this.board[key(nx.q,nx.r)]===P){run.push(nx);cur=nx;} else break; }
+          const L=run.length; const front=run[L-1]; const beyond={q:front.q+d[0],r:front.r+d[1]}; if(!inBoard(beyond.q,beyond.r)) continue;
+          const bv=this.board[key(beyond.q,beyond.r)];
+          if(bv===0){ moves.push({type:'in',tail:rear,d,L,opp:0}); }
+          else if(bv===3-P){ let M=0,oc=beyond; while(inBoard(oc.q,oc.r)&&this.board[key(oc.q,oc.r)]===3-P){M++; oc={q:oc.q+d[0],r:oc.r+d[1]}; if(M>=3)break;}
+            if(M<L){ const after={q:oc.q,r:oc.r}; if(!inBoard(after.q,after.r)||this.board[key(after.q,after.r)]===0) moves.push({type:'in',tail:rear,d,L,opp:M}); } } }
+      }
+      for(const c of this.cells){ if(this.board[key(c.q,c.r)]!==P) continue;
+        for(const p of DIRS){ const nb={q:c.q+p[0],r:c.r+p[1]}; if(!inBoard(nb.q,nb.r)||this.board[key(nb.q,nb.r)]!==P) continue;
+          for(const d of DIRS){ if((d[0]===p[0]&&d[1]===p[1])||(d[0]===-p[0]&&d[1]===-p[1])) continue;
+            const d1={q:c.q+d[0],r:c.r+d[1]}, d2={q:nb.q+d[0],r:nb.r+d[1]}; if(inBoard(d1.q,d1.r)&&inBoard(d2.q,d2.r)&&this.board[key(d1.q,d1.r)]===0&&this.board[key(d2.q,d2.r)]===0) moves.push({type:'br',a:c,p,d}); } } }
+      return moves; }
+    apply(m,P){ let removed=0;
+      if(m.type==='in'){ const {tail,d,L,opp}=m;
+        for(let i=0;i<L;i++){ const c={q:tail.q+d[0]*i,r:tail.r+d[1]*i}; this.board[key(c.q,c.r)]=0; }
+        if(opp>0){ for(let i=L;i<L+opp;i++){ const c={q:tail.q+d[0]*i,r:tail.r+d[1]*i}; this.board[key(c.q,c.r)]=0; } }
+        for(let i=1;i<=L;i++){ const c={q:tail.q+d[0]*i,r:tail.r+d[1]*i}; if(inBoard(c.q,c.r)) this.board[key(c.q,c.r)]=P; }
+        if(opp>0){ for(let i=L+1;i<=L+opp;i++){ const c={q:tail.q+d[0]*i,r:tail.r+d[1]*i}; if(inBoard(c.q,c.r)) this.board[key(c.q,c.r)]=3-P; else removed++; } }
+      } else { const {a,p,d}=m; const nb={q:a.q+p[0],r:a.r+p[1]}; this.board[key(a.q,a.r)]=0; this.board[key(nb.q,nb.r)]=0;
+        const d1={q:a.q+d[0],r:a.r+d[1]}, d2={q:nb.q+d[0],r:nb.r+d[1]}; this.board[key(d1.q,d1.r)]=P; this.board[key(d2.q,d2.r)]=P; }
+      return removed; }
+    A(P,q,r){ return (P===1)?(q-r):(-q+r); }
+    scoreMove(m,P){ let s=0;
+      if(m.type==='in'){ const {tail,d,L,opp}=m; const f=k=>({q:tail.q+d[0]*k,r:tail.r+d[1]*k});
+        s+=this.A(P,f(L).q,f(L).r)-this.A(P,f(L-1).q,f(L-1).r);
+        if(opp>0){ const od=this.A(P,f(L+1).q,f(L+1).r)-this.A(P,f(L).q,f(L).r); if(od>0) s+=od*4; if(!inBoard(f(L+opp).q,f(L+opp).r)) s+=60; }
+      } else { const {a,p,d}=m; const src=a,dst={q:a.q+d[0],r:a.r+d[1]}; s+=this.A(P,dst.q,dst.r)-this.A(P,src.q,src.r); }
+      return s+Math.random()*0.5; }
+    autoStep(){ if(this.over){ this.newGame(); return; }
+      const P=this.turn; const moves=this.genMoves(P); if(!moves.length){ this.newGame(); return; }
+      let best=null,bs=-1e9; for(const m of moves){ const s=this.scoreMove(m,P); if(s>bs){bs=s;best=m;} }
+      const rem=this.apply(best,P); if(rem>0){ this.off[P]+=rem; if(this.off[P]>=6){ this.win(P); return; } }
+      this.turn=3-P; }
+    win(P){ this.over=true; statusEl.textContent=(P===1?'🏆 你':'AI')+'把对方挤出 6 颗，获胜！'; if(P===1){ this.bestWon++; if(this.bestWon>this.best){ this.best=this.bestWon; localStorage.setItem('abaloneBest',String(this.best)); } } if(this.autoPlay) this._autoNext(); }
+    _autoNext(){ this.stopAuto(); this.newGame(); this.startAuto(); }
+    onTap(e){ e.preventDefault(); if(this.autoPlay||this.over||this.turn!==1) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left,y=e.clientY-r.top;
+      let hit=null,bd=1e9; for(const c of this.cells){ const p=this.pts[key(c.q,c.r)]; const dd=Math.hypot(p.x-x,p.y-y); if(dd<bd){bd=dd;hit=c;} } if(!hit||bd>this.W*0.05) return;
+      if(this.sel&&this.sel.q===hit.q&&this.sel.r===hit.r){ this.sel=null; return; }
+      if(this.board[key(hit.q,hit.r)]===1){ this.sel=hit; return; }
+      if(this.sel){ // attempt single inline move in direction to hit
+        const dq=hit.q-this.sel.q, dr=hit.r-this.sel.r; const step=Math.abs(dq)+Math.abs(dr);
+        if(step===1 || (step===2&&Math.abs(dq+dr)===1)){ const d=[dq,dr]; const m={type:'in',tail:{q:this.sel.q,r:this.sel.r},d,L:1,opp:0};
+          // validate quickly by trying in a cloned check
+          if(this.validInline(this.sel,d,1)){ const rem=this.apply(m,1); if(rem>0){ this.off[1]+=rem; if(this.off[1]>=6){ this.win(1); return; } } this.turn=2; this.sel=null; return; } }
+        this.sel=null; } }
+    validInline(c,d,L){ const beyond={q:c.q+d[0]*L,r:c.r+d[1]*L}; if(!inBoard(beyond.q,beyond.r)) return false; const bv=this.board[key(beyond.q,beyond.r)]; if(bv===0) return true; if(bv===2){ let M=0,oc=beyond; while(inBoard(oc.q,oc.r)&&this.board[key(oc.q,oc.r)]===2){M++;oc={q:oc.q+d[0],r:oc.r+d[1]};if(M>=3)break;} if(M<L){ const after={q:oc.q,r:oc.r}; return (!inBoard(after.q,after.r)||this.board[key(after.q,after.r)]===0); } } return false; }
+    update(dt){ this.time+=dt; youEl.textContent=this.off[1]; aiEl.textContent=this.off[2];
+      if(this.autoPlay&&!this.over){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.5; this.autoStep(); } } }
+    draw(){ const W=this.W; ctx.clearRect(0,0,W,W);
+      for(const c of this.cells){ const p=this.pts[key(c.q,c.r)]; const rad=W*0.038;
+        ctx.beginPath(); ctx.arc(p.x,p.y,rad+2,0,7); ctx.fillStyle='#0e1c2c'; ctx.fill();
+        const v=this.board[key(c.q,c.r)]; if(v){ ctx.save(); const col=v===1?'#4dff91':'#ff5d6a'; ctx.shadowColor=col; ctx.shadowBlur=12; ctx.fillStyle=col; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.fill(); ctx.restore(); }
+        else { ctx.fillStyle='#1a2c40'; ctx.beginPath(); ctx.arc(p.x,p.y,rad*0.7,0,7); ctx.fill(); }
+        if(this.sel&&this.sel.q===c.q&&this.sel.r===c.r){ ctx.strokeStyle='#ffffff'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(p.x,p.y,rad+4,0,7); ctx.stroke(); } }
+      ctx.fillStyle='#e6f3ff'; ctx.font='bold 13px Segoe UI'; ctx.textAlign='left'; ctx.fillText(this.over?'':'Turn: '+(this.turn===1?'You':'AI'), 6, 18); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.off[1]*100+this.off[2]; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    restart(){ this.stopAuto(); this.newGame(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.4; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Abalone();
+})();
+</script>
+</body>
+</html>

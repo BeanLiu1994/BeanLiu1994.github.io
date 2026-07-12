@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#2a0820" />
+<title>星群突袭 · Star Swarm</title>
+<style>
+  :root { --bg:#2a0820; --surface:#2e0e26; --board:#1c0818; --text:#ffe6f5; --muted:#c08aa8; --accent:#ff6bd0; --accent-glow:#ff6bd055; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3a1030 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #1c0820 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ff6bd0,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#2a0820; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#2a0820; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>星群突袭</h1><div class="sub">S T A R &nbsp; S W A R M</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="560"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">拖动屏幕左右移动战机，自动开火；躲开来袭的敌机</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const PCOL=['#ff6bd0','#ffd54a','#4dfff0','#b06bff','#4dff91'];
+  class StarSwarm {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.over=false; this.time=0; this.stars=[];
+      this.best=parseInt(localStorage.getItem('starswarmBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      canvas.addEventListener('pointermove',e=>this.onMove(e));
+      for(let i=0;i<50;i++) this.stars.push({x:Math.random(),y:Math.random(),s:Math.random()*1.6+0.4});
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,440)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.33; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
+    restart(){ this.stopAuto(); this.over=false; this.lives=3; this.score=0; this.wave=1; this.px=this.W/2; this.targetX=this.W/2; this.bullets=[]; this.parts=[]; this.fireCd=0; this.diveCd=1; this.invuln=0; this.spawnWave(); }
+    spawnWave(){ const C=7,R=Math.min(3+this.wave,5); this.enemies=[]; const mx=this.W*0.12, gap=(this.W-2*mx)/(C-1); const my=this.H*0.12, rgap=this.H*0.085;
+      for(let rr=0;rr<R;rr++) for(let cc=0;cc<C;cc++){ const fx=mx+cc*gap, fy=my+rr*rgap; this.enemies.push({fx,fy,x:fx,y:fy,state:'form',diveT:0,vx:0,vy:0,alive:true,ph:Math.random()*6,col:PCOL[rr%PCOL.length]}); } }
+    fire(){ if(this.fireCd>0) return; this.fireCd=0.3; this.bullets.push({x:this.px,y:this.H-46,vy:-640}); }
+    autoControl(){ let threat=null,bd=1e9; for(const e of this.enemies){ if(e.alive&&e.state==='dive'){ const d=Math.hypot(e.x-this.px,e.y-(this.H-46)); if(d<bd){bd=d;threat=e;} } }
+      if(threat&&threat.y>this.H-280&&Math.abs(threat.x-this.px)<90){ this.targetX=threat.x<this.px?this.px+110:this.px-110; }
+      else { let near=null,nd=1e9; for(const e of this.enemies){ if(e.alive&&e.state==='form'){ const d=Math.abs(e.x-this.px); if(d<nd){nd=d;near=e;} } } if(near) this.targetX=near.x; }
+      let fire=false; for(const e of this.enemies){ if(e.alive&&Math.abs(e.x-this.px)<14&&e.y<this.H-46){ fire=true; break; } }
+      if(fire) this.fire(); }
+    update(dt){ this.time+=dt; this.fireCd-=dt; this.diveCd-=dt; if(this.invuln>0) this.invuln-=dt;
+      this.px+=(this.targetX-this.px)*Math.min(1,dt*11);
+      for(const b of this.bullets) b.y+=b.vy*dt; this.bullets=this.bullets.filter(b=>b.y>-10);
+      for(const e of this.enemies){ if(!e.alive) continue;
+        if(e.state==='form'){ e.y=e.fy+Math.sin(this.time*2+e.ph)*4; e.x=e.fx; }
+        else { e.diveT+=dt; e.x+=e.vx*dt; e.y+=e.vy*dt; e.y+=Math.sin(e.diveT*6)*30*dt; if(e.y>this.H+30){ e.state='form'; e.x=e.fx; e.y=e.fy-40; } } }
+      if(this.diveCd<=0){ this.diveCd=1.1; const cand=this.enemies.filter(e=>e.alive&&e.state==='form'); if(cand.length){ const e=cand[Math.floor(Math.random()*cand.length)]; const ang=Math.atan2((this.H-46)-e.y, this.px-e.x); e.state='dive'; e.vx=Math.cos(ang)*120; e.vy=150; } }
+      for(const b of this.bullets){ for(const e of this.enemies){ if(e.alive&&Math.abs(e.x-b.x)<14&&Math.abs(e.y-b.y)<14){ e.alive=false; this.score+=10; this.boom(e.x,e.y,e.col); b.y=-999; break; } } }
+      this.bullets=this.bullets.filter(b=>b.y>-900);
+      if(this.invuln<=0){ for(const e of this.enemies){ if(e.alive&&e.state==='dive'&&Math.hypot(e.x-this.px,e.y-(this.H-46))<22){ this.hit(); break; } } }
+      for(const p of this.parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=200*dt; p.t-=dt; } this.parts=this.parts.filter(p=>p.t>0);
+      if(this.enemies.length&&this.enemies.every(e=>!e.alive)){ this.wave++; this.spawnWave(); }
+      if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.05; this.autoControl(); } } }
+    hit(){ this.lives--; this.invuln=1.2;
+      if(this.lives<=0){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('starswarmBest',String(this.best)); bestEl.textContent=this.best; } statusEl.textContent='💥 游戏结束，得分 '+this.score; if(this.autoPlay) this._autoNext(); }
+      else statusEl.textContent='被击中！剩余 '+this.lives+' 条命'; }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    boom(x,y,col){ for(let i=0;i<12;i++){ const a=Math.random()*7; this.parts.push({x,y,vx:Math.cos(a)*130,vy:Math.sin(a)*130,t:0.5,col}); } }
+    onDown(e){ e.preventDefault(); if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); this.targetX=e.clientX-r.left; this.fire(); }
+    onMove(e){ if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect(); this.targetX=e.clientX-r.left; }
+    draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      for(const s of this.stars){ ctx.fillStyle='#ffffff30'; ctx.fillRect(s.x*W,((s.y+this.time*0.05)%1)*H, s.s, s.s); }
+      const py=H-46; ctx.save(); ctx.shadowColor='#4dfff0'; ctx.shadowBlur=14; ctx.fillStyle=(this.invuln>0&&Math.floor(this.time*10)%2)?'#ff5d6a':'#4dfff0'; ctx.beginPath(); ctx.moveTo(this.px,py-16); ctx.lineTo(this.px-13,py+12); ctx.lineTo(this.px+13,py+12); ctx.closePath(); ctx.fill(); ctx.restore();
+      for(const e of this.enemies){ if(!e.alive) continue; ctx.save(); ctx.shadowColor=e.col; ctx.shadowBlur=12; ctx.fillStyle=e.col; ctx.beginPath(); ctx.moveTo(e.x,e.y-10); ctx.lineTo(e.x+10,e.y+8); ctx.lineTo(e.x-10,e.y+8); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      ctx.strokeStyle='#ffd54a'; ctx.lineWidth=3; ctx.shadowColor='#ffd54a'; ctx.shadowBlur=8; for(const b of this.bullets){ ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x,b.y+10); ctx.stroke(); }
+      for(const p of this.parts){ ctx.globalAlpha=Math.max(0,p.t/0.5); ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,7); ctx.fill(); } ctx.globalAlpha=1;
+      ctx.fillStyle='#ffe6f5'; ctx.font='bold 14px Segoe UI'; ctx.textAlign='left'; ctx.fillText('Score '+this.score, 8, 20); ctx.textAlign='right'; ctx.fillText('♥'+this.lives+'  W'+this.wave, W-8, 20);
+      if(this.over){ ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=18; ctx.fillStyle='#ff5d6a'; ctx.font='bold '+(W*0.09)+'px Segoe UI'; ctx.textAlign='center'; ctx.fillText('GAME OVER', W/2, H/2); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.wave*1000+this.score; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    restartBtn(){ this.restart(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=this.score; this._autoCd=0.1; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new StarSwarm();
+})();
+</script>
+</body>
+</html>

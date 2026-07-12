@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a0a2a" />
+<title>霓虹数织和 · Neon Kakuro</title>
+<style>
+  :root { --bg:#1a0a2a; --surface:#221033; --board:#160a24; --text:#f3e6ff; --muted:#9a7fb8; --accent:#b06bff; --accent-glow:#b06bff55; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #2a1240 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #1a0a30 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#b06bff,#ff6bd0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .pad { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; justify-content:center; }
+  .pad button { flex:1; min-width:42px; padding:10px 0; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.95rem; font-weight:700; cursor:pointer; transition:all .15s; }
+  .pad button:hover { background:#ffffff10; } .pad button:active { transform:scale(0.95); }
+  .pad button.clr { background:var(--red); color:#fff; border-color:var(--red); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0a2a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0a2a; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹数织和</h1><div class="sub">N E O N &nbsp; K A K U R O</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="420"></canvas></div>
+  <div class="pad">
+    <button onclick="game.fill(1)">1</button><button onclick="game.fill(2)">2</button><button onclick="game.fill(3)">3</button>
+    <button onclick="game.fill(4)">4</button><button onclick="game.fill(5)">5</button><button onclick="game.fill(6)">6</button>
+    <button class="clr" onclick="game.fill(0)">⌫</button>
+  </div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点格子选中，下方数字键填入 1-6（行列内不重复且等于提示和）</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const solvedEl=document.getElementById('solved'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const N=6;
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  function genLatin(){ const g=Array.from({length:N},()=>Array(N).fill(0));
+    function ok(r,c,v){ for(let i=0;i<N;i++){ if(g[r][i]===v||g[i][c]===v) return false; } return true; }
+    function rec(r,c){ if(r===N) return true; if(c===N) return rec(r+1,0); for(const v of shuffle([1,2,3,4,5,6])){ if(ok(r,c,v)){ g[r][c]=v; if(rec(r,c+1)) return true; g[r][c]=0; } } return false; }
+    rec(0,0); return g; }
+  function splitRun(){ const s=2+Math.floor(Math.random()*3); return [[0,s-1],[s,N-1]]; }
+  class Kakuro {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=null; this.solvedCount=0;
+      this.best=parseInt(localStorage.getItem('kakuroBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onTap(e));
+      window.addEventListener('keydown',e=>{ if(this.autoPlay) return; const n=parseInt(e.key); if(n>=1&&n<=6) this.fill(n); else if(e.key==='Backspace'||e.key==='0') this.fill(0); });
+      this.newPuzzle(); this.fit();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,460)); const d=window.devicePixelRatio||1; this.W=w; this.cell=w/N; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); }
+    newPuzzle(){ const sol=genLatin(); this.sol=sol;
+      this.hRuns=[]; this.vRuns=[]; this.cellInfo=Array.from({length:N},()=>Array(N).fill(null));
+      for(let r=0;r<N;r++){ const runs=splitRun(); let sum=0; const info=runs.map(rn=>{ const s=rn[0],e=rn[1]; let su=0; for(let c=s;c<=e;c++) su+=sol[r][c]; return {cols:[s,e],sum:su}; }); this.hRuns.push(info); }
+      for(let c=0;c<N;c++){ const runs=splitRun(); const info=runs.map(rn=>{ const s=rn[0],e=rn[1]; let su=0; for(let r=s;r<=e;r++) su+=sol[r][c]; return {rows:[s,e],sum:su}; }); this.vRuns.push(info); }
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        const hr=this.hRuns[r].find(rn=>c>=rn.cols[0]&&c<=rn.cols[1]); const vr=this.vRuns[c].find(rn=>r>=rn.rows[0]&&r<=rn.rows[1]);
+        this.cellInfo[r][c]={ hSum:hr.sum, vSum:vr.sum, hStart:(c===hr.cols[0]), vStart:(r===vr.rows[0]) }; }
+      this.val=Array.from({length:N},()=>Array(N).fill(0)); this.sel=null; this.solIdx=0; }
+    onTap(e){ e.preventDefault(); if(this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top;
+      const c=Math.floor(x/this.cell), row=Math.floor(y/this.cell); if(c>=0&&c<N&&row>=0&&row<N) this.sel={r:row,c}; }
+    fill(v){ if(this.autoPlay||!this.sel) return; this.val[this.sel.r][this.sel.c]=v; this.checkWin(); }
+    checkWin(){ for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(!this.val[r][c]) return;
+      // validate
+      let okAll=true;
+      for(let r=0;r<N;r++){ const seen=new Set(); for(const rn of this.hRuns[r]){ let su=0; for(let c=rn.cols[0];c<=rn.cols[1];c++){ const v=this.val[r][c]; if(seen.has(v)) okAll=false; seen.add(v); su+=v; } if(su!==rn.sum) okAll=false; } }
+      for(let c=0;c<N;c++){ const seen=new Set(); for(const rn of this.vRuns[c]){ let su=0; for(let r=rn.rows[0];r<=rn.rows[1];r++){ const v=this.val[r][c]; if(seen.has(v)) okAll=false; seen.add(v); su+=v; } if(su!==rn.sum) okAll=false; } }
+      if(okAll){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('kakuroBest',String(this.best)); bestEl.textContent=this.best; } statusEl.textContent='✓ 完成！已解 '+this.solvedCount+' 题'; this.newPuzzle(); } else statusEl.textContent='还不对，检查行列不重复与提示和'; }
+    autoStep(){ // reveal solution cell by cell
+      let done=true; for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(!this.val[r][c]){ this.val[r][c]=this.sol[r][c]; done=false; break; } if(!done) break; }
+      if(done){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('kakuroBest',String(this.best)); bestEl.textContent=this.best; } this.newPuzzle(); } }
+    update(dt){ if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.16; this.autoStep(); } } }
+    draw(){ const W=this.W,cs=this.cell; ctx.clearRect(0,0,W,W);
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const x=c*cs,y=r*cs; const info=this.cellInfo[r][c];
+        ctx.fillStyle='#0e0820'; ctx.fillRect(x+1,y+1,cs-2,cs-2);
+        ctx.strokeStyle='#3a2a55'; ctx.lineWidth=1; ctx.strokeRect(x+1,y+1,cs-2,cs-2);
+        if(info.hStart){ ctx.fillStyle='#b06bff'; ctx.font='bold '+(cs*0.26)+'px Segoe UI'; ctx.textAlign='right'; ctx.textBaseline='alphabetic'; ctx.fillText(info.hSum, x+cs-4, y+cs-4); }
+        if(info.vStart){ ctx.fillStyle='#ff6bd0'; ctx.font='bold '+(cs*0.26)+'px Segoe UI'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(info.vSum, x+4, y+3); }
+        if(this.val[r][c]){ ctx.fillStyle='#f3e6ff'; ctx.font='bold '+(cs*0.5)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(this.val[r][c], x+cs/2, y+cs/2); }
+        if(this.sel&&this.sel.r===r&&this.sel.c===c){ ctx.strokeStyle='#ffffff'; ctx.lineWidth=2.5; ctx.strokeRect(x+2,y+2,cs-4,cs-4); }
+      } }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.solvedCount*100+this.solIdx; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    restart(){ this.stopAuto(); this.newPuzzle(); solvedEl.textContent=0; statusEl.textContent='点格子选中，下方数字键填入 1-6'; }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.2; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Kakuro();
+})();
+</script>
+</body>
+</html>
