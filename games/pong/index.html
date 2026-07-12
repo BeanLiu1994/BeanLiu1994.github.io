@@ -77,6 +77,7 @@
   const W=420,H=520;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const PH=74, PW=12, WIN=7;
+  const RAND=0.22, SPMAX=9.5; // 反弹角随机扰动幅度(rad) 与 速度上限
 
   class Pong {
     constructor(){
@@ -86,7 +87,7 @@
       this.bind(); this.restart();
       this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
     }
-    reset(){ this.ball={ x:W/2, y:H/2, vx:(Math.random()<.5?-1:1)*4.4, vy:(Math.random()*2-1)*2.2 }; this.rally=0; this.updateUI(); }
+    reset(){ this._autoErr=0; this._aiErr=0; this._autoAITarget=H/2; this._autoHits=0; this._autoLet=0; this.ball={ x:W/2, y:H/2, vx:(Math.random()<.5?-1:1)*4.4, vy:(Math.random()*2-1)*2.2 }; this.rally=0; this.updateUI(); }
     restart(){
       this.stopAuto();
       this.youS=0; this.aiS=0; this.over=false;
@@ -101,17 +102,54 @@
       if(this.over) return;
       const b=this.ball;
       // paddles
-      if(this.autoPlay) this.targetY=b.y;
-      this.aiMovePaddle(this.ai,b.y,dt);
-      this.aiMovePaddle(this.you,this.targetY,dt);
+      if(this.autoPlay){
+        // 自动演示：双方都带缓慢游走误差让对拉 lively；再用"轮转漏球"保证比分稳稳推进、比赛必然收敛
+        const boost = 1 + Math.max(0, this.rally-20)*0.08;
+        this._autoErr += (Math.random()*2-1)*12*dt;
+        this._autoErr = Math.max(-PH*0.45*boost, Math.min(PH*0.45*boost, this._autoErr*0.96));
+        this.targetY = b.y + this._autoErr; // 我方带误差
+        this._aiErr += (Math.random()*2-1)*12*dt;
+        this._aiErr = Math.max(-PH*0.45*boost, Math.min(PH*0.45*boost, this._aiErr*0.96));
+        this._autoAITarget = b.y + this._aiErr; // AI 也带误差
+      }
+      this.aiMovePaddle(this.ai, this.autoPlay ? this._autoAITarget : b.y, dt);
+      this.aiMovePaddle(this.you, this.targetY, dt);
       // ball
       b.x+=b.vx*dt; b.y+=b.vy*dt;
       if(b.y<12){ b.y=12; b.vy=Math.abs(b.vy); }
       if(b.y>H-12){ b.y=H-12; b.vy=-Math.abs(b.vy); }
+      // 击球反弹：用固定速度 + 随机扰动夹角重算 vx/vy，保证总有垂直分量、轨迹每拍不同
+      const bounce=(dir)=>{ // dir: -1 表示球改向右、+1 表示改向左
+        const off=(b.y-((dir<0)?this.you.y:this.ai.y))/(PH/2); // -1..1 偏低/偏高
+        const base=Math.max(0.32, Math.min(1, 1-Math.abs(off)*0.6)); // off 越偏，夹角越斜(更水平但不为0)
+        const jitter=(Math.random()*2-1)*RAND; // 角度随机性
+        let ang=base*Math.PI/2*-Math.sign(off||(Math.random()<.5?-1:1)) + jitter; // 向上/下弹的夹角(含随机)
+        if(Math.abs(off)<0.06) ang=(Math.random()*2-1)*RAND; // 几乎打正中心→加随机上下角，避免死水平
+        // 速度上限随 rally 增长而下降：长局球慢下来，挡板误差才能真正转化成失分、保证比赛收敛
+        const spCap = Math.max(5.2, SPMAX - Math.max(0,this.rally-20)*0.06);
+        let sp=Math.hypot(b.vx,b.vy)+0.25; if(sp>spCap) sp=spCap;
+        b.vx=dir*Math.cos(ang)*sp; b.vy=Math.sin(ang)*sp; // 水平分=cos、垂直分=sin(夹角)
+        b.x=(dir<0)?PW+8+10:W-PW-8-10; this.rally++; this.updateUI();
+        if(this.autoPlay){ // 真实击球数累计，达阈值则安排领先方下次漏球
+          this._autoHits++;
+          const diff=Math.abs(this.youS-this.aiS);
+          // 任一方接近 win(>=6) 或全局回合过久 → 压低阈值快速收尾，杜绝偶发长局
+          const nearEnd = (this.youS>=6||this.aiS>=6);
+          const stale = this.rally>400?5 : this.rally>800?4 : 14;
+          const every=nearEnd?4:Math.max(4, Math.min(stale, 14-diff*2));
+          if(this._autoHits>=every){
+            this._autoHits=0;
+            if(this.youS>this.aiS) this._autoLet=1; else if(this.aiS>this.youS) this._autoLet=-1; else this._autoLet=(this._autoLet>0?-1:1);
+          }
+        }
+      };
+      // 自动演示的"轮转漏球"：领先方每接若干球故意漏一拍→球穿过得分，比分稳推、比赛必然收敛
+      let letLeft=false, letRight=false;
+      if(this.autoPlay && this._autoLet===1) letLeft=true; else if(this.autoPlay && this._autoLet===-1) letRight=true;
       // left paddle
-      if(b.vx<0 && b.x-10< PW+8 && b.x> PW && Math.abs(b.y-this.you.y)<PH/2+10){ const off=(b.y-this.you.y)/(PH/2); b.vx=Math.abs(b.vx)+0.25; b.vy=off*5; b.x=PW+8+10; this.rally++; this.updateUI(); }
+      if(b.vx<0 && b.x-10< PW+8 && b.x> PW && Math.abs(b.y-this.you.y)<PH/2+10 && !letLeft){ bounce(1); }
       // right paddle
-      if(b.vx>0 && b.x+10> W-PW-8 && b.x<W-PW && Math.abs(b.y-this.ai.y)<PH/2+10){ const off=(b.y-this.ai.y)/(PH/2); b.vx=-(Math.abs(b.vx)+0.25); b.vy=off*5; b.x=W-PW-8-10; this.rally++; this.updateUI(); }
+      if(b.vx>0 && b.x+10> W-PW-8 && b.x<W-PW && Math.abs(b.y-this.ai.y)<PH/2+10 && !letRight){ bounce(-1); }
       // scoring
       if(b.x< -10){ this.aiS++; this.score('ai'); }
       else if(b.x> W+10){ this.youS++; this.score('you'); }
