@@ -91,8 +91,8 @@ class G{
   document.getElementById('streak').textContent=this.streak;
   document.getElementById('best').textContent=this.best;
  }
- hit(){if(this.autoPlay||this.phase!=='player'||this.over)return;this.dealCard(this.player);const t=this.computeTotal(this.player).total;if(t>21)this.resolveRound();}
- stand(){if(this.autoPlay||this.phase!=='player'||this.over)return;this.phase='dealer';this.dealerAccum=0;this.updateIndicators();}
+ hit(fromAuto){if((this.autoPlay&&!fromAuto)||this.phase!=='player'||this.over)return;this.dealCard(this.player);const t=this.computeTotal(this.player).total;if(t>21)this.resolveRound();}
+ stand(fromAuto){if((this.autoPlay&&!fromAuto)||this.phase!=='player'||this.over)return;this.phase='dealer';this.dealerAccum=0;this.updateIndicators();}
  dealerStep(){
   const t=this.computeTotal(this.dealer).total;
   if(t<17){this.dealCard(this.dealer);}
@@ -122,8 +122,8 @@ class G{
   if(this.phase==='player'){
    const t=this.computeTotal(this.player).total;
    const st=document.getElementById('ai-status');
-   if(t<17){this.hit();if(st)st.textContent='AI 玩家: 要牌 ('+this.computeTotal(this.player).total+')';}
-   else{this.stand();if(st)st.textContent='AI 玩家: 停 ('+t+')';}
+   if(t<17){this.hit(true);if(st)st.textContent='AI 玩家: 要牌 ('+this.computeTotal(this.player).total+')';}
+   else{this.stand(true);if(st)st.textContent='AI 玩家: 停 ('+t+')';}
   }
  }
  update(dt){
