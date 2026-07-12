@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>常见端口速查 · Well-known Ports</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  input[type=text]{background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 12px;font-size:13px;outline:none}
+  main{flex:1;padding:16px;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--bg);text-transform:uppercase;font-size:12px;letter-spacing:1px}
+  tbody tr:hover{background:var(--panel)}
+  .port{font-family:"SF Mono",Consolas,monospace;color:var(--accent)}
+  .tag{font-size:11px;padding:2px 7px;border-radius:6px;background:var(--panel);border:1px solid var(--border);color:var(--muted)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .hint{color:var(--muted);font-size:12px;margin-left:auto}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔌 常见端口速查</h1>
+    <div class="sub">内置公认端口表 · 纯本地查询</div>
+  </div>
+  <div class="toolbar">
+    <input type="text" id="q" placeholder="搜索端口 / 服务 / 关键字…" style="width:260px">
+    <span class="hint" id="hint"></span>
+  </div>
+</header>
+<main>
+  <table>
+    <thead><tr><th>端口</th><th>协议</th><th>服务</th><th>说明</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</main>
+<div class="status" id="st">内置 0 条端口记录</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const DATA=[
+    [7,'TCP/UDP','echo','回显协议'],
+    [20,'TCP','ftp-data','FTP 数据传输'],
+    [21,'TCP','ftp','FTP 控制'],
+    [22,'TCP','ssh','安全远程登录 (SSH)'],
+    [23,'TCP','telnet','远程登录 (明文，不安全)'],
+    [25,'TCP','smtp','简单邮件传输'],
+    [53,'TCP/UDP','dns','域名系统'],
+    [67,'UDP','dhcp','DHCP 服务端'],
+    [68,'UDP','dhcp','DHCP 客户端'],
+    [69,'UDP','tftp','简单文件传输'],
+    [80,'TCP','http','超文本传输协议'],
+    [110,'TCP','pop3','邮局协议 v3'],
+    [111,'TCP/UDP','rpcbind','RPC 端口映射'],
+    [113,'TCP','ident','身份识别协议'],
+    [119,'TCP','nntp','网络新闻传输'],
+    [123,'UDP','ntp','网络时间协议'],
+    [135,'TCP','msrpc','Microsoft RPC'],
+    [137,'TCP/UDP','netbios-ns','NetBIOS 名称服务'],
+    [138,'UDP','netbios-dgm','NetBIOS 数据报'],
+    [139,'TCP','netbios-ssn','NetBIOS 会话'],
+    [143,'TCP','imap','邮件访问协议'],
+    [161,'UDP','snmp','简单网络管理'],
+    [162,'UDP','snmptrap','SNMP 陷阱'],
+    [179,'TCP','bgp','边界网关协议'],
+    [194,'TCP','irc','IRC 聊天'],
+    [220,'TCP','imap3','IMAP3'],
+    [389,'TCP/UDP','ldap','轻量目录访问'],
+    [443,'TCP','https','加密 HTTP (TLS)'],
+    [445,'TCP','microsoft-ds','SMB 文件共享'],
+    [465,'TCP','smtps','加密 SMTP'],
+    [514,'UDP','syslog','系统日志'],
+    [515,'TCP','printer','打印服务 (LPD)'],
+    [587,'TCP','submission','邮件提交 (SMTP)'],
+    [636,'TCP','ldaps','加密 LDAP'],
+    [993,'TCP','imaps','加密 IMAP'],
+    [995,'TCP','pop3s','加密 POP3'],
+    [1433,'TCP','mssql','Microsoft SQL Server'],
+    [1521,'TCP','oracle','Oracle 数据库'],
+    [1723,'TCP','pptp','PPTP VPN'],
+    [2049,'TCP/UDP','nfs','网络文件系统'],
+    [2181,'TCP','zookeeper','ZooKeeper'],
+    [2375,'TCP','docker','Docker (未加密)'],
+    [2376,'TCP','docker','Docker (TLS)'],
+    [3306,'TCP','mysql','MySQL 数据库'],
+    [3389,'TCP','rdp','远程桌面 (RDP)'],
+    [3690,'TCP','svn','Subversion'],
+    [5432,'TCP','postgresql','PostgreSQL'],
+    [5672,'TCP','rabbitmq','RabbitMQ'],
+    [5900,'TCP','vnc','VNC 远程桌面'],
+    [5984,'TCP','couchdb','CouchDB'],
+    [5985,'TCP','wsman','WinRM HTTP'],
+    [5986,'TCP','wsman','WinRM HTTPS'],
+    [6379,'TCP','redis','Redis'],
+    [7001,'TCP','weblogic','WebLogic'],
+    [8080,'TCP','http-alt','HTTP 代理/备用'],
+    [8086,'TCP','influxdb','InfluxDB'],
+    [8088,'TCP','radan-http','HTTP 备用'],
+    [8443,'TCP','https-alt','HTTPS 备用'],
+    [9000,'TCP','sonarqube','SonarQube'],
+    [9092,'TCP','kafka','Apache Kafka'],
+    [9200,'TCP','elasticsearch','Elasticsearch'],
+    [9300,'TCP','elasticsearch','Elasticsearch 集群'],
+    [11211,'TCP/UDP','memcached','Memcached'],
+    [27017,'TCP','mongodb','MongoDB'],
+    [27018,'TCP','mongodb','MongoDB 分片'],
+    [50000,'TCP','db2','IBM DB2']
+  ];
+  const tbody=$('tbody'),q=$('q'),st=$('st');
+  function render(list){
+    tbody.innerHTML=list.map(r=>'<tr><td class="port">'+r[0]+'</td><td><span class="tag">'+r[1]+'</span></td><td>'+r[2]+'</td><td style="color:var(--muted)">'+r[3]+'</td></tr>').join('');
+    st.textContent='共 '+list.length+' / '+DATA.length+' 条';
+  }
+  function filter(){
+    const k=q.value.trim().toLowerCase();
+    if(!k){render(DATA);return;}
+    const list=DATA.filter(r=>String(r[0]).includes(k)||r[1].toLowerCase().includes(k)||r[2].toLowerCase().includes(k)||r[3].toLowerCase().includes(k));
+    render(list);
+  }
+  q.addEventListener('input',filter);
+  render(DATA);
+})();
+</script>
+</body>
+</html>

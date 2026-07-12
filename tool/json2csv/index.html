@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON 转 CSV · JSON to CSV</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:300px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📊 JSON 转 CSV</h1>
+    <div class="sub">嵌套自动扁平化 · 纯本地运行 · 数据不上传</div>
+  </div>
+  <div class="toolbar">
+    <label class="indent"><input type="checkbox" id="flat" checked> 扁平化嵌套(.)</label>
+    <button id="bConvert" class="primary">转换 →</button>
+    <button id="bCopy">复制 CSV</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">JSON 输入</div>
+    <textarea id="in" spellcheck="false" placeholder='粘贴 JSON（对象数组或单个对象）：&#10;[&#10;  {"name":"Alice","addr":{"city":"BJ"}},&#10;  {"name":"Bob","addr":{"city":"SH"}}&#10;]'></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">CSV 输出</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="转换后的 CSV 将显示在这里…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+
+  function flatten(obj,prefix,flat,sep){
+    if(obj===null||obj===undefined){ flat[prefix]= ''; return; }
+    if(Array.isArray(obj)){
+      if(obj.length===0){ flat[prefix]=''; return; }
+      if(obj.every(v=>typeof v!=='object'||v===null)){
+        flat[prefix]=obj.join('; '); return;
+      }
+      obj.forEach((v,i)=>flatten(v,prefix+sep+i,flat,sep));
+      return;
+    }
+    if(typeof obj==='object'){
+      const keys=Object.keys(obj);
+      if(keys.length===0){ flat[prefix]=''; return; }
+      keys.forEach(k=>flatten(obj[k],prefix?prefix+sep+k:prefix+k,flat,sep));
+      return;
+    }
+    flat[prefix]=obj;
+  }
+
+  function csvCell(v){
+    if(v===null||v===undefined) v='';
+    v=String(v);
+    if(/[",\n\r]/.test(v)) v='"'+v.replace(/"/g,'""')+'"';
+    return v;
+  }
+
+  function convert(){
+    let data=JSON.parse(inp.value);
+    if(!Array.isArray(data)) data=[data];
+    const sep='.';
+    const flat=$('flat').checked;
+    const rows=[];
+    data.forEach(item=>{
+      const obj={};
+      if(flat) flatten(item,'',obj,sep);
+      else if(item && typeof item==='object') Object.assign(obj,item);
+      else obj['value']=item;
+      rows.push(obj);
+    });
+    // collect headers preserving order
+    const headers=[];
+    rows.forEach(r=>Object.keys(r).forEach(k=>{ if(!headers.includes(k)) headers.push(k); }));
+    let csv=csvCell(headers.join(','))+'\n';
+    csv=headers.join(',')+'\n';
+    rows.forEach(r=>{ csv+=headers.map(h=>csvCell(r[h])).join(',')+'\n'; });
+    return csv.trim();
+  }
+
+  $('bConvert').onclick=()=>{
+    if(!inp.value.trim()){setStatus('请输入 JSON','err');return;}
+    try{
+      out.value=convert();
+      setStatus('✓ 已转换 · 共 '+(out.value.split('\n').length)+' 行','ok');
+    }catch(e){ setStatus('✗ 转换失败：'+e.message,'err'); }
+  };
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ inp.value=''; out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

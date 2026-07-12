@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base58 / Base32 编解码 · Base58 / Base32</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:300px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔣 Base58 / Base32 编解码</h1>
+    <div class="sub">比特币风格 Base58 + RFC 4648 Base32 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="b58e">Base58 编码</button>
+    <button id="b58d">Base58 解码</button>
+    <button id="b32e">Base32 编码</button>
+    <button id="b32d">Base32 解码</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="in" spellcheck="false" placeholder="文本或编码字符串…"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="结果将显示在这里…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:false});
+
+  const B58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  function b58encode(bytes){
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+    const digits=[];
+    for(let i=zeros;i<bytes.length;i++){
+      let carry=bytes[i];
+      for(let j=0;j<digits.length;j++){ carry+=digits[j]<<8; digits[j]=carry%58; carry=Math.floor(carry/58); }
+      while(carry>0){ digits.push(carry%58); carry=Math.floor(carry/58); }
+    }
+    let r='1'.repeat(zeros);
+    for(let i=digits.length-1;i>=0;i--) r+=B58[digits[i]];
+    return r;
+  }
+  function b58decode(str){
+    let zeros=0; while(zeros<str.length && str[zeros]==='1') zeros++;
+    const bytes=[];
+    for(let i=zeros;i<str.length;i++){
+      const v=B58.indexOf(str[i]); if(v<0) throw new Error('非法 Base58 字符: '+str[i]);
+      let carry=v;
+      for(let j=0;j<bytes.length;j++){ carry+=bytes[j]*58; bytes[j]=carry&0xff; carry=Math.floor(carry/256); }
+      while(carry>0){ bytes.push(carry&0xff); carry=Math.floor(carry/256); }
+    }
+    const out=new Uint8Array(zeros+bytes.length);
+    for(let i=0;i<bytes.length;i++) out[zeros+i]=bytes[bytes.length-1-i];
+    return out;
+  }
+
+  const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  function b32encode(bytes){
+    let bits=0,value=0,r='';
+    for(let i=0;i<bytes.length;i++){ value=(value<<8)|bytes[i]; bits+=8;
+      while(bits>=5){ r+=B32[(value>>>(bits-5))&31]; bits-=5; } }
+    if(bits>0) r+=B32[(value<<(5-bits))&31];
+    while(r.length%8) r+='=';
+    return r;
+  }
+  function b32decode(str){
+    str=str.replace(/=+$/,'').replace(/\s/g,'').toUpperCase();
+    let bits=0,value=0; const out=[];
+    for(const ch of str){
+      const v=B32.indexOf(ch); if(v<0) throw new Error('非法 Base32 字符: '+ch);
+      value=(value<<5)|v; bits+=5;
+      if(bits>=8){ out.push((value>>>(bits-8))&0xff); bits-=8; }
+    }
+    return new Uint8Array(out);
+  }
+
+  const encText=()=>enc.encode(inp.value);
+  $('b58e').onclick=()=>{ if(!inp.value){setStatus('请输入文本','err');return;}
+    try{ out.value=b58encode(encText()); setStatus('✓ Base58 编码完成','ok'); }catch(e){ setStatus('✗ '+e.message,'err'); } };
+  $('b58d').onclick=()=>{ if(!inp.value.trim()){setStatus('请输入 Base58','err');return;}
+    try{ out.value=dec.decode(b58decode(inp.value.trim())); setStatus('✓ Base58 解码完成','ok'); }catch(e){ setStatus('✗ '+e.message,'err'); } };
+  $('b32e').onclick=()=>{ if(!inp.value){setStatus('请输入文本','err');return;}
+    try{ out.value=b32encode(encText()); setStatus('✓ Base32 编码完成','ok'); }catch(e){ setStatus('✗ '+e.message,'err'); } };
+  $('b32d').onclick=()=>{ if(!inp.value.trim()){setStatus('请输入 Base32','err');return;}
+    try{ out.value=dec.decode(b32decode(inp.value.trim())); setStatus('✓ Base32 解码完成','ok'); }catch(e){ setStatus('✗ '+e.message,'err'); } };
+  $('bClear').onclick=()=>{ inp.value=''; out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

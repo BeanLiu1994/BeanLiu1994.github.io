@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown 转 HTML · Markdown to HTML</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:320px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📝 Markdown 转 HTML</h1>
+    <div class="sub">轻量解析 · 纯本地运行 · 数据不上传</div>
+  </div>
+  <div class="toolbar">
+    <button id="bConvert" class="primary">转换 →</button>
+    <button id="bCopy">复制 HTML</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">Markdown 输入</div>
+    <textarea id="in" spellcheck="false" placeholder="在此输入 Markdown…&#10;&#10;# 标题&#10;**加粗** 与 *斜体* 和 `代码`&#10;&#10;- 列表项&#10;- 列表项&#10;&#10;> 引用&#10;&#10;```js&#10;console.log('hi')&#10;```"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">HTML 输出</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="转换后的 HTML 将显示在这里…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  function inline(text){
+    // escape first
+    let s=esc(text);
+    // code spans
+    s=s.replace(/`([^`]+)`/g,(m,c)=>'<code>'+c+'</code>');
+    // bold
+    s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    s=s.replace(/__([^_]+)__/g,'<strong>$1</strong>');
+    // italic
+    s=s.replace(/\*([^*]+)\*/g,'<em>$1</em>');
+    s=s.replace(/_([^_]+)_/g,'<em>$1</em>');
+    // links [text](url)
+    s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>');
+    return s;
+  }
+
+  function parse(md){
+    const lines=md.replace(/\r\n/g,'\n').split('\n');
+    let html='';
+    let i=0;
+    let listType=null, listBuf=[];
+
+    function flushList(){
+      if(listType){
+        html+='<'+listType+'>\n'+listBuf.join('\n')+'\n</'+listType+'>\n';
+        listType=null; listBuf=[];
+      }
+    }
+
+    while(i<lines.length){
+      let line=lines[i];
+
+      // fenced code block
+      const fence=line.match(/^```(\w*)\s*$/);
+      if(fence){
+        let buf=[]; i++;
+        while(i<lines.length && !/^```\s*$/.test(lines[i])){ buf.push(lines[i]); i++; }
+        i++; // skip closing fence
+        html+='<pre><code>'+esc(buf.join('\n'))+'</code></pre>\n';
+        continue;
+      }
+
+      // headings
+      const h=line.match(/^(#{1,6})\s+(.*)$/);
+      if(h){ flushList(); const lvl=h[1].length; html+='<h'+lvl+'>'+inline(h[2])+'</h'+lvl+'>\n'; i++; continue; }
+
+      // hr
+      if(/^(\s*[-*_]){3,}\s*$/.test(line) && !/^\s*[-*]\s+/.test(line)){
+        flushList(); html+='<hr>\n'; i++; continue;
+      }
+
+      // blockquote
+      const bq=line.match(/^>\s?(.*)$/);
+      if(bq){
+        flushList();
+        let buf=[bq[1]];
+        i++;
+        while(i<lines.length && /^>\s?(.*)$/.test(lines[i])){ buf.push(lines[i].match(/^>\s?(.*)$/)[1]); i++; }
+        html+='<blockquote>\n'+buf.map(inline).join('<br>\n')+'\n</blockquote>\n';
+        continue;
+      }
+
+      // unordered list
+      const ul=line.match(/^\s*[-*+]\s+(.*)$/);
+      if(ul){ if(listType!=='ul'){flushList();listType='ul';} listBuf.push('<li>'+inline(ul[1])+'</li>'); i++; continue; }
+
+      // ordered list
+      const ol=line.match(/^\s*\d+\.\s+(.*)$/);
+      if(ol){ if(listType!=='ol'){flushList();listType='ol';} listBuf.push('<li>'+inline(ol[1])+'</li>'); i++; continue; }
+
+      // blank line
+      if(/^\s*$/.test(line)){ flushList(); i++; continue; }
+
+      // paragraph (collect consecutive non-empty, non-special lines)
+      flushList();
+      let buf=[line]; i++;
+      while(i<lines.length && !/^\s*$/.test(lines[i]) &&
+            !/^(#{1,6}\s)/.test(lines[i]) && !/^```/.test(lines[i]) &&
+            !/^>\s?/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i]) &&
+            !/^\s*\d+\.\s+/.test(lines[i])){
+        buf.push(lines[i]); i++;
+      }
+      html+='<p>'+buf.map(inline).join('<br>\n')+'</p>\n';
+    }
+    flushList();
+    return html.trim();
+  }
+
+  $('bConvert').onclick=()=>{
+    if(!inp.value.trim()){setStatus('请输入 Markdown','err');return;}
+    try{
+      out.value=parse(inp.value);
+      setStatus('✓ 已转换 · 输出 '+out.value.length+' 字符','ok');
+    }catch(e){ setStatus('✗ 转换失败：'+e.message,'err'); }
+  };
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ inp.value=''; out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

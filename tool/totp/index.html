@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOTP 动态验证码 · TOTP Authenticator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap;align-items:flex-start}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:12px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text],input[type=number]{background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 12px;font-size:13px;outline:none;width:100%}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row .field{flex:1;min-width:120px}
+  .code-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;text-align:center}
+  .code{font-size:40px;letter-spacing:6px;font-family:"SF Mono",Consolas,monospace;color:var(--accent);font-weight:700}
+  .meta{color:var(--muted);font-size:13px;margin-top:6px}
+  .bar{height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:14px}
+  .bar > i{display:block;height:100%;background:var(--accent);transition:width .25s linear}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔑 TOTP 动态验证码</h1>
+    <div class="sub">RFC 6238 · HMAC-SHA1 · 纯本地生成</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制验证码</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="field">
+      <label>Base32 密钥 Secret</label>
+      <input type="text" id="secret" placeholder="例如 JBSWY3DPEHPK3PXP" spellcheck="false">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>时间步长 Step (秒)</label>
+        <input type="number" id="step" value="30" min="1" max="120">
+      </div>
+      <div class="field">
+        <label>位数 Digits</label>
+        <input type="number" id="digits" value="6" min="6" max="8">
+      </div>
+    </div>
+    <div class="hint">支持 Google Authenticator / GitHub / 各类 2FA 的 Base32 密钥。数据仅在本地计算，不上传。</div>
+  </section>
+  <section class="pane">
+    <div class="code-box">
+      <div class="code" id="code">------</div>
+      <div class="meta" id="meta">输入密钥后自动生成</div>
+      <div class="bar"><i id="bar" style="width:100%"></i></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">等待输入密钥…</div>
+<script>
+(async function(){
+  const $=id=>document.getElementById(id);
+  const secretEl=$('secret'),stepEl=$('step'),digitsEl=$('digits'),
+        codeEl=$('code'),metaEl=$('meta'),barEl=$('bar'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+
+  const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  function b32decode(str){
+    str=str.replace(/[\s]/g,'').toUpperCase().replace(/=+$/,'');
+    let bits=0,value=0; const out=[];
+    for(const ch of str){
+      const v=B32.indexOf(ch); if(v<0) throw new Error('非法 Base32 字符: '+ch);
+      value=(value<<5)|v; bits+=5;
+      if(bits>=8){ out.push((value>>>(bits-8))&0xff); bits-=8; }
+    }
+    return new Uint8Array(out);
+  }
+
+  async function hotp(keyBytes,counter,digits){
+    const buf=new ArrayBuffer(8); const dv=new DataView(buf);
+    dv.setUint32(0,Math.floor(counter/0x100000000));
+    dv.setUint32(4,counter>>>0);
+    const sig=await crypto.subtle.sign({name:'HMAC',hash:'SHA-1'},
+      await crypto.subtle.importKey('raw',keyBytes,{name:'HMAC'},false,['sign']),buf);
+    const b=new Uint8Array(sig);
+    const off=b[19]&0x0f;
+    const code=((b[off]&0x7f)<<24)|((b[off+1]&0xff)<<16)|((b[off+2]&0xff)<<8)|(b[off+3]&0xff);
+    return (code%Math.pow(10,digits)).toString().padStart(digits,'0');
+  }
+
+  let timer=null;
+  async function update(){
+    const sec=secretEl.value.trim();
+    if(!sec){ codeEl.textContent='------'; metaEl.textContent='输入密钥后自动生成'; barEl.style.width='100%'; return; }
+    try{
+      const key=b32decode(sec);
+      const step=Math.max(1,parseInt(stepEl.value)||30);
+      const digits=Math.min(8,Math.max(6,parseInt(digitsEl.value)||6));
+      const t=Math.floor(Date.now()/1000);
+      const counter=Math.floor(t/step);
+      const code=await hotp(key,counter,digits);
+      codeEl.textContent=digits===6?code.slice(0,3)+' '+code.slice(3):code;
+      const remain=step-(t%step);
+      metaEl.textContent='剩余 '+remain+'s · 步长 '+step+'s';
+      barEl.style.width=(remain/step*100)+'%';
+      setStatus('✓ 已生成','ok');
+    }catch(e){ codeEl.textContent='------'; metaEl.textContent='密钥无效'; setStatus('✗ '+e.message,'err'); }
+  }
+
+  function schedule(){
+    if(timer) clearInterval(timer);
+    update();
+    timer=setInterval(update,1000);
+  }
+
+  secretEl.addEventListener('input',schedule);
+  stepEl.addEventListener('change',update);
+  digitsEl.addEventListener('change',update);
+  $('bCopy').onclick=async()=>{
+    const c=codeEl.textContent.replace(/\s/g,'');
+    if(c==='------'){setStatus('暂无可复制的验证码','err');return;}
+    try{ await navigator.clipboard.writeText(c); setStatus('✓ 已复制：'+c,'ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  schedule();
+})();
+</script>
+</body>
+</html>

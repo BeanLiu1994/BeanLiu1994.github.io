@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML 转 Markdown · HTML to Markdown</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:320px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌐 HTML 转 Markdown</h1>
+    <div class="sub">基于 DOM 解析 · 纯本地运行 · 数据不上传</div>
+  </div>
+  <div class="toolbar">
+    <button id="bConvert" class="primary">转换 →</button>
+    <button id="bCopy">复制 Markdown</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">HTML 输入</div>
+    <textarea id="in" spellcheck="false" placeholder="在此粘贴 HTML 片段…&#10;&#10;<h1>标题</h1>&#10;<p>段落 <strong>加粗</strong> 与 <a href=&quot;#&quot;>链接</a></p>"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head">Markdown 输出</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="转换后的 Markdown 将显示在这里…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+
+  function walk(node, lines){
+    node.childNodes.forEach(child=>{
+      if(child.nodeType===3){ // text
+        const t=child.textContent;
+        if(t.trim()) lines.push({type:'text',text:t});
+        return;
+      }
+      if(child.nodeType!==1) return;
+      const tag=child.tagName.toLowerCase();
+      switch(tag){
+        case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':{
+          const lvl=+tag[1]; const txt=child.textContent.trim();
+          lines.push({type:'h',lvl,text:txt}); break;
+        }
+        case 'p': case 'div':{
+          lines.push({type:'block',text:renderInline(child)}); break;
+        }
+        case 'br': lines.push({type:'br'}); break;
+        case 'hr': lines.push({type:'hr'}); break;
+        case 'blockquote':{
+          const inner=[]; walk(child,inner);
+          inner.forEach(l=>{
+            if(l.type==='text') lines.push({type:'text',text:'> '+l.text});
+            else if(l.type==='block') lines.push({type:'block',text:'> '+l.text});
+            else if(l.type==='h') lines.push({type:'h',lvl:l.lvl,text:'> '+l.text});
+            else lines.push(l);
+          });
+          break;
+        }
+        case 'ul': case 'ol':{
+          const ord=tag==='ol';
+          child.querySelectorAll(':scope > li').forEach((li,idx)=>{
+            const prefix=ord?(idx+1)+'. ':'- ';
+            lines.push({type:'li',prefix,text:renderInline(li)});
+          });
+          break;
+        }
+        case 'pre':{
+          const code=child.querySelector('code');
+          const txt=(code||child).textContent;
+          lines.push({type:'code',text:txt}); break;
+        }
+        case 'code':{
+          if(child.parentNode.tagName.toLowerCase()==='pre'){ /* handled by pre */ }
+          else lines.push({type:'text',text:'`'+child.textContent+'`'});
+          break;
+        }
+        case 'strong': case 'b': lines.push({type:'text',text:'**'+child.textContent+'**'}); break;
+        case 'em': case 'i': lines.push({type:'text',text:'*'+child.textContent+'*'}); break;
+        case 'a':{
+          const href=child.getAttribute('href')||'';
+          lines.push({type:'text',text:'['+child.textContent+']('+href+')'}); break;
+        }
+        case 'img':{
+          const src=child.getAttribute('src')||''; const alt=child.getAttribute('alt')||'';
+          lines.push({type:'text',text:'!['+alt+']('+src+')'}); break;
+        }
+        default: walk(child,lines);
+      }
+    });
+  }
+
+  function renderInline(node){
+    let s='';
+    node.childNodes.forEach(c=>{
+      if(c.nodeType===3){ s+=c.textContent; return; }
+      if(c.nodeType!==1) return;
+      const tag=c.tagName.toLowerCase();
+      if(tag==='strong'||tag==='b') s+='**'+c.textContent+'**';
+      else if(tag==='em'||tag==='i') s+='*'+c.textContent+'*';
+      else if(tag==='code') s+='`'+c.textContent+'`';
+      else if(tag==='a') s+='['+c.textContent+']('+(c.getAttribute('href')||'')+')';
+      else if(tag==='br') s+='\n';
+      else s+=renderInline(c);
+    });
+    return s;
+  }
+
+  function toMd(html){
+    const tpl=document.createElement('template');
+    tpl.innerHTML=html;
+    const lines=[];
+    walk(tpl.content,lines);
+    const out=[];
+    let prev=null;
+    for(const l of lines){
+      if(l.type==='h'){ out.push('\n'+'#'.repeat(l.lvl)+' '+l.text+'\n'); }
+      else if(l.type==='hr'){ out.push('\n---\n'); }
+      else if(l.type==='br'){ out.push('\n'); }
+      else if(l.type==='code'){ out.push('\n```\n'+l.text+'\n```\n'); }
+      else if(l.type==='li'){ out.push(l.prefix+l.text); }
+      else if(l.type==='block'){ out.push(l.text); }
+      else if(l.type==='text'){ out.push(l.text); }
+      prev=l.type;
+    }
+    return out.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  }
+
+  $('bConvert').onclick=()=>{
+    if(!inp.value.trim()){setStatus('请输入 HTML','err');return;}
+    try{
+      out.value=toMd(inp.value);
+      setStatus('✓ 已转换 · 输出 '+out.value.length+' 字符','ok');
+    }catch(e){ setStatus('✗ 转换失败：'+e.message,'err'); }
+  };
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ inp.value=''; out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

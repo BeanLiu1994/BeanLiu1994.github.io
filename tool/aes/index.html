@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AES 加密 / 解密 · AES Encrypt</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:12px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:240px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  input[type=password],input[type=text]{background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 12px;font-size:13px;outline:none;width:100%}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{color:var(--muted);font-size:13px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 AES 加密 / 解密</h1>
+    <div class="sub">AES-GCM 256 · PBKDF2 派生 · 浏览器本地加密</div>
+  </div>
+  <div class="toolbar">
+    <button id="bEncrypt" class="primary">加密 →</button>
+    <button id="bDecrypt">← 解密</button>
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入 Input</div>
+    <textarea id="in" spellcheck="false" placeholder="在此粘贴要加密的文本，或粘贴密文(base64)用于解密…"></textarea>
+    <div class="field">
+      <label>口令 Passphrase</label>
+      <input type="password" id="pass" placeholder="用于派生密钥的口令（仅本地使用）">
+    </div>
+  </section>
+  <section class="pane">
+    <div class="pane-head">结果 Output</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="结果将显示在这里…"></textarea>
+    <div class="hint">密文格式：base64( salt[16] + iv[12] + ciphertext )，解密需相同口令。</div>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(async function(){
+  const $=id=>document.getElementById(id);
+  const inp=$('in'),out=$('out'),st=$('st'),pass=$('pass');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const enc=new TextEncoder(),dec=new TextDecoder();
+  const subtle=crypto.subtle;
+
+  function b64(arr){ let s=''; const u=new Uint8Array(arr); for(let i=0;i<u.length;i++) s+=String.fromCharCode(u[i]); return btoa(s); }
+  function unb64(b){ const bin=atob(b); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+
+  async function deriveKey(passphrase,salt){
+    const keyMat=await subtle.importKey('raw',enc.encode(passphrase),'PBKDF2',false,['deriveKey']);
+    return subtle.deriveKey(
+      {name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},
+      keyMat,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  }
+
+  $('bEncrypt').onclick=async()=>{
+    if(!inp.value){setStatus('请输入明文','err');return;}
+    if(!pass.value){setStatus('请输入口令','err');return;}
+    try{
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const key=await deriveKey(pass.value,salt);
+      const ct=await subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(inp.value));
+      const merged=new Uint8Array(salt.length+iv.length+ct.byteLength);
+      merged.set(salt,0); merged.set(iv,16); merged.set(new Uint8Array(ct),28);
+      out.value=b64(merged);
+      setStatus('✓ 已加密 · '+out.value.length+' 字符','ok');
+    }catch(e){ setStatus('✗ 加密失败：'+e.message,'err'); }
+  };
+
+  $('bDecrypt').onclick=async()=>{
+    if(!inp.value.trim()){setStatus('请输入密文','err');return;}
+    if(!pass.value){setStatus('请输入口令','err');return;}
+    try{
+      const merged=unb64(inp.value.trim());
+      if(merged.length<29){setStatus('✗ 密文长度不足','err');return;}
+      const salt=merged.slice(0,16), iv=merged.slice(16,28), ct=merged.slice(28);
+      const key=await deriveKey(pass.value,salt);
+      const pt=await subtle.decrypt({name:'AES-GCM',iv},key,ct);
+      out.value=dec.decode(pt);
+      setStatus('✓ 已解密','ok');
+    }catch(e){ setStatus('✗ 解密失败：口令错误或密文损坏','err'); }
+  };
+
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ inp.value=''; out.value=''; pass.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

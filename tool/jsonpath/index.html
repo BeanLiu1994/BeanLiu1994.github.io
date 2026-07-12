@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSONPath 提取测试 · JSONPath Tester</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:10px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:300px;background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;resize:vertical;outline:none;padding:14px;
+    font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6}
+  input[type=text]{background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:14px;outline:none;width:100%;font-family:"SF Mono",monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔎 JSONPath 提取测试</h1>
+    <div class="sub">支持 .key [n] [a:b] .* ..key · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="bRun" class="primary">运行 ▶</button>
+    <button id="bCopy">复制结果</button>
+    <button id="bClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">JSON 数据</div>
+    <textarea id="json" spellcheck="false" placeholder='{&#10;  "store": {&#10;    "book": [&#10;      {"title":"A","price":8},&#10;      {"title":"B","price":12}&#10;    ]&#10;  }&#10;}'></textarea>
+    <div class="pane-head">路径 Path（如 $.store.book[*].title）</div>
+    <input type="text" id="path" value="$.store.book[0].title" spellcheck="false">
+  </section>
+  <section class="pane">
+    <div class="pane-head">匹配结果 Matches</div>
+    <textarea id="out" readonly spellcheck="false" placeholder="匹配到的值将以 JSON 显示…"></textarea>
+  </section>
+</main>
+<div class="status" id="st">等待输入…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const jsonEl=$('json'),pathEl=$('path'),out=$('out'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+
+  function parsePath(p){
+    if(p[0]!=='$') throw new Error('路径须以 $ 开头');
+    let i=1; const steps=[];
+    while(i<p.length){
+      const c=p[i];
+      if(c==='.'){
+        if(p[i+1]==='.'){ // recursive
+          i+=2;
+          if(p[i]==='*'){ steps.push({t:'rec',key:null}); i++; }
+          else { const m=p.slice(i).match(/^([A-Za-z_$][\w$]*|\*)/); if(!m) throw new Error('.. 后语法错误'); steps.push({t:'rec',key:m[1]==='*'?null:m[1]}); i+=m[1].length; }
+        } else {
+          i++;
+          if(p[i]==='*'){ steps.push({t:'wild'}); i++; }
+          else { const m=p.slice(i).match(/^([A-Za-z_$][\w$]*)/); if(!m) throw new Error('. 后须为键名'); steps.push({t:'key',name:m[1]}); i+=m[1].length; }
+        }
+      } else if(c==='['){
+        const end=p.indexOf(']',i); if(end<0) throw new Error('缺少 ]');
+        let inner=p.slice(i+1,end).trim();
+        if(inner.startsWith('"')||inner.startsWith("'")){
+          inner=inner.slice(1,-1); steps.push({t:'key',name:inner});
+        } else if(inner==='*'){
+          steps.push({t:'wild'});
+        } else if(inner.includes(':')){
+          const [a,b]=inner.split(':');
+          steps.push({t:'slice',start:a===''?null:+a,end:b===''?null:+b});
+        } else {
+          steps.push({t:'idx',i:+inner});
+        }
+        i=end+1;
+      } else { throw new Error('无法解析字符: '+c); }
+    }
+    return steps;
+  }
+
+  function collectAll(node,acc){
+    acc.push(node);
+    if(Array.isArray(node)) node.forEach(n=>collectAll(n,acc));
+    else if(node && typeof node==='object') Object.values(node).forEach(n=>collectAll(n,acc));
+  }
+
+  function evalStep(nodes,step){
+    const next=[];
+    for(const node of nodes){
+      if(step.t==='key'){
+        if(node && typeof node==='object'){ const v=node[step.name]; if(v!==undefined) next.push(v); }
+      } else if(step.t==='idx'){
+        if(Array.isArray(node)){ let k=step.i; if(k<0) k+=node.length; if(k>=0&&k<node.length) next.push(node[k]); }
+      } else if(step.t==='wild'){
+        if(Array.isArray(node)) next.push(...node);
+        else if(node && typeof node==='object') next.push(...Object.values(node));
+      } else if(step.t==='slice'){
+        if(Array.isArray(node)){
+          const len=node.length; let s=step.start==null?0:step.start<0?step.start+len:step.start;
+          let e=step.end==null?len:step.end<0?step.end+len:step.end;
+          s=Math.max(0,s); e=Math.min(len,e); for(let k=s;k<e;k++) next.push(node[k]);
+        }
+      } else if(step.t==='rec'){
+        const all=[]; collectAll(node,all);
+        if(step.key===null){ all.forEach(n=>next.push(n)); }
+        else { all.forEach(n=>{ if(n && typeof n==='object' && n[step.key]!==undefined) next.push(n[step.key]); }); }
+      }
+    }
+    return next;
+  }
+
+  function run(){
+    let data;
+    try{ data=JSON.parse(jsonEl.value); }catch(e){ setStatus('✗ JSON 解析失败：'+e.message,'err'); return; }
+    let steps;
+    try{ steps=parsePath(pathEl.value.trim()); }catch(e){ setStatus('✗ 路径错误：'+e.message,'err'); return; }
+    let nodes=[data];
+    for(const s of steps) nodes=evalStep(nodes,s);
+    if(nodes.length===1){ out.value=JSON.stringify(nodes[0],null,2); }
+    else { out.value=JSON.stringify(nodes,null,2); }
+    setStatus('✓ 匹配到 '+nodes.length+' 个结果','ok');
+  }
+
+  $('bRun').onclick=run;
+  pathEl.addEventListener('keydown',e=>{ if(e.key==='Enter') run(); });
+  $('bCopy').onclick=async()=>{
+    if(!out.value){setStatus('没有可复制的内容','err');return;}
+    try{ await navigator.clipboard.writeText(out.value); setStatus('✓ 已复制','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ jsonEl.value=''; out.value=''; setStatus('已清空'); };
+})();
+</script>
+</body>
+</html>

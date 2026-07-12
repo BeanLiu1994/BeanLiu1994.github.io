@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>色盲模拟器 · Color Blindness Simulator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap;align-items:flex-start}
+  .pane{flex:1;min-width:280px;display:flex;flex-direction:column;gap:12px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text]{background:var(--panel);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:11px 13px;font-size:14px;outline:none;width:100%}
+  input[type=color]{width:100%;height:42px;background:var(--panel);border:1px solid var(--border);border-radius:8px;cursor:pointer;padding:4px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .swatch{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel)}
+  .swatch .chip{height:90px;display:flex;align-items:flex-end;justify-content:flex-start;padding:8px}
+  .swatch .hex{font-family:"SF Mono",Consolas,monospace;font-size:12px;background:var(--bg);padding:7px 10px;display:flex;justify-content:space-between;align-items:center}
+  .swatch .hex button{padding:3px 8px;font-size:11px}
+  .swatch .name{padding:6px 10px;color:var(--muted);font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎨 色盲模拟器</h1>
+    <div class="sub">模拟三类色觉缺陷 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopyAll">复制全部</button>
+    <button id="bReset">重置</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head">输入颜色</div>
+    <input type="color" id="picker" value="#4f9cff">
+    <input type="text" id="hex" value="#4f9cff" spellcheck="false" style="font-family:monospace">
+    <div class="hint">输入十六进制颜色或用取色器选择，右侧实时模拟红绿蓝三类色盲视角。</div>
+  </section>
+  <section class="pane">
+    <div class="pane-head">模拟结果</div>
+    <div class="grid" id="grid"></div>
+  </section>
+</main>
+<div class="status" id="st">请输入颜色…</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const picker=$('picker'),hexEl=$('hex'),grid=$('grid'),st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+
+  const MAT={
+    '正常':[[1,0,0],[0,1,0],[0,0,1]],
+    '红色盲 (Protanopia)':[[0.567,0.433,0],[0.558,0.442,0],[0,0.242,0.758]],
+    '绿色盲 (Deuteranopia)':[[0.625,0.375,0],[0.7,0.3,0],[0,0.3,0.7]],
+    '蓝色盲 (Tritanopia)':[[0.95,0.05,0],[0,0.433,0.567],[0,0.475,0.525]]
+  };
+  function clamp(x){return Math.max(0,Math.min(255,Math.round(x)));}
+  function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
+    return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+  function rgbToHex(r,g,b){return '#'+[r,g,b].map(v=>clamp(v).toString(16).padStart(2,'0')).join('');}
+  function apply(rgb,m){
+    return rgbToHex(
+      m[0][0]*rgb[0]+m[0][1]*rgb[1]+m[0][2]*rgb[2],
+      m[1][0]*rgb[0]+m[1][1]*rgb[1]+m[1][2]*rgb[2],
+      m[2][0]*rgb[0]+m[2][1]*rgb[1]+m[2][2]*rgb[2]);
+  }
+  function luminance(hex){
+    const [r,g,b]=hexToRgb(hex).map(v=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);});
+    return 0.2126*r+0.7152*g+0.0722*b;
+  }
+  function textColor(hex){return luminance(hex)>0.179?'#000':'#fff';}
+
+  function render(){
+    const h=hexEl.value.trim();
+    if(!/^#?[0-9a-fA-F]{6}$/.test(h)&&!/^#?[0-9a-fA-F]{3}$/.test(h)){ setStatus('✗ 颜色格式无效','err'); return; }
+    const full='#'+h.replace('#','');
+    const rgb=hexToRgb(full);
+    if(/^#?[0-9a-fA-F]{6}$/.test(full)) picker.value=full;
+    let html='';
+    for(const name in MAT){
+      const out=apply(rgb,MAT[name]);
+      html+='<div class="swatch"><div class="chip" style="background:'+out+';color:'+textColor(out)+'">'+name+'</div>'+
+            '<div class="hex"><span>'+out.toUpperCase()+'</span><button data-c="'+out+'">复制</button></div>'+
+            '<div class="name">'+(name==='正常'?'原始颜色':name)+'</div></div>';
+    }
+    grid.innerHTML=html;
+    setStatus('✓ 已模拟 4 种视角','ok');
+  }
+
+  hexEl.addEventListener('input',render);
+  picker.addEventListener('input',()=>{hexEl.value=picker.value;render();});
+  $('bCopyAll').onclick=async()=>{
+    const codes=[...grid.querySelectorAll('.hex span')].map(s=>s.textContent).join('\n');
+    try{ await navigator.clipboard.writeText(codes); setStatus('✓ 已复制全部色值','ok'); }
+    catch(e){ setStatus('复制失败：'+e.message,'err'); }
+  };
+  grid.addEventListener('click',e=>{ if(e.target.dataset.c){ navigator.clipboard.writeText(e.target.dataset.c); setStatus('✓ 复制 '+e.target.dataset.c,'ok'); } });
+  $('bReset').onclick=()=>{ hexEl.value='#4f9cff'; picker.value='#4f9cff'; render(); };
+  render();
+})();
+</script>
+</body>
+</html>
