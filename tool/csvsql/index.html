@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>表格 / CSV → SQL 生成器 · CSV to SQL</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea,pre{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;width:100%}
+  textarea{min-height:170px;resize:vertical}
+  pre{overflow:auto;white-space:pre-wrap;margin:0}
+  label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🗄️ 表格 / CSV → SQL 生成器</h1>
+    <div class="sub">把 CSV 或制表符表格转为 CREATE TABLE + INSERT · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="sample">示例</button>
+    <button id="copy" class="primary">复制 SQL</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入</h2>
+    <div class="row">
+      <label>表名<input id="tbl" value="users"></label>
+      <label>分隔符
+        <select id="sep"><option value=",">逗号 ,</option><option value="\t">制表符 Tab</option><option value=";">分号 ;</option></select>
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="detect" checked style="width:auto"> 自动检测类型</label>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="genCreate" checked style="width:auto"> 生成 CREATE TABLE</label>
+    </div>
+    <p class="hint">首行作为列名。单元格可用双引号包裹以包含分隔符。</p>
+    <textarea id="src" placeholder="id,name,age,active&#10;1,Tom,20,true&#10;2,Jerry,18,false"></textarea>
+  </section>
+  <section class="card">
+    <h2>生成的 SQL</h2>
+    <pre id="out"></pre>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(m,cls){const s=$('st');s.textContent=m;s.className='status '+(cls||'');}
+function parseCSV(text,sep){
+  const rows=[]; let row=[], field='', i=0, inQ=false;
+  sep = sep==='\\t' ? '\t' : sep;
+  while(i<text.length){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inQ=false;i++;continue; }
+      field+=c; i++; continue;
+    }
+    if(c==='"'){ inQ=true; i++; continue; }
+    if(c===sep){ row.push(field); field=''; i++; continue; }
+    if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    field+=c; i++;
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function ident(name){
+  let s=name.trim().replace(/[^A-Za-z0-9_]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  if(!s) s='col';
+  if(/^[0-9]/.test(s)) s='col_'+s;
+  return s;
+}
+function sqlType(val,detect){
+  if(!detect) return 'TEXT';
+  const t=val.trim();
+  if(t==='') return 'TEXT';
+  if(/^-?\d+$/.test(t)) return 'INTEGER';
+  if(/^-?\d*\.\d+$/.test(t)) return 'REAL';
+  if(/^(true|false)$/i.test(t)) return 'BOOLEAN';
+  return 'TEXT';
+}
+function render(){
+  const text=$('src').value;
+  const rows=parseCSV(text,$('sep').value);
+  if(rows.length<1){ $('out').textContent=''; setStatus('请输入数据','err'); return; }
+  const header=rows[0].map(ident);
+  const detect=$('detect').checked;
+  const types=header.map(()=>new Set());
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r];
+    for(let c=0;c<header.length;c++){
+      const v=(row[c]!==undefined)?row[c]:'';
+      types[c].add(sqlType(v,detect));
+    }
+  }
+  const colType=header.map((h,c)=>{ const ts=[...types[c]]; return ts.length===1?ts[0]:'TEXT'; });
+  let sql='';
+  if($('genCreate').checked){
+    sql+=`CREATE TABLE "${$('tbl').value}" (\n`;
+    sql+=header.map((h,c)=>`  "${h}" ${colType[c]}`).join(",\n");
+    sql+="\n);\n\n";
+  }
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r];
+    const vals=header.map((h,c)=>{
+      const v=(row[c]!==undefined)?row[c]:'';
+      const t=colType[c];
+      if(v.trim()===''||t==='TEXT'||t==='BOOLEAN') return `'${v.replace(/'/g,"''")}'`;
+      return v;
+    });
+    sql+=`INSERT INTO "${$('tbl').value}" (${header.map(h=>'"'+h+'"').join(', ')}) VALUES (${vals.join(', ')});\n`;
+  }
+  $('out').textContent=sql;
+  setStatus('已生成 '+Math.max(0,rows.length-1)+' 条 INSERT','ok');
+}
+['src','tbl','sep','detect','genCreate'].forEach(id=>$(id).addEventListener('input',render));
+$('sample').addEventListener('click',()=>{ $('src').value='id,name,age,active,score\n1,Tom,20,true,95.5\n2,Jerry,18,false,88\n3,"Smith, John",25,true,91.2'; render(); });
+$('copy').addEventListener('click',()=>navigator.clipboard.writeText($('out').textContent).then(()=>setStatus('已复制 SQL','ok')));
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>桌游骰子 · Dice Roller</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:5px}
+  select,input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  input[type=number]{width:90px}
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .presets button{font-size:12px;padding:5px 10px}
+  .dice-area{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .die{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#1f2a3a,#243349);
+    border:1px solid #2f3e54;display:flex;align-items:center;justify-content:center;
+    font-size:24px;font-weight:700;color:#cfe0ff;animation:pop .25s ease}
+  @keyframes pop{from{transform:scale(.7);opacity:.4}to{transform:scale(1);opacity:1}}
+  .sum{font-size:15px;margin-top:12px;color:var(--text)}
+  .sum b{color:var(--accent);font-size:20px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎲 桌游骰子</h1>
+    <div class="sub">RPG 多面骰投掷 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="roll" class="primary">🎲 投掷</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>设置</h2>
+    <div class="row">
+      <label>骰面
+        <select id="faces">
+          <option value="4">d4</option>
+          <option value="6" selected>d6</option>
+          <option value="8">d8</option>
+          <option value="10">d10</option>
+          <option value="12">d12</option>
+          <option value="20">d20</option>
+          <option value="100">d100</option>
+        </select>
+      </label>
+      <label>数量<input type="number" id="count" value="2" min="1" max="20"></label>
+    </div>
+    <div class="presets">
+      <button data-f="20" data-c="1">1d20</button>
+      <button data-f="6" data-c="2">2d6</button>
+      <button data-f="6" data-c="3">3d6</button>
+      <button data-f="10" data-c="1">1d10</button>
+      <button data-f="100" data-c="1">1d100</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>结果</h2>
+    <div class="dice-area" id="area"><span class="hint">点击「投掷」开始</span></div>
+    <div class="sum" id="sum"></div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+const $=id=>document.getElementById(id);
+function roll(){
+  const faces=parseInt($('faces').value);
+  const count=Math.max(1,Math.min(20,parseInt($('count').value)||1));
+  const area=$('area'); area.innerHTML='';
+  let total=0, vals=[];
+  for(let i=0;i<count;i++){
+    const v=Math.floor(Math.random()*faces)+1;
+    total+=v; vals.push(v);
+    const d=document.createElement('div'); d.className='die'; d.textContent=v; area.appendChild(d);
+  }
+  const stats=`总和 <b>${total}</b> · 最小 ${Math.min(...vals)} · 最大 ${Math.max(...vals)} · 平均 ${(total/count).toFixed(2)}`;
+  $('sum').innerHTML=stats;
+  const s=$('st'); s.textContent=`投掷 ${count}d${faces} 完成`; s.className='status ok';
+}
+$('roll').addEventListener('click',roll);
+document.querySelectorAll('.presets button').forEach(b=>{
+  b.addEventListener('click',()=>{ $('faces').value=b.dataset.f; $('count').value=b.dataset.c; roll(); });
+});
+</script>
+</body>
+</html>

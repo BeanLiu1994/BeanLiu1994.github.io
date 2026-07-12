@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSS Grid 生成器 · CSS Grid Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:5px}
+  input,select,textarea{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  input[type=number]{width:96px}
+  .grid-preview{display:grid;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:120px}
+  .cell{background:linear-gradient(135deg,#1f2a3a,#243349);border:1px solid #2f3e54;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;font-size:13px;color:#cfe0ff;min-height:48px}
+  pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;
+    font-family:"SF Mono",Consolas,Monaco,monospace;font-size:12.5px;margin:0;white-space:pre-wrap}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📐 CSS Grid 生成器</h1>
+    <div class="sub">可视化生成 grid 布局代码 · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="copy" class="primary">复制 CSS</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>参数 Controls</h2>
+    <div class="row">
+      <label>列数<input type="number" id="cols" value="3" min="1" max="12"></label>
+      <label>行数<input type="number" id="rows" value="2" min="1" max="12"></label>
+      <label>列间距(px)<input type="number" id="cgap" value="10" min="0" max="80"></label>
+      <label>行间距(px)<input type="number" id="rgap" value="10" min="0" max="80"></label>
+      <label>轨道尺寸
+        <select id="track">
+          <option value="1fr">1fr（等宽）</option>
+          <option value="auto">auto</option>
+          <option value="100px">100px</option>
+          <option value="minmax(80px,1fr)">minmax(80px,1fr)</option>
+        </select>
+      </label>
+    </div>
+  </section>
+  <section class="card">
+    <h2>预览 Preview</h2>
+    <div class="grid-preview" id="preview"></div>
+  </section>
+  <section class="card">
+    <h2>代码 CSS</h2>
+    <pre id="out"></pre>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(m,cls){const s=$('st');s.textContent=m;s.className='status '+(cls||'');}
+function render(){
+  const cols=Math.max(1,Math.min(12,parseInt($('cols').value)||1));
+  const rows=Math.max(1,Math.min(12,parseInt($('rows').value)||1));
+  const cgap=Math.max(0,parseInt($('cgap').value)||0);
+  const rgap=Math.max(0,parseInt($('rgap').value)||0);
+  const track=$('track').value;
+  const rowTrack=track==='auto'?'auto':track;
+  const preview=$('preview');
+  preview.style.gridTemplateColumns=`repeat(${cols}, ${track})`;
+  preview.style.gridTemplateRows=`repeat(${rows}, ${rowTrack})`;
+  preview.style.gap=`${rgap}px ${cgap}px`;
+  preview.innerHTML='';
+  for(let i=1;i<=cols*rows;i++){const d=document.createElement('div');d.className='cell';d.textContent='· '+i;preview.appendChild(d);}
+  const css=`.grid {\n  display: grid;\n  grid-template-columns: repeat(${cols}, ${track});\n  grid-template-rows: repeat(${rows}, ${rowTrack});\n  gap: ${rgap}px ${cgap}px;\n}`;
+  $('out').textContent=css;
+}
+['cols','rows','cgap','rgap','track'].forEach(id=>$(id).addEventListener('input',render));
+$('copy').addEventListener('click',()=>{
+  navigator.clipboard.writeText($('out').textContent).then(()=>setStatus('已复制 CSS 到剪贴板','ok'));
+});
+render();
+</script>
+</body>
+</html>

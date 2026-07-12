@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Schema 生成器 · JSON Schema Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea,pre{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;width:100%}
+  textarea{min-height:200px;resize:vertical}
+  pre{overflow:auto;white-space:pre-wrap;margin:0}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧬 JSON Schema 生成器</h1>
+    <div class="sub">从示例 JSON 推断 JSON Schema (draft-07) · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="sample">示例</button>
+    <button id="copy" class="primary">复制 Schema</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入 JSON</h2>
+    <p class="hint">粘贴一段 JSON 示例，工具会推断类型并生成 Schema。</p>
+    <textarea id="src" placeholder='{"name":"Tom","age":20,"tags":["a","b"],"addr":{"city":"BJ"}}'></textarea>
+  </section>
+  <section class="card">
+    <h2>生成的 Schema</h2>
+    <pre id="out"></pre>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(m,cls){const s=$('st');s.textContent=m;s.className='status '+(cls||'');}
+function infer(v){
+  if(v===null) return {type:'null'};
+  if(Array.isArray(v)){
+    if(v.length===0) return {type:'array'};
+    let acc=null;
+    for(const it of v){ const s=infer(it); acc=acc?merge(acc,s):s; }
+    return {type:'array', items:acc};
+  }
+  if(typeof v==='object'){
+    const props={}, required=[];
+    for(const k of Object.keys(v)){ props[k]=infer(v[k]); required.push(k); }
+    const o={type:'object', properties:props};
+    if(required.length) o.required=required;
+    return o;
+  }
+  if(typeof v==='string') return {type:'string'};
+  if(typeof v==='boolean') return {type:'boolean'};
+  if(typeof v==='number') return Number.isInteger(v)?{type:'integer'}:{type:'number'};
+  return {};
+}
+function merge(a,b){
+  if(!a) return b; if(!b) return a;
+  if(a.type!==b.type){
+    const t=new Set([].concat(a.type||[]).concat(b.type||[]));
+    const r={type:[...t]};
+    if(a.description) r.description=a.description;
+    return r;
+  }
+  if(a.type==='object'){
+    const props={...a.properties}, req=new Set(a.required||[]);
+    for(const k of Object.keys(b.properties||{})){ props[k]=props[k]?merge(props[k],b.properties[k]):b.properties[k]; req.add(k); }
+    const o={type:'object', properties:props};
+    const reqArr=[...req]; if(reqArr.length) o.required=reqArr;
+    return o;
+  }
+  if(a.type==='array'){ return {type:'array', items:merge(a.items,b.items)}; }
+  return a;
+}
+function render(){
+  const txt=$('src').value.trim();
+  if(!txt){ $('out').textContent=''; return; }
+  let data;
+  try{ data=JSON.parse(txt); }
+  catch(e){ setStatus('JSON 解析失败：'+e.message,'err'); $('out').textContent=''; return; }
+  const schema=Object.assign({'$schema':'http://json-schema.org/draft-07/schema#'}, infer(data));
+  $('out').textContent=JSON.stringify(schema,null,2);
+  setStatus('已生成 Schema','ok');
+}
+$('src').addEventListener('input',render);
+$('sample').addEventListener('click',()=>{ $('src').value='{\n  "id": 1,\n  "name": "Tom",\n  "active": true,\n  "score": 95.5,\n  "tags": ["a", "b"],\n  "address": { "city": "Beijing", "zip": "100000" },\n  "roles": [ { "name": "admin" }, { "name": "user" } ]\n}'; render(); });
+$('copy').addEventListener('click',()=>navigator.clipboard.writeText($('out').textContent).then(()=>setStatus('已复制 Schema','ok')));
+render();
+</script>
+</body>
+</html>

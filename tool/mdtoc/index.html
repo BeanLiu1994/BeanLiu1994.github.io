@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown 目录生成 · Markdown TOC</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea,pre{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;width:100%}
+  textarea{min-height:200px;resize:vertical}
+  pre{overflow:auto;white-space:pre-wrap;margin:0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📑 Markdown 目录生成</h1>
+    <div class="sub">从 Markdown 提取标题生成嵌套 TOC · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="copyMd">复制 Markdown</button>
+    <button id="copyHtml" class="primary">复制 HTML</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入 Markdown</h2>
+    <textarea id="src" placeholder="粘贴 Markdown 文本…"># 第一章 入门
+## 安装
+## 快速开始
+### 配置项
+# 第二章 进阶
+## 插件
+### 编写插件
+## 性能</textarea>
+  </section>
+  <section class="card">
+    <h2>Markdown TOC</h2>
+    <pre id="outMd"></pre>
+  </section>
+  <section class="card">
+    <h2>HTML TOC（嵌套）</h2>
+    <pre id="outHtml"></pre>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(m,cls){const s=$('st');s.textContent=m;s.className='status '+(cls||'');}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function slugify(text,used){
+  let s=text.trim().toLowerCase()
+    .replace(/[^\w一-龥\s-]/g,'')
+    .replace(/\s+/g,'-')
+    .replace(/-+/g,'-').replace(/^-|-$/g,'');
+  if(!s) s='section';
+  let base=s,i=1,out=s;
+  while(used.has(out)){ out=base+'-'+(i++); }
+  used.add(out);
+  return out;
+}
+function build(md){
+  const lines=md.split('\n');
+  let inFence=false; const heads=[]; const used=new Set();
+  for(const line of lines){
+    if(/^\s*```/.test(line)){ inFence=!inFence; continue; }
+    if(inFence) continue;
+    const m=line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if(m){ const level=m[1].length; const text=m[2].trim(); heads.push({level,text,slug:slugify(text,used)}); }
+  }
+  let mdOut='';
+  for(const h of heads){ mdOut+='  '.repeat(h.level-1)+`- [${h.text}](#${h.slug})\n`; }
+  let html='', prev=0;
+  for(const h of heads){
+    const lvl=h.level;
+    if(lvl>prev){ html+='<ul>\n'; }
+    else if(lvl<prev){ html+='</li>\n'; for(let k=prev;k>lvl;k--){ html+='</ul>\n</li>\n'; } }
+    else { html+='</li>\n'; }
+    html+=`  <li><a href="#${h.slug}">${escHtml(h.text)}</a>`;
+    prev=lvl;
+  }
+  html+='</li>\n';
+  for(let k=prev;k>=1;k--){ html+='</ul>\n'; }
+  return {md:mdOut, html};
+}
+function render(){
+  const {md,html}=build($('src').value);
+  $('outMd').textContent=md||'(未检测到标题)';
+  $('outHtml').textContent=html||'(未检测到标题)';
+}
+$('src').addEventListener('input',render);
+$('copyMd').addEventListener('click',()=>navigator.clipboard.writeText($('outMd').textContent).then(()=>setStatus('已复制 Markdown TOC','ok')));
+$('copyHtml').addEventListener('click',()=>navigator.clipboard.writeText($('outHtml').textContent).then(()=>setStatus('已复制 HTML TOC','ok')));
+render();
+</script>
+</body>
+</html>

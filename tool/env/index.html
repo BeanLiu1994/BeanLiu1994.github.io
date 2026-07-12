@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.env 配置解析器 · Env Parser</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea,pre{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;width:100%}
+  textarea{min-height:160px;resize:vertical}
+  pre{overflow:auto;white-space:pre-wrap;margin:0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:1px}
+  td.key{color:var(--accent);font-family:"SF Mono",Consolas,monospace;white-space:nowrap}
+  td.val{word-break:break-all;font-family:"SF Mono",Consolas,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⚙️ .env 配置解析器</h1>
+    <div class="sub">解析 / 转换 .env 配置为表格与 JSON · 纯本地运行</div>
+  </div>
+  <div class="toolbar">
+    <button id="sample">示例</button>
+    <button id="copyJson">复制 JSON</button>
+    <button id="copyEnv" class="primary">复制 .env</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入 .env</h2>
+    <p class="hint">支持 KEY=VALUE、引号包裹、export 前缀、# 注释。</p>
+    <textarea id="src" placeholder="DB_HOST=localhost&#10;DB_PORT=5432&#10;API_KEY=&quot;secret-123&quot;&#10;# 注释会被忽略&#10;export DEBUG=true"></textarea>
+  </section>
+  <section class="card">
+    <h2>解析结果</h2>
+    <table id="tbl"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody></tbody></table>
+  </section>
+  <section class="card">
+    <h2>JSON</h2>
+    <pre id="outJson"></pre>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(m,cls){const s=$('st');s.textContent=m;s.className='status '+(cls||'');}
+function parseEnv(text){
+  const out=[];
+  for(let line of text.split('\n')){
+    line=line.trim();
+    if(!line||line.startsWith('#')) continue;
+    const m=line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if(!m) continue;
+    let val=m[2];
+    if((val.startsWith('"')&&val.endsWith('"'))||(val.startsWith("'")&&val.endsWith("'"))){
+      val=val.slice(1,-1).replace(/\\n/g,'\n').replace(/\\t/g,'\t');
+    }
+    out.push({key:m[1],val});
+  }
+  return out;
+}
+function render(){
+  const data=parseEnv($('src').value);
+  const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+  const obj={};
+  for(const {key,val} of data){ obj[key]=val; const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="key">${key}</td><td class="val"></td>`; tr.querySelector('.val').textContent=val; tb.appendChild(tr); }
+  $('outJson').textContent=JSON.stringify(obj,null,2);
+  setStatus('已解析 '+data.length+' 个变量','ok');
+}
+$('src').addEventListener('input',render);
+$('sample').addEventListener('click',()=>{ $('src').value='DB_HOST=localhost\nDB_PORT=5432\nAPI_KEY="secret-123"\nDEBUG=true\n# 这是注释\nexport APP_NAME="My App"'; render(); });
+$('copyJson').addEventListener('click',()=>navigator.clipboard.writeText($('outJson').textContent).then(()=>setStatus('已复制 JSON','ok')));
+$('copyEnv').addEventListener('click',()=>{
+  const env=parseEnv($('src').value).map(d=>`${d.key}=${/[\s"']/.test(d.val)?'"'+d.val.replace(/"/g,'\\"')+'"':d.val}`).join('\n');
+  navigator.clipboard.writeText(env).then(()=>setStatus('已复制 .env','ok'));
+});
+render();
+</script>
+</body>
+</html>
