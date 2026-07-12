@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>温度换算 · Temperature</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:720px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .row:last-child{margin-bottom:0}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;font-family:inherit}
+  input:focus,select:focus{border-color:var(--accent)}
+  input[type=number]{flex:1;min-width:140px;font-family:"SF Mono",monospace}
+  select{min-width:150px}
+  .pane-head{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .table{display:grid;grid-template-columns:1fr auto;gap:8px 14px;margin-top:6px}
+  .table .u{color:var(--muted);font-size:13px}
+  .table .v{font-family:"SF Mono",monospace;font-size:13px;text-align:right;word-break:break-all}
+  .hint{color:var(--muted);font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header><div><h1>🌡️ 温度换算</h1><div class="sub">摄氏度 · 华氏度 · 开尔文 · 兰氏 · 列氏 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <div class="row">
+      <input type="number" id="val" value="0" step="any">
+      <select id="from">
+        <option value="C">摄氏度 °C</option>
+        <option value="F">华氏度 °F</option>
+        <option value="K">开尔文 K</option>
+        <option value="R">兰氏度 °R</option>
+        <option value="Re">列氏度 °Ré</option>
+      </select>
+    </div>
+    <p class="hint" style="margin:0">下方列出所有温度单位的对应值。</p>
+  </div>
+  <div class="card">
+    <div class="pane-head">全部换算</div>
+    <div class="table" id="all"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function toC(u,v){
+    if(u==='C') return v;
+    if(u==='F') return (v-32)*5/9;
+    if(u==='K') return v-273.15;
+    if(u==='R') return v*5/9-273.15;
+    if(u==='Re') return v*5/4;
+    return v;
+  }
+  function fromC(u,c){
+    if(u==='C') return c;
+    if(u==='F') return c*9/5+32;
+    if(u==='K') return c+273.15;
+    if(u==='R') return (c+273.15)*9/5;
+    if(u==='Re') return c*4/5;
+    return c;
+  }
+  const UNITS=[['C','摄氏度 °C'],['F','华氏度 °F'],['K','开尔文 K'],['R','兰氏度 °R'],['Re','列氏度 °Ré']];
+  function fmt(n){ if(!isFinite(n)) return '—';
+    if(n!==0 && (Math.abs(n)<1e-6||Math.abs(n)>=1e15)) return n.toExponential(6);
+    return (Math.round(n*1e6)/1e6).toString(); }
+  function convert(){
+    const v=parseFloat($('val').value);
+    if(isNaN(v)){ $('all').innerHTML=''; setStatus('请输入数值','err'); return; }
+    const c=toC($('from').value,v);
+    $('all').innerHTML=UNITS.map(([k,label])=>'<div class="u">'+label+'</div><div class="v">'+fmt(fromC(k,c))+'</div>').join('');
+    setStatus('✓ 已换算','ok');
+  }
+  $('val').addEventListener('input',convert);
+  $('from').addEventListener('change',convert);
+  convert();
+})();
+</script>
+</body>
+</html>

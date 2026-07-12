@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>斐波那契数列 · Fibonacci</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
+  input:focus{border-color:var(--accent)}
+  input[type=number]{font-family:"SF Mono",monospace}
+  #out{font-family:"SF Mono",monospace;font-size:13px;line-height:1.7;word-break:break-all;max-height:320px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+  .hint{color:var(--muted);font-size:12px;margin:12px 0 0}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:560px){ .grid2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header><div><h1>🌀 斐波那契数列</h1><div class="sub">大整数运算 · 不会溢出</div></div></header>
+<main>
+  <div class="card">
+    <div class="grid2">
+      <div><label>项数 n</label><input id="n" type="number" value="12" min="1" max="2000"></div>
+      <div><label>起始项 a, b（可选）</label><input id="ab" type="text" value="0, 1" placeholder="0, 1"></div>
+    </div>
+    <p class="hint">默认从 0,1 开始；可自定义前两项生成广义数列。n 最大 2000。</p>
+  </div>
+  <div class="card">
+    <div id="out"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function setStatus(m,t){ $('st').textContent=m; $('st').className='status'+(t?' '+t:''); }
+  function calc(){
+    let n=parseInt($('n').value,10);
+    if(isNaN(n)||n<1){ setStatus('请输入正整数 n','err'); $('out').textContent=''; return; }
+    n=Math.min(n,2000);
+    const ab=$('ab').value.split(',').map(s=>s.trim());
+    let a=ab[0]!==''&&!isNaN(parseInt(ab[0],10))?BigInt(parseInt(ab[0],10)):0n;
+    let b=ab[1]!==''&&!isNaN(parseInt(ab[1],10))?BigInt(parseInt(ab[1],10)):1n;
+    const seq=[a,b];
+    for(let i=2;i<n;i++){ const c=a+b; seq.push(c); a=b; b=c; }
+    if(n===1) seq.length=1;
+    $('out').textContent=seq.join(', ');
+    const sum=seq.reduce((x,y)=>x+y,0n);
+    setStatus('✓ 已生成 '+seq.length+' 项，总和 = '+sum.toString(),'ok');
+  }
+  $('n').addEventListener('input',calc);
+  $('ab').addEventListener('input',calc);
+  calc();
+})();
+</script>
+</body>
+</html>

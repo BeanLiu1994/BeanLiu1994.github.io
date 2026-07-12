@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULID 生成器 · ULID</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .row:last-child{margin-bottom:0}
+  input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;font-family:inherit}
+  input:focus{border-color:var(--accent)}
+  input[type=text]{flex:1;min-width:160px;font-family:"SF Mono",monospace}
+  input[type=number]{width:80px}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer}
+  .btn:hover{opacity:.9}
+  #list,#decOut{font-family:"SF Mono",monospace;font-size:13px;word-break:break-all;line-height:1.8}
+  #list{margin-top:8px}
+  #decOut{color:var(--muted);margin-top:6px}
+  .pane-head{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header><div><h1>🆔 ULID 生成器</h1><div class="sub">26 位 · 按时间排序 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <div class="row">
+      <input id="out" type="text" readonly>
+      <button class="btn" id="gen">生成</button>
+      <button class="btn" id="copy">复制</button>
+    </div>
+    <div class="row">
+      <label style="margin:0;color:var(--muted);font-size:13px">数量</label>
+      <input id="count" type="number" value="1" min="1" max="50">
+      <button class="btn" id="genMany">批量生成</button>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div class="card">
+    <div class="pane-head">解析 / 反查</div>
+    <div class="row">
+      <input id="decode" type="text" placeholder="粘贴 ULID 查看其时间戳">
+      <button class="btn" id="dec">解析</button>
+    </div>
+    <div id="decOut"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const CROCK='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const MAP={}; CROCK.split('').forEach((c,i)=>MAP[c]=i); MAP['I']=1; MAP['L']=1; MAP['O']=0;
+  function setStatus(m,t){ $('st').textContent=m; $('st').className='status'+(t?' '+t:''); }
+  function copyText(t){
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>setStatus('✓ 已复制','ok'),()=>fb(t)); }
+    else fb(t);
+  }
+  function fb(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败，请手动复制','err');} document.body.removeChild(ta); }
+  function encodeTime(ms){ let s=''; for(let i=0;i<10;i++){ s=CROCK[ms%32]+s; ms=Math.floor(ms/32); } return s; }
+  function encodeRand(){
+    const b=new Uint8Array(10);
+    (window.crypto||window.msCrypto).getRandomValues(b);
+    let bits=0,bl=0,out='';
+    for(const x of b){ bits=(bits<<8)|x; bl+=8; while(bl>=5){ bl-=5; out+=CROCK[(bits>>bl)&31]; } }
+    return out;
+  }
+  function genULID(){ return encodeTime(Date.now())+encodeRand(); }
+  function decode(id){
+    id=(id||'').toUpperCase().replace(/\s/g,'');
+    if(id.length!==26) return '❌ 长度应为 26 位（当前 '+id.length+' 位）';
+    let t=0;
+    for(let i=0;i<10;i++){ const v=MAP[id[i]]; if(v===undefined||id[i]==='U') return '❌ 前 10 位含非法字符: '+id[i]; t=t*32+v; }
+    for(let i=10;i<26;i++){ if(MAP[id[i]]===undefined && id[i]!=='U') return '❌ 后 16 位含非法字符: '+id[i]; }
+    return '⏱ 时间戳(ms): '+t+'  →  '+new Date(t).toLocaleString('zh-CN');
+  }
+  function gen(){ const v=genULID(); $('out').value=v; setStatus('✓ 已生成','ok'); return v; }
+  $('gen').addEventListener('click',gen);
+  $('copy').addEventListener('click',()=>copyText($('out').value));
+  $('genMany').addEventListener('click',()=>{
+    const n=Math.min(50,Math.max(1,parseInt($('count').value,10)||1));
+    const arr=[]; for(let i=0;i<n;i++) arr.push(genULID());
+    $('list').textContent=arr.join('\n');
+    setStatus('✓ 已批量生成 '+n+' 个','ok');
+  });
+  $('dec').addEventListener('click',()=>{ $('decOut').textContent=decode($('decode').value); });
+  gen();
+})();
+</script>
+</body>
+</html>

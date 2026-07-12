@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>复利计算器 · Compound Interest</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .results{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:19px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;word-break:break-all}
+  .stat .v.ok{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+  th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500}
+  td:first-child,th:first-child{text-align:left}
+  .pane-head{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .hint{color:var(--muted);font-size:12px;margin:12px 0 0}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:560px){ .grid2{grid-template-columns:1fr} .results{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>💹 复利计算器</h1><div class="sub">本金 + 定期追加 · 纯本地运算</div></div>
+</header>
+<main>
+  <div class="card">
+    <div class="grid2">
+      <div><label>初始本金（元）</label><input id="principal" type="number" value="10000" min="0"></div>
+      <div><label>年化收益率（%）</label><input id="rate" type="number" value="5" step="0.1" min="0"></div>
+      <div><label>投资年限（年）</label><input id="years" type="number" value="10" min="1" max="200"></div>
+      <div><label>每年复利次数</label>
+        <select id="freq"><option value="1">1（年）</option><option value="2">2（半年）</option><option value="4">4（季）</option><option value="12" selected>12（月）</option><option value="365">365（日）</option></select>
+      </div>
+      <div><label>定期追加（元，可选）</label><input id="pmt" type="number" value="0" min="0"></div>
+      <div><label>追加频率</label>
+        <select id="pmtfreq"><option value="monthly" selected>每月</option><option value="yearly">每年</option></select>
+      </div>
+    </div>
+    <p class="hint">追加默认在每期期初投入；结果含逐年明细。</p>
+  </div>
+  <div class="card">
+    <div class="results">
+      <div class="stat"><div class="k">期末总额</div><div class="v ok" id="rTotal">—</div></div>
+      <div class="stat"><div class="k">累计投入</div><div class="v" id="rPrincipal">—</div></div>
+      <div class="stat"><div class="k">累计收益</div><div class="v" id="rGain">—</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="pane-head">逐年明细</div>
+    <div style="overflow:auto;max-height:300px"><table id="tbl">
+      <thead><tr><th>年份</th><th>当年投入</th><th>累计本金</th><th>当年利息</th><th>期末余额</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function money(n){ return '¥'+(Math.round(n*100)/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function calc(){
+    const P=Math.max(0,parseFloat($('principal').value)||0);
+    const r=Math.max(0,parseFloat($('rate').value)||0)/100;
+    const yrs=parseInt($('years').value)||0;
+    const m=parseInt($('freq').value)||12;
+    const pmt=Math.max(0,parseFloat($('pmt').value)||0);
+    const pmtfreq=$('pmtfreq').value;
+    if(yrs<1||yrs>200){ $('st').textContent='⚠ 年限请填写 1–200'; $('st').className='status err'; return; }
+    const perRate=r/m;
+    const periodPmt = pmtfreq==='monthly' ? pmt*(12/m) : pmt*(1/m);
+    let balance=P, totalPrincipal=P;
+    const rows=[];
+    for(let y=1;y<=yrs;y++){
+      const startBal=balance; let yearPmt=0;
+      for(let i=0;i<m;i++){ balance+=periodPmt; yearPmt+=periodPmt; balance*=(1+perRate); }
+      totalPrincipal+=yearPmt;
+      rows.push({y,yearPmt,totalPrincipal,interest:balance-startBal-yearPmt,balance});
+    }
+    $('rTotal').textContent=money(balance);
+    $('rPrincipal').textContent=money(totalPrincipal);
+    $('rGain').textContent=money(balance-totalPrincipal);
+    $('tbl').querySelector('tbody').innerHTML=rows.map(r=>
+      '<tr><td>'+r.y+'</td><td>'+money(r.yearPmt)+'</td><td>'+money(r.totalPrincipal)+'</td><td>'+money(r.interest)+'</td><td>'+money(r.balance)+'</td></tr>'
+    ).join('');
+    $('st').textContent='✓ 已计算'; $('st').className='status ok';
+  }
+  ['principal','rate','years','pmt'].forEach(id=>$(id).addEventListener('input',calc));
+  ['freq','pmtfreq'].forEach(id=>$(id).addEventListener('change',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

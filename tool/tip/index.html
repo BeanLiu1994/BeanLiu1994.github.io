@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小费计算器 · Tip Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:620px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:15px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--muted);transition:.12s}
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .results{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;word-break:break-all}
+  .stat .v.ok{color:var(--ok)}
+  .stat.full{grid-column:1/3}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:480px){ .results{grid-template-columns:1fr} .stat.full{grid-column:auto} }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>💁 小费计算器</h1><div class="sub">聚餐 / 旅行分摊 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <label>账单金额</label>
+    <input id="bill" type="number" value="0" min="0" step="0.01" placeholder="例如 268">
+    <div class="chips" id="pctChips">
+      <span class="chip" data-v="10">10%</span>
+      <span class="chip" data-v="15">15%</span>
+      <span class="chip on" data-v="18">18%</span>
+      <span class="chip" data-v="20">20%</span>
+      <span class="chip" data-v="25">25%</span>
+    </div>
+    <label style="margin-top:14px">自定义小费比例（%）</label>
+    <input id="pct" type="number" value="18" min="0" step="0.5">
+    <label style="margin-top:14px">分摊人数</label>
+    <input id="people" type="number" value="1" min="1" step="1">
+  </div>
+  <div class="card">
+    <div class="results">
+      <div class="stat"><div class="k">小费金额</div><div class="v ok" id="rTip">—</div></div>
+      <div class="stat"><div class="k">含小费总额</div><div class="v" id="rTotal">—</div></div>
+      <div class="stat"><div class="k">每人应付</div><div class="v" id="rPer">—</div></div>
+      <div class="stat"><div class="k">每人小费</div><div class="v" id="rPerTip">—</div></div>
+    </div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function money(n){ return '$'+(Math.round(n*100)/100).toFixed(2); }
+  let pct=18;
+  function calc(){
+    const bill=Math.max(0,parseFloat($('bill').value)||0);
+    const people=Math.max(1,parseInt($('people').value)||1);
+    const tip=bill*pct/100;
+    const total=bill+tip;
+    $('rTip').textContent=money(tip);
+    $('rTotal').textContent=money(total);
+    $('rPer').textContent=money(total/people);
+    $('rPerTip').textContent=money(tip/people);
+    $('st').textContent='✓ 已计算'; $('st').className='status ok';
+  }
+  $('pctChips').addEventListener('click',e=>{
+    const c=e.target.closest('.chip'); if(!c)return;
+    document.querySelectorAll('#pctChips .chip').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on'); pct=parseFloat(c.dataset.v); $('pct').value=pct; calc();
+  });
+  $('pct').addEventListener('input',()=>{
+    pct=Math.max(0,parseFloat($('pct').value)||0);
+    document.querySelectorAll('#pctChips .chip').forEach(x=>x.classList.toggle('on',parseFloat(x.dataset.v)===pct));
+    calc();
+  });
+  ['bill','people'].forEach(id=>$(id).addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>最大公约数 / 最小公倍数 · GCD & LCM</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;font-family:"SF Mono",monospace;resize:vertical;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  .results{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:6px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:22px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;word-break:break-all}
+  .stat .v.ok{color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px;margin:10px 0 0}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:560px){ .results{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header><div><h1>🔢 最大公约数 / 最小公倍数</h1><div class="sub">GCD · LCM · 支持多个整数</div></div></header>
+<main>
+  <div class="card">
+    <label>整数（用逗号、空格或换行分隔）</label>
+    <textarea id="nums" rows="3">12, 18, 24</textarea>
+    <p class="hint">支持两个或多个非负整数。</p>
+  </div>
+  <div class="card">
+    <div class="results">
+      <div class="stat"><div class="k">最大公约数 GCD</div><div class="v ok" id="rGcd">—</div></div>
+      <div class="stat"><div class="k">最小公倍数 LCM</div><div class="v" id="rLcm">—</div></div>
+    </div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function setStatus(m,t){ $('st').textContent=m; $('st').className='status'+(t?' '+t:''); }
+  function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ const t=a%b; a=b; b=t; } return a; }
+  function lcm(a,b){ if(a===0||b===0) return 0; return Math.abs(a*b)/gcd(a,b); }
+  function calc(){
+    const raw=$('nums').value.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
+    const arr=raw.map(s=>{ const n=parseInt(s,10); return isNaN(n)?null:n; }).filter(n=>n!==null);
+    if(arr.length<2 || arr.some(n=>n<0)){ $('rGcd').textContent='—'; $('rLcm').textContent='—'; setStatus('请输入至少两个非负整数','err'); return; }
+    let g=arr[0]; for(let i=1;i<arr.length;i++) g=gcd(g,arr[i]);
+    let l=arr[0]; for(let i=1;i<arr.length;i++) l=lcm(l,arr[i]);
+    $('rGcd').textContent=g;
+    $('rLcm').textContent=l;
+    setStatus('✓ 已计算 '+arr.length+' 个数','ok');
+  }
+  $('nums').addEventListener('input',calc);
+  calc();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件类型识别 · File Type</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  input[type=file]{color:var(--muted);font-size:14px;width:100%}
+  .hint{color:var(--muted);font-size:12px;margin:10px 0 0}
+  #info{margin-top:12px;font-size:14px;line-height:1.9}
+  #info .k{color:var(--muted)}
+  #info .v{font-family:"SF Mono",monospace}
+  #info .ok{color:var(--ok)} #info .warn{color:#ffd166}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header><div><h1>🗂️ 文件类型识别</h1><div class="sub">按文件头魔数判断 · 不上传</div></div></header>
+<main>
+  <div class="card">
+    <input type="file" id="file">
+    <p class="hint">仅读取文件头部字节进行识别，不会上传到任何服务器。</p>
+    <div id="info"></div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function setStatus(m,t){ $('st').textContent=m; $('st').className='status'+(t?' '+t:''); }
+  const SIGS=[
+    {name:'PNG 图片', ext:'png', mime:'image/png', off:0, sig:[0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A]},
+    {name:'JPEG 图片', ext:'jpg', mime:'image/jpeg', off:0, sig:[0xFF,0xD8,0xFF]},
+    {name:'GIF 图片', ext:'gif', mime:'image/gif', off:0, sig:[0x47,0x49,0x46,0x38]},
+    {name:'BMP 图片', ext:'bmp', mime:'image/bmp', off:0, sig:[0x42,0x4D]},
+    {name:'ICO 图标', ext:'ico', mime:'image/x-icon', off:0, sig:[0x00,0x00,0x01,0x00]},
+    {name:'WEBP 图片', ext:'webp', mime:'image/webp', off:0, sig:[0x52,0x49,0x46,0x46], sig2:[0x57,0x45,0x42,0x50], off2:8},
+    {name:'PDF 文档', ext:'pdf', mime:'application/pdf', off:0, sig:[0x25,0x50,0x44,0x46]},
+    {name:'ZIP 压缩包（可能含 docx/xlsx/pptx/jar）', ext:'zip', mime:'application/zip', off:0, sig:[0x50,0x4B,0x03,0x04]},
+    {name:'GZIP 压缩包', ext:'gz', mime:'application/gzip', off:0, sig:[0x1F,0x8B]},
+    {name:'RAR 压缩包', ext:'rar', mime:'application/x-rar-compressed', off:0, sig:[0x52,0x61,0x72,0x21,0x1A,0x07,0x00]},
+    {name:'7-Zip 压缩包', ext:'7z', mime:'application/x-7z-compressed', off:0, sig:[0x37,0x7A,0xBC,0xAF,0x27,0x1C]},
+    {name:'TAR 归档', ext:'tar', mime:'application/x-tar', off:257, sig:[0x75,0x73,0x74,0x61,0x72]},
+    {name:'ISO 光盘镜像', ext:'iso', mime:'application/x-iso9660-image', off:1, sig:[0x43,0x44,0x30,0x30,0x31]},
+    {name:'MP3 音频', ext:'mp3', mime:'audio/mpeg', off:0, sig:[0x49,0x44,0x33]},
+    {name:'WAV 音频', ext:'wav', mime:'audio/wav', off:0, sig:[0x52,0x49,0x46,0x46], sig2:[0x57,0x41,0x56,0x45], off2:8},
+    {name:'AVI 视频', ext:'avi', mime:'video/x-msvideo', off:0, sig:[0x52,0x49,0x46,0x46], sig2:[0x41,0x56,0x49,0x20], off2:8},
+    {name:'MP4 视频', ext:'mp4', mime:'video/mp4', off:4, sig:[0x66,0x74,0x79,0x70]},
+    {name:'ELF 可执行文件', ext:'', mime:'application/x-executable', off:0, sig:[0x7F,0x45,0x4C,0x46]},
+    {name:'Windows 可执行文件 (EXE/DLL)', ext:'exe', mime:'application/x-msdownload', off:0, sig:[0x4D,0x5A]},
+    {name:'TrueType 字体', ext:'ttf', mime:'font/ttf', off:0, sig:[0x00,0x01,0x00,0x00]},
+    {name:'OpenType 字体', ext:'otf', mime:'font/otf', off:0, sig:[0x4F,0x54,0x54,0x4F]}
+  ];
+  function match(buf){
+    for(const s of SIGS){
+      let ok=true;
+      for(let i=0;i<s.sig.length;i++){ if(buf[s.off+i]!==s.sig[i]){ ok=false; break; } }
+      if(!ok) continue;
+      if(s.sig2){ let ok2=true; for(let i=0;i<s.sig2.length;i++){ if(buf[s.off2+i]!==s.sig2[i]){ ok2=false; break; } } if(!ok2) continue; }
+      return s;
+    }
+    return null;
+  }
+  function isText(buf){
+    if(buf.length===0) return false;
+    let printable=0;
+    for(let i=0;i<buf.length;i++){ const b=buf[i]; if(b===9||b===10||b===13||(b>=32&&b<=126)||b>=194) printable++; }
+    return printable/buf.length>0.85;
+  }
+  function fmtSize(n){ if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; return (n/1048576).toFixed(1)+' MB'; }
+  $('file').addEventListener('change',e=>{
+    const f=e.target.files[0];
+    if(!f){ $('info').innerHTML=''; return; }
+    const size=f.size;
+    const slice=f.slice(0,512);
+    const r=new FileReader();
+    r.onload=()=>{
+      const buf=new Uint8Array(r.result);
+      const s=match(buf);
+      let html='<div><span class="k">文件名：</span><span class="v">'+f.name+'</span></div>';
+      html+='<div><span class="k">大小：</span><span class="v">'+fmtSize(size)+'</span></div>';
+      if(s){
+        html+='<div><span class="k">类型：</span><span class="v ok">'+s.name+'</span></div>';
+        html+='<div><span class="k">建议扩展名：</span><span class="v">.'+(s.ext||'—')+'</span></div>';
+        html+='<div><span class="k">MIME：</span><span class="v">'+s.mime+'</span></div>';
+        setStatus('✓ 识别为 '+s.name,'ok');
+      } else if(isText(buf)){
+        html+='<div><span class="k">类型：</span><span class="v warn">文本文件（可能是 .txt/.csv/.json/.xml/.html/.css/.js 等）</span></div>';
+        setStatus('⚠ 未匹配已知二进制格式，疑为文本文件','ok');
+      } else {
+        html+='<div><span class="k">类型：</span><span class="v warn">未知 / 二进制文件</span></div>';
+        setStatus('⚠ 无法识别该文件类型','ok');
+      }
+      $('info').innerHTML=html;
+    };
+    r.readAsArrayBuffer(slice);
+  });
+})();
+</script>
+</body>
+</html>

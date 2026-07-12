@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>折扣计算器 · Discount</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
+  input:focus,select:focus{border-color:var(--accent)}
+  input[type=number]{font-family:"SF Mono",monospace}
+  .results{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:19px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;word-break:break-all}
+  .stat .v.ok{color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px;margin:12px 0 0}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:560px){ .grid2{grid-template-columns:1fr} .results{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header><div><h1>🏷️ 折扣 / 满减计算器</h1><div class="sub">到手价 · 共省多少 · 纯本地</div></div></header>
+<main>
+  <div class="card">
+    <div class="grid2">
+      <div><label>原价（元）</label><input id="price" type="number" value="100" min="0" step="any"></div>
+      <div><label>折扣（%，100 = 不打折）</label><input id="disc" type="number" value="70" min="0" max="100" step="any"></div>
+      <div><label>满（元，可选）</label><input id="thr" type="number" value="0" min="0" step="any"></div>
+      <div><label>减（元，可选）</label><input id="cut" type="number" value="0" min="0" step="any"></div>
+    </div>
+    <p class="hint">当「原价 ≥ 满」且满、减都大于 0 时，再减去「减」的金额。</p>
+  </div>
+  <div class="card">
+    <div class="results">
+      <div class="stat"><div class="k">到手价</div><div class="v ok" id="rFinal">—</div></div>
+      <div class="stat"><div class="k">共节省</div><div class="v" id="rSave">—</div></div>
+      <div class="stat"><div class="k">实际折扣</div><div class="v" id="rRate">—</div></div>
+    </div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function money(n){ return '¥'+(Math.round(n*100)/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function calc(){
+    const price=Math.max(0,parseFloat($('price').value)||0);
+    const disc=Math.min(100,Math.max(0,parseFloat($('disc').value)||0));
+    const thr=Math.max(0,parseFloat($('thr').value)||0);
+    const cut=Math.max(0,parseFloat($('cut').value)||0);
+    const afterDisc=price*disc/100;
+    let manjian=0;
+    if(price>=thr && thr>0 && cut>0){ manjian=cut; }
+    const final=Math.max(0,afterDisc-manjian);
+    const save=price-final;
+    $('rFinal').textContent=money(final);
+    $('rSave').textContent=money(save);
+    $('rRate').textContent= price>0 ? (final/price*10).toFixed(2)+' 折' : '—';
+    setStatus('✓ 已计算（满减 '+money(manjian)+'）','ok');
+  }
+  function setStatus(m,t){ $('st').textContent=m; $('st').className='status'+(t?' '+t:''); }
+  ['price','disc','thr','cut'].forEach(id=>$(id).addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

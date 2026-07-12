@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素数工具箱 · Prime Tools</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:720px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 16px;font-size:14px;cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row>*{flex:1;min-width:140px}
+  .row button{flex:0 0 auto}
+  .out{margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:"SF Mono",Consolas,monospace;font-size:13px;word-break:break-all;white-space:pre-wrap;min-height:24px}
+  .pane-head{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .hint{color:var(--muted);font-size:12px;margin:10px 0 0}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🔢 素数工具箱</h1><div class="sub">判定 · 质因数分解 · 区间枚举 · 纯本地</div></div>
+</header>
+<main>
+  <div class="card">
+    <div class="pane-head">判定 / 质因数分解</div>
+    <div class="row">
+      <div><label>整数（≤ 1e15 以免卡顿）</label><input id="n" type="text" value="123456789"></div>
+      <button class="primary" id="go">计算</button>
+    </div>
+    <div class="out" id="outN">—</div>
+    <p class="hint">支持大整数（BigInt），超大数可能较慢。</p>
+  </div>
+  <div class="card">
+    <div class="pane-head">区间素数（a … b）</div>
+    <div class="row">
+      <div><label>起始 a</label><input id="a" type="number" value="1"></div>
+      <div><label>结束 b</label><input id="b" type="number" value="100"></div>
+      <button class="primary" id="range">列出</button>
+    </div>
+    <div class="out" id="outR">—</div>
+  </div>
+  <div class="card">
+    <div class="pane-head">前 N 个素数</div>
+    <div class="row">
+      <div><label>数量 N（≤ 100000）</label><input id="k" type="number" value="50"></div>
+      <button class="primary" id="first">生成</button>
+    </div>
+    <div class="out" id="outK">—</div>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function isPrime(n){
+    n=BigInt(n);
+    if(n<2n)return false;
+    if(n%2n===0n)return n===2n;
+    if(n%3n===0n)return n===3n;
+    for(let i=5n;i*i<=n;i+=6n){ if(n%i===0n||n%(i+2n)===0n)return false; }
+    return true;
+  }
+  function factor(n){
+    n=BigInt(n); let f=[];
+    if(n<2n) return n+'（非合数）';
+    for(let d=2n;d*d<=n;d++){ while(n%d===0n){ f.push(d); n/=d; } }
+    if(n>1n)f.push(n);
+    let parts=[],i=0;
+    while(i<f.length){ let c=1; while(i+c<f.length&&f[i+c]===f[i])c++; parts.push(c>1?(f[i]+'^'+c):(''+f[i])); i+=c; }
+    return parts.join(' × ');
+  }
+  function sievePrimes(a,b){
+    a=Math.max(2,parseInt(a)||2); b=parseInt(b)||a;
+    if(b-a>200000){ return '⚠ 区间过大（>200000），请缩小范围。'; }
+    if(a>b) [a,b]=[b,a];
+    const comp=new Uint8Array(b-a+1); const res=[];
+    for(let p=2;p*p<=b;p++){ let s=Math.max(p*p,Math.ceil(a/p)*p); for(let m=s;m<=b;m+=p) comp[m-a]=1; }
+    for(let x=a;x<=b;x++) if(!comp[x-a]) res.push(x);
+    return '共 '+res.length+' 个：\n'+res.join(', ');
+  }
+  function firstPrimes(k){
+    k=Math.min(100000,Math.max(1,parseInt(k)||1));
+    const res=[]; let cand=2;
+    while(res.length<k){
+      if(isPrime(cand)) res.push(cand);
+      cand++;
+      if(cand>2000000 && res.length<k){ return '⚠ 范围超出，请减小 N。'; }
+    }
+    return '前 '+k+' 个素数：\n'+res.join(', ');
+  }
+  $('go').onclick=()=>{
+    const v=$('n').value.trim();
+    if(!/^\d+$/.test(v)){ $('outN').textContent='⚠ 请输入正整数'; $('st').textContent='⚠ 输入非法'; $('st').className='status err'; return; }
+    if(v.length>15){ $('outN').textContent='⚠ 数值过大（>1e15），计算可能较慢'; }
+    const big=BigInt(v);
+    $('outN').textContent=(isPrime(big)?'✓ 是素数':'✗ 不是素数')+'\n质因数分解：'+factor(big);
+    $('st').textContent='✓ 完成'; $('st').className='status ok';
+  };
+  $('range').onclick=()=>{ $('outR').textContent=sievePrimes($('a').value,$('b').value); $('st').textContent='✓ 完成'; $('st').className='status ok'; };
+  $('first').onclick=()=>{ $('outK').textContent=firstPrimes($('k').value); $('st').textContent='✓ 完成'; $('st').className='status ok'; };
+  $('go').click();
+})();
+</script>
+</body>
+</html>

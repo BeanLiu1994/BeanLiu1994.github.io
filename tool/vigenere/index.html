@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>维吉尼亚密码 · Vigenère</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;max-width:760px;margin:0 auto;width:100%}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}
+  textarea,input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
+  textarea:focus,input:focus{border-color:var(--accent)}
+  textarea{resize:vertical;font-family:"SF Mono",monospace}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer}
+  .btn:hover{opacity:.9}
+  .pane-head{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header><div><h1>🔐 维吉尼亚密码</h1><div class="sub">经典多表代换 · 仅变换字母</div></div></header>
+<main>
+  <div class="card">
+    <label>文本</label>
+    <textarea id="text" rows="4">ATTACK AT DAWN</textarea>
+    <label style="margin-top:12px">密钥（仅字母，自动转大写）</label>
+    <input id="key" type="text" value="LEMON">
+    <div class="row">
+      <button class="btn" id="enc">加密</button>
+      <button class="btn" id="dec">解密</button>
+      <button class="btn" id="copy">复制结果</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="pane-head">结果</div>
+    <textarea id="res" rows="4" readonly></textarea>
+  </div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function setStatus(m,t){ $('st').textContent=m; $('st').className='status'+(t?' '+t:''); }
+  function copyText(t){
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>setStatus('✓ 已复制','ok'),()=>fb(t)); }
+    else fb(t);
+  }
+  function fb(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败，请手动复制','err');} document.body.removeChild(ta); }
+  function proc(decrypt){
+    const text=$('text').value;
+    const key=$('key').value.toUpperCase().replace(/[^A-Z]/g,'');
+    if(!key){ setStatus('请输入密钥','err'); return; }
+    let ki=0, out='';
+    for(const ch of text){
+      if(/[a-zA-Z]/.test(ch)){
+        const base=ch<='Z'?65:97;
+        const p=ch.toUpperCase().charCodeAt(0)-65;
+        const k=key.charCodeAt(ki%key.length)-65;
+        let c=decrypt ? (p-k+26)%26 : (p+k)%26;
+        out+=String.fromCharCode(c+base);
+        ki++;
+      } else { out+=ch; }
+    }
+    $('res').value=out;
+    setStatus('✓ 已'+(decrypt?'解密':'加密'),'ok');
+  }
+  $('enc').addEventListener('click',()=>proc(false));
+  $('dec').addEventListener('click',()=>proc(true));
+  $('copy').addEventListener('click',()=>copyText($('res').value));
+})();
+</script>
+</body>
+</html>
