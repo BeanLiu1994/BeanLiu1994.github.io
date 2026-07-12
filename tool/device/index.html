@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备与浏览器信息 · Device Info</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:14px;font-weight:600;color:var(--accent);margin-top:4px;word-break:break-all;line-height:1.5}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .full{grid-column:1/3}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📱 设备与浏览器信息</h1>
+    <div class="sub">实时读取 · 纯本地 · 不上传</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy" class="primary">复制全部</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">屏幕与窗口 Screen &amp; Viewport</div>
+      <div class="grid" id="g1"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">系统与浏览器 System &amp; Browser</div>
+      <div class="grid" id="g2"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st');
+  function setStatus(m){st.textContent=m;}
+  function tz(){ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone; }catch(e){ return '未知'; } }
+  function scheme(){ return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'深色 Dark':'浅色 Light'; }
+  function touch(){ return ('ontouchstart' in window)||navigator.maxTouchPoints>0?'支持':'不支持'; }
+  let last={};
+  function item(k,v){ last[k]=String(v); return '<div class="stat'+(v&&String(v).length>28?' full':'')+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+  function render(){
+    last={};
+    $('g1').innerHTML=[
+      item('屏幕分辨率',screen.width+' × '+screen.height),
+      item('可用区域',screen.availWidth+' × '+screen.availHeight),
+      item('窗口视口',window.innerWidth+' × '+window.innerHeight),
+      item('像素比 DPR',window.devicePixelRatio||1),
+      item('色彩深度',screen.colorDepth+'-bit'),
+      item('方向',screen.orientation?screen.orientation.type:'未知'),
+      item('触摸支持',touch()),
+      item('配色模式',scheme())
+    ].join('');
+    $('g2').innerHTML=[
+      item('平台 Platform',navigator.platform||'未知'),
+      item('CPU 核心',navigator.hardwareConcurrency||'未知'),
+      item('内存(GB)',navigator.deviceMemory||'未知'),
+      item('语言 Language',navigator.language),
+      item('语言列表',navigator.languages?navigator.languages.join(', '):'未知'),
+      item('时区 Timezone',tz()),
+      item('在线状态',navigator.onLine?'在线':'离线'),
+      item('Cookie',navigator.cookieEnabled?'启用':'禁用'),
+      item('User-Agent',navigator.userAgent)
+    ].join('');
+    setStatus('✓ 已读取设备信息（窗口尺寸变化会自动更新）');
+  }
+  $('bCopy').onclick=async()=>{
+    const all=Object.entries(last).map(([k,v])=>k+': '+v).join('\n');
+    try{await navigator.clipboard.writeText(all);setStatus('✓ 已复制全部信息');}catch(e){setStatus('复制失败：'+e.message);}
+  };
+  window.addEventListener('resize',render);
+  if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
+  window.addEventListener('online',render);
+  window.addEventListener('offline',render);
+  render();
+})();
+</script>
+</body>
+</html>

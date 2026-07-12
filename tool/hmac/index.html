@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HMAC 生成器 · HMAC Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  select,input[type=text]{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .field label{color:var(--muted);font-size:13px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔐 HMAC 生成器</h1>
+    <div class="sub">基于 Web Crypto · HMAC-SHA1/256/512 · 纯本地计算</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy">复制结果</button>
+    <button id="bClear" class="primary">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">消息 Message</div>
+      <textarea id="msg" placeholder="要签名的文本…">Hello, HMAC!</textarea>
+    </div>
+    <div class="card">
+      <div class="pane-head">密钥与算法 Key &amp; Algorithm</div>
+      <div class="field">
+        <label>密钥</label>
+        <input type="text" id="key" value="secret-key" style="flex:1;min-width:160px">
+      </div>
+      <div class="field">
+        <label>算法</label>
+        <select id="algo">
+          <option value="SHA-1">SHA-1</option>
+          <option value="SHA-256" selected>SHA-256</option>
+          <option value="SHA-512">SHA-512</option>
+        </select>
+        <label>输出</label>
+        <select id="out">
+          <option value="hex" selected>Hex</option>
+          <option value="base64">Base64</option>
+        </select>
+      </div>
+      <div class="hint">提示：密钥与消息均为 UTF-8 文本，可在源码中改为二进制输入。</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">结果 Result</div>
+      <textarea id="result" readonly placeholder="HMAC 输出…"></textarea>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const te=new TextEncoder();
+  function bufToHex(buf){return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');}
+  function bufToB64(buf){let s='';const b=new Uint8Array(buf);for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
+  async function compute(){
+    try{
+      const msgBytes=te.encode($('msg').value);
+      const keyBytes=te.encode($('key').value);
+      const algo=$('algo').value;
+      const fmt=$('out').value;
+      const cryptoKey=await crypto.subtle.importKey('raw',keyBytes,{name:'HMAC',hash:algo},false,['sign']);
+      const sig=await crypto.subtle.sign('HMAC',cryptoKey,msgBytes);
+      const val= fmt==='base64'? bufToB64(sig) : bufToHex(sig);
+      $('result').value=val;
+      setStatus('✓ 已生成 HMAC-'+algo+'（'+(fmt==='base64'?'Base64':'Hex')+'，'+new Uint8Array(sig).length+' 字节）','ok');
+    }catch(e){ $('result').value=''; setStatus('✗ 失败：'+e.message,'err'); }
+  }
+  ['msg','key'].forEach(id=>$(id).addEventListener('input',compute));
+  ['algo','out'].forEach(id=>$(id).addEventListener('change',compute));
+  $('bCopy').onclick=async()=>{ if(!$('result').value){setStatus('没有可复制的结果','err');return;} try{await navigator.clipboard.writeText($('result').value);setStatus('✓ 已复制到剪贴板','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  $('bClear').onclick=()=>{ $('msg').value=''; $('key').value=''; $('result').value=''; compute(); };
+  compute();
+})();
+</script>
+</body>
+</html>

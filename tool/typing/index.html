@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打字速度测试 · Typing Test</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .source{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:15px;line-height:1.9}
+  .source .ch{position:relative}
+  .source .ok{color:var(--ok)}
+  .source .bad{color:var(--err);text-decoration:underline}
+  .source .cur{background:var(--accent);color:#fff;border-radius:2px}
+  textarea{width:100%;min-height:110px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-size:15px;line-height:1.7;resize:vertical;outline:none;font-family:inherit}
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:24px;font-weight:600;color:var(--accent);margin-top:4px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⌨️ 打字速度测试</h1>
+    <div class="sub">实时 WPM / 准确率 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <select id="sample">
+      <option value="en" selected>英文样例</option>
+      <option value="cn">中文样例</option>
+      <option value="code">代码样例</option>
+    </select>
+    <button id="bRestart" class="primary">重新开始</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">原文 Source</div>
+      <div class="source" id="source"></div>
+    </div>
+    <div class="card">
+      <div class="pane-head">输入 Input</div>
+      <textarea id="input" placeholder="在此开始输入，计时将自动开始…"></textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">成绩 Result</div>
+      <div class="stat-grid" id="stats"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  const SAMPLES={
+    en:'The quick brown fox jumps over the lazy dog while the sun sets behind the quiet hills. Practice every day and your fingers will learn the rhythm of the keys without a single thought.',
+    cn:'熟能生巧。每天抽出十分钟练习打字，指尖会逐渐记住按键的节奏。保持正确的坐姿与指法，速度与准确率都会稳步提升，写作也会变得轻松愉快。',
+    code:'function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }'
+  };
+  let target='', start=0, done=false;
+  function render(stats){
+    const d=[['WPM',stats.wpm],['准确率',stats.acc+'%'],['用时',stats.sec+'s'],['进度',stats.prog+'%']];
+    $('stats').innerHTML=d.map(([k,v])=>'<div class="stat"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('');
+  }
+  function highlight(typed){
+    let html='';
+    for(let i=0;i<target.length;i++){
+      let cls='';
+      if(i<typed.length) cls = typed[i]===target[i]?'ok':'bad';
+      if(i===typed.length) cls+=' cur';
+      html+='<span class="ch '+cls.trim()+'">'+target[i].replace(' ','&nbsp;')+'</span>';
+    }
+    $('source').innerHTML=html;
+  }
+  function update(){
+    const typed=$('input').value;
+    if(!done && typed.length>0 && start===0){ start=Date.now(); }
+    highlight(typed);
+    const sec= start? Math.max(0.1,(Date.now()-start)/1000) : 0;
+    let correct=0; const n=Math.min(typed.length,target.length);
+    for(let i=0;i<n;i++) if(typed[i]===target[i]) correct++;
+    const chars=typed.length;
+    const wpm= start? Math.round((chars/5)/(sec/60)) : 0;
+    const acc= chars? Math.round(correct/chars*100) : 100;
+    const prog= Math.round(typed.length/target.length*100);
+    render({wpm,acc,sec:sec.toFixed(1),prog});
+    if(typed.length>=target.length && !done){
+      done=true;
+      setStatus('✓ 完成！WPM '+wpm+' · 准确率 '+acc+'% · 用时 '+sec.toFixed(1)+'s','ok');
+    } else if(start){
+      setStatus('测试中… WPM '+wpm+' · 准确率 '+acc+'%');
+    }
+  }
+  function reset(){
+    target=SAMPLES[$('sample').value];
+    start=0; done=false;
+    $('input').value='';
+    highlight('');
+    render({wpm:0,acc:100,sec:0,prog:0});
+    setStatus('就绪 · 共 '+target.length+' 字符');
+  }
+  $('input').addEventListener('input',update);
+  $('sample').addEventListener('change',reset);
+  $('bRestart').onclick=reset;
+  reset();
+})();
+</script>
+</body>
+</html>

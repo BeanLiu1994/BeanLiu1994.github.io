@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>浮点转换器 · IEEE 754 Float</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;font-size:14px;font-family:"SF Mono",Consolas,monospace;outline:none}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  .row label{color:var(--muted);font-size:13px;min-width:64px}
+  .mono{font-family:"SF Mono",Consolas,monaco,monospace;font-size:13px;line-height:1.7;word-break:break-all}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+  .kv .k{color:var(--muted)}
+  .kv .v{color:var(--accent);font-family:"SF Mono",Consolas,monospace}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel);border:none;border-right:1px solid var(--border);color:var(--muted);padding:6px 12px;font-size:13px;cursor:pointer}
+  .seg button:last-child{border-right:none}
+  .seg button.on{background:var(--accent);color:#fff}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .copy{margin-left:auto;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
+  .copy:hover{border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔢 IEEE 754 浮点转换器</h1>
+    <div class="sub">单精度 / 双精度位模式互换 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">数字 → 位模式 Number → Bits</div>
+      <input type="text" id="num" value="3.141592653589793">
+      <div class="row"><label>精度</label>
+        <span class="seg" id="prec">
+          <button data-p="32" class="on">32-bit</button>
+          <button data-p="64">64-bit</button>
+        </span>
+      </div>
+      <div class="mono" id="fwd"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">位模式 → 数字 Bits → Number</div>
+      <input type="text" id="bits" placeholder="32 位二进制或 0x 十六进制…">
+      <div class="row"><label>解析</label>
+        <span class="seg" id="rprec">
+          <button data-p="32" class="on">32-bit</button>
+          <button data-p="64">64-bit</button>
+        </span>
+        <button class="copy" id="bCopyRes">复制结果</button>
+      </div>
+      <div class="mono" id="rev"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function bytesToBin(u8){return [...u8].map(b=>b.toString(2).padStart(8,'0')).join('');}
+  function bytesToHex(u8){return [...u8].map(b=>b.toString(16).padStart(2,'0')).join('');}
+  let prec=32, rprec=32;
+  function fwd(){
+    const x=parseFloat($('num').value);
+    if(isNaN(x)){ $('fwd').textContent='（请输入有效数字）'; return; }
+    const ab=new ArrayBuffer(prec/8); const dv=new DataView(ab);
+    if(prec===32) dv.setFloat32(0,x,false); else dv.setFloat64(0,x,false);
+    const u8=new Uint8Array(ab);
+    const bin=bytesToBin(u8);
+    const hex='0x'+bytesToHex(u8);
+    const sign=bin[0], exp=bin.slice(1,1+ (prec===32?8:11)), mant=bin.slice(1+(prec===32?8:11));
+    $('fwd').innerHTML=
+      '<div class="kv">'+
+      '<div class="k">二进制</div><div class="v">'+bin+'</div>'+
+      '<div class="k">十六进制</div><div class="v">'+hex+'</div>'+
+      '<div class="k">符号位</div><div class="v">'+sign+'（'+(sign==='0'?'正':'负')+'）</div>'+
+      '<div class="k">指数</div><div class="v">'+exp+'（'+(parseInt(exp,2)-(prec===32?127:1023))+'）</div>'+
+      '<div class="k">尾数</div><div class="v">'+mant+'</div>'+
+      '</div>';
+  }
+  function rev(){
+    const raw=$('bits').value.trim().toLowerCase();
+    if(!raw){ $('rev').textContent=''; return; }
+    let bin;
+    if(raw.startsWith('0x')){ const n=raw.slice(2); if(!/^[0-9a-f]+$/.test(n)){ $('rev').textContent='（非法十六进制）'; return; } bin=''; const u8=[]; for(let i=0;i<n.length;i+=2) u8.push(parseInt(n.substr(i,2),16)); const need=rprec/8; while(u8.length<need)u8.unshift(0); bin=bytesToBin(u8.slice(-need)); }
+    else { if(!/^[01]+$/.test(raw)){ $('rev').textContent='（仅支持 0/1 二进制或 0x 十六进制）'; return; } bin=raw; }
+    if(bin.length!==rprec){ $('rev').textContent='（需要 '+rprec+' 位，当前 '+bin.length+' 位）'; return; }
+    const ab=new ArrayBuffer(rprec/8); const dv=new DataView(ab);
+    const u8=new Uint8Array(ab);
+    for(let i=0;i<bin.length;i+=8) u8[i/8]=parseInt(bin.substr(i,8),2);
+    const val= rprec===32? dv.getFloat32(0,false) : dv.getFloat64(0,false);
+    $('rev').innerHTML='<div class="kv"><div class="k">数值</div><div class="v">'+val+'</div>'+
+      '<div class="k">十进制</div><div class="v">'+val.toFixed(rprec===32?8:15)+'</div></div>';
+    lastRev=String(val);
+  }
+  let lastRev='';
+  document.querySelectorAll('#prec button').forEach(b=>b.onclick=()=>{
+    prec=+b.dataset.p; document.querySelectorAll('#prec button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fwd();
+  });
+  document.querySelectorAll('#rprec button').forEach(b=>b.onclick=()=>{
+    rprec=+b.dataset.p; document.querySelectorAll('#rprec button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); rev();
+  });
+  $('num').addEventListener('input',fwd);
+  $('bits').addEventListener('input',rev);
+  $('bCopyRes').onclick=async()=>{ if(!lastRev){setStatus('没有可复制的结果','err');return;} try{await navigator.clipboard.writeText(lastRev);setStatus('✓ 已复制 '+lastRev,'ok');}catch(e){setStatus('复制失败：'+e.message,'err');} };
+  fwd();
+})();
+</script>
+</body>
+</html>

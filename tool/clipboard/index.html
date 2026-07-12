@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>剪贴板片段管理 · Clipboard Manager</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:160px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .hist{display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto}
+  .item{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:flex-start}
+  .item .txt{flex:1;font-size:13px;line-height:1.5;word-break:break-all;white-space:pre-wrap;max-height:90px;overflow:auto}
+  .item .acts{display:flex;gap:6px;flex-shrink:0}
+  .item .acts button{padding:4px 9px;font-size:12px}
+  .item .time{color:var(--muted);font-size:11px;margin-top:4px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📋 剪贴板片段管理</h1>
+    <div class="sub">保存常用片段 · 本地存储 · 随时复制</div>
+  </div>
+  <div class="toolbar">
+    <button id="bPaste">读取剪贴板</button>
+    <button id="bSave" class="primary">保存到历史</button>
+    <button id="bClear">清空历史</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">片段内容 Snippet</div>
+      <textarea id="text" placeholder="输入文本，点“保存到历史”收藏；或点“读取剪贴板”导入当前剪贴板内容…"></textarea>
+      <div class="hint" style="margin-top:8px">历史保存在本机浏览器（localStorage），不会上传。</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">历史 History</div>
+      <div class="hist" id="hist"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st'); const KEY='clipboard_snippets_v1';
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY)||'[]'); }catch(e){ return []; } }
+  function save(arr){ localStorage.setItem(KEY,JSON.stringify(arr)); }
+  function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  function render(){
+    const arr=load();
+    if(!arr.length){ $('hist').innerHTML='<div class="hint">暂无保存的片段。</div>'; return; }
+    $('hist').innerHTML=arr.map((it,i)=>
+      '<div class="item"><div><div class="txt">'+esc(it.text)+'</div><div class="time">'+new Date(it.t).toLocaleString()+'</div></div>'+
+      '<div class="acts"><button data-copy="'+i+'">复制</button><button data-del="'+i+'">删除</button></div></div>'
+    ).join('');
+    $('hist').querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copy(load()[+b.dataset.copy].text));
+    $('hist').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ const a=load(); a.splice(+b.dataset.del,1); save(a); render(); setStatus('✓ 已删除','ok'); });
+  }
+  async function copy(t){ try{await navigator.clipboard.writeText(t);setStatus('✓ 已复制到剪贴板','ok');}catch(e){setStatus('复制失败：'+e.message,'err');} }
+  $('bSave').onclick=()=>{
+    const t=$('text').value;
+    if(!t.trim()){setStatus('内容为空，未保存','err');return;}
+    const arr=load(); arr.unshift({text:t,t:Date.now()});
+    save(arr.slice(0,100)); render(); setStatus('✓ 已保存（共 '+Math.min(arr.length,100)+' 条）','ok');
+  };
+  $('bPaste').onclick=async()=>{
+    try{ const t=await navigator.clipboard.readText(); $('text').value=t; setStatus('✓ 已读取剪贴板','ok'); }
+    catch(e){ setStatus('读取失败（需授权或浏览器不支持）：'+e.message,'err'); }
+  };
+  $('bClear').onclick=()=>{ if(load().length&&!confirm('确定清空全部历史？'))return; save([]); render(); setStatus('已清空历史'); };
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRC 校验和 · CRC Checksum</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;min-height:160px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
+    padding:12px;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .field label{color:var(--muted);font-size:13px}
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer}
+  .stat:hover{border-color:var(--accent)}
+  .stat .k{color:var(--muted);font-size:12px}
+  .stat .v{font-size:16px;font-weight:600;color:var(--accent);margin-top:4px;word-break:break-all;font-family:"SF Mono",Consolas,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px}
+  input[type=file]{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧮 CRC 校验和</h1>
+    <div class="sub">CRC32 / CRC16-CCITT / Adler32 · 文本或文件 · 纯本地</div>
+  </div>
+  <div class="toolbar">
+    <button id="bCopy">复制全部</button>
+    <button id="bClear" class="primary">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入 Input</div>
+      <div class="field">
+        <label>模式</label>
+        <select id="mode">
+          <option value="text" selected>文本</option>
+          <option value="file">文件</option>
+        </select>
+        <input type="file" id="file" style="display:none">
+      </div>
+      <textarea id="text" placeholder="在此输入文本，或切换到“文件”模式选择文件…">WorkBuddy CRC checksum tool.</textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card" style="display:flex;flex-direction:column;height:100%">
+      <div class="pane-head">校验和 Checksums（点击复制）</div>
+      <div class="stat-grid" id="stats"></div>
+      <div class="hint" id="meta" style="margin-top:10px"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const st=$('st');
+  function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  let last={};
+  function makeCRCTable(){
+    const table=new Uint32Array(256);
+    for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?(0xEDB88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}
+    return table;
+  }
+  const T=makeCRCTable();
+  function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=(c>>>8)^T[(c^b[i])&0xFF];return (c^0xFFFFFFFF)>>>0;}
+  function crc16(b){let c=0;for(let i=0;i<b.length;i++){c^=(b[i]<<8);for(let j=0;j<8;j++)c=(c&0x8000)?((c<<1)^0x1021):(c<<1);c&=0xFFFF;}return c>>>0;}
+  function adler32(b){let a=1,bb=0,m=65521;for(let i=0;i<b.length;i++){a=(a+b[i])%m;bb=(bb+a)%m;}return ((bb*65536)+a)>>>0;}
+  function h(n,w){return n.toString(16).padStart(w,'0');}
+  function render(bytes){
+    last={
+      'CRC32':'0x'+h(crc32(bytes),8),
+      'CRC32 (hex)':h(crc32(bytes),8),
+      'CRC16-CCITT':'0x'+h(crc16(bytes),4),
+      'Adler32':'0x'+h(adler32(bytes),8)
+    };
+    $('stats').innerHTML=Object.entries(last).map(([k,v])=>
+      '<div class="stat" data-v="'+v+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('');
+    document.querySelectorAll('#stats .stat').forEach(el=>el.onclick=()=>copy(el.dataset.v));
+    $('meta').textContent='输入长度：'+bytes.length+' 字节';
+    setStatus('✓ 已计算 '+bytes.length+' 字节的校验和','ok');
+  }
+  async function copy(v){ try{await navigator.clipboard.writeText(v);setStatus('✓ 已复制 '+v,'ok');}catch(e){setStatus('复制失败：'+e.message,'err');} }
+  function recompute(){
+    if($('mode').value==='file'){
+      const f=$('file').files[0];
+      if(!f){setStatus('请选择一个文件','err');return;}
+      const buf=await f.arrayBuffer();
+      render(new Uint8Array(buf));
+    } else {
+      render(new TextEncoder().encode($('text').value));
+    }
+  }
+  $('text').addEventListener('input',()=>{ if($('mode').value==='text') recompute(); });
+  $('mode').addEventListener('change',()=>{
+    const fileMode=$('mode').value==='file';
+    $('file').style.display=fileMode?'inline-block':'none';
+    $('text').style.display=fileMode?'none':'block';
+    recompute();
+  });
+  $('file').addEventListener('change',recompute);
+  $('bCopy').onclick=async()=>{
+    const all=Object.values(last).join('\n');
+    if(!all){setStatus('没有可复制的结果','err');return;}
+    try{await navigator.clipboard.writeText(all);setStatus('✓ 已复制全部校验和','ok');}catch(e){setStatus('复制失败：'+e.message,'err');}
+  };
+  $('bClear').onclick=()=>{ $('text').value=''; last={}; $('stats').innerHTML=''; $('meta').textContent=''; recompute(); };
+  recompute();
+})();
+</script>
+</body>
+</html>
