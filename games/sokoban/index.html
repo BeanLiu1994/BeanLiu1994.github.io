@@ -105,9 +105,10 @@
     // 14 — 四箱大对称，终极关
     ['#########','#       #','#  $ $  #','# .   . #','#   @   #','#  $ $  #','# .   . #','#       #','#########']
   ];
-  let CW=7,CH=7,CELL=46,W=322,H=322;
+  let CW=7,CH=7,CELL=46,W=322,H=322,SX=1,SY=1;
   const canvas=document.getElementById('game');
-  function fit(){ const dpr=window.devicePixelRatio||1; canvas.width=W*dpr; canvas.height=H*dpr; const c=canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return c; }
+  // 用整数 backing + 精确缩放矩阵，规避 Safari/WebKit 对小数 DPR 与 transform 丢失的渲染 bug
+  function fit(){ const dpr=window.devicePixelRatio||1; const bw=Math.round(W*dpr), bh=Math.round(H*dpr); canvas.width=bw; canvas.height=bh; SX=bw/W; SY=bh/H; const c=canvas.getContext('2d'); c.setTransform(SX,0,0,SY,0,0); return c; }
   let ctx=fit();
 
   function parse(rows){ const walls=new Set(),goals=new Set(),boxes=[]; let player=null;
@@ -183,7 +184,7 @@
     autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
       const mv=this.solution[this.solIdx++]; this._stepDuringAuto=true;
       this.boxes.forEach(b=>{ b.fromR=b.r; b.fromC=b.c; }); // 同 move：先对齐所有箱子动画起点，避免未推动的箱子回放旧动画
-      this.player={r:mv.from.r,c:mv.from.c,fromR:this.player.r,fromC:this.player.c}; const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c); if(bi>=0){ this.boxes[bi]={r:mv.to.r,c:mv.to.c,fromR:mv.box.r,fromC:mv.box.c}; }
+      this.player={r:mv.box.r,c:mv.box.c,fromR:this.player.r,fromC:this.player.c}; const bi=this.boxes.findIndex(b=>b.r===mv.box.r&&b.c===mv.box.c); if(bi>=0){ this.boxes[bi]={r:mv.to.r,c:mv.to.c,fromR:mv.box.r,fromC:mv.box.c}; }
       this.tween=0; this.tweenStart=performance.now(); this.draw(); this.updateUndoBtn();
       this._stepDuringAuto=false; this.updateUndoBtn();
       if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
@@ -200,7 +201,7 @@
       const end=(e)=>{ if(e.pointerId!==id) return; id=null; if(fired||this.autoPlay||this.over) return; const dx=e.clientX-sx,dy=e.clientY-sy; if(Math.max(Math.abs(dx),Math.abs(dy))>=TH){ if(Math.abs(dx)>Math.abs(dy)) this.move(0,dx>0?1:-1); else this.move(dy>0?1:-1,0); } };
       wrap.addEventListener('pointerup',end); wrap.addEventListener('pointercancel',end);
       window.addEventListener('resize',()=>this.draw()); }
-    draw(){ ctx.clearRect(0,0,W,H); const tf=this.tween<1?Math.min(1,(performance.now()-this.tweenStart)/260):1; this.tween=tf;
+    draw(){ ctx.setTransform(SX,0,0,SY,0,0); ctx.clearRect(0,0,W,H); const tf=this.tween<1?Math.min(1,(performance.now()-this.tweenStart)/260):1; this.tween=tf;
       // draw cells
       for(let r=0;r<CH;r++) for(let c=0;c<CW;c++){ const x=c*CELL,y=r*CELL; if(this.walls.has(r+','+c)){ ctx.fillStyle='#2a2150'; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); } else { ctx.fillStyle='#10162e'; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); if(this.goals.has(r+','+c)){ ctx.strokeStyle='#4dffc4'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,CELL*0.18,0,7); ctx.stroke(); } } }
       const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
