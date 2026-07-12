@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数学表达式计算器 · Math Evaluator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:15px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-height:120px;resize:vertical}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .line{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);font-size:14px;align-items:baseline}
+  .line:last-child{border-bottom:none}
+  .line .e{color:var(--muted);flex:0 0 auto;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .line .r{margin-left:auto;font-weight:700;color:var(--accent);word-break:break-all;text-align:right}
+  .line .err{margin-left:auto;color:var(--err)}
+  .out{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;min-height:60px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chip{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--muted);cursor:pointer}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  code{background:var(--bg);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧮 数学表达式计算器</h1>
+    <div class="sub">支持函数 / 常量 / 括号 · 逐行批量计算 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入表达式（每行一个）</div>
+      <textarea id="inp" spellcheck="false">2 + 3 * 4
+sqrt(144) + pi
+(10 + 5) ^ 2 / 3
+log(1000) - ln(e)
+sin(pi/2) * cos(0)
+round(3.14159, 2)
+max(1, 9, 4) - min(2, 8)
+-(2 + 3) * 2</textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="run">计算</button>
+        <button class="ghost" id="copy">复制结果</button>
+        <button class="ghost" id="clear">清空</button>
+      </div>
+      <div class="pane-head">常用插入</div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">结果</div>
+      <div class="out" id="out">—</div>
+      <p class="pane-head" style="margin-top:14px">支持</p>
+      <ul style="color:var(--muted);font-size:13px;line-height:1.7;margin:0;padding-left:18px">
+        <li>运算符：<code>+ - * / ^ %</code>，括号 <code>( )</code>，一元负号。</li>
+        <li>函数：<code>sin cos tan asin acos atan sqrt cbrt abs floor ceil round exp sign</code></li>
+        <li>对数：<code>log</code>(10 底) <code>ln</code> <code>log2</code>；<code>pow(a,b)</code> <code>hypot(a,b)</code></li>
+        <li>聚合：<code>min(...)</code> <code>max(...)</code>（多个参数）</li>
+        <li>常量：<code>pi</code> <code>e</code> <code>tau</code>(=2π)</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const FUNCS = {
+    sin:Math.sin,cos:Math.cos,tan:Math.tan,asin:Math.asin,acos:Math.acos,atan:Math.atan,
+    sqrt:Math.sqrt,cbrt:Math.cbrt,abs:Math.abs,floor:Math.floor,ceil:Math.ceil,
+    round:(...a)=>a.length>=2?+a[0].toFixed(a[1]):Math.round(a[0]),
+    exp:Math.exp,sign:Math.sign,log:Math.log10,ln:Math.log,log2:Math.log2,
+    pow:Math.pow,hypot:Math.hypot,min:Math.min,max:Math.max
+  };
+  const CONSTS = { pi:Math.PI, e:Math.E, tau:2*Math.PI };
+  const PREC={'+':1,'-':1,'*':2,'/':2,'%':2,'^':3}, RIGHT={'^':true};
+
+  function tokenize(s){
+    const t=[]; let i=0;
+    while(i<s.length){
+      const c=s[i];
+      if(c===' '||c==='\t'){ i++; continue; }
+      if(/[0-9.]/.test(c)){
+        let j=i+1; while(j<s.length && /[0-9.eE]/.test(s[j])){
+          if((s[j]==='e'||s[j]==='E') && (s[j+1]==='+'||s[j+1]==='-')) j+=2; else j++;
+        }
+        t.push({t:'num',v:parseFloat(s.slice(i,j))}); i=j; continue;
+      }
+      if(/[a-zA-Z_]/.test(c)){
+        let j=i+1; while(j<s.length && /[a-zA-Z0-9_]/.test(s[j])) j++;
+        t.push({t:'name',v:s.slice(i,j)}); i=j; continue;
+      }
+      if('+-*/%^(),'.includes(c)){ t.push({t:'op',v:c}); i++; continue; }
+      throw new Error('无法识别的字符：'+c);
+    }
+    return t;
+  }
+
+  function toRPN(tokens){
+    const out=[], st=[]; let prev=null;
+    tokens.forEach((tk,idx)=>{
+      if(tk.t==='num'){ out.push(tk); }
+      else if(tk.t==='name'){
+        const next=tokens[idx+1];
+        if(CONSTS.hasOwnProperty(tk.v) && !(next && next.v==='(')){ out.push({t:'num',v:CONSTS[tk.v]}); }
+        else { st.push({t:'fn',v:tk.v}); }
+      }
+      else if(tk.v==='('){
+        if(st.length && st[st.length-1].t==='fn') out.push({t:'sep',v:'|'});
+        st.push(tk);
+      }
+      else if(tk.v===')'){
+        while(st.length && st[st.length-1].v!=='(') out.push(st.pop());
+        if(!st.length) throw new Error('括号不匹配');
+        st.pop();
+        if(st.length && st[st.length-1].t==='fn') out.push(st.pop());
+      }
+      else if(tk.v===','){
+        while(st.length && st[st.length-1].v!=='(') out.push(st.pop());
+      }
+      else { // 运算符 + - * / % ^
+        const op=tk.v;
+        const isUnary = (op==='-'||op==='+') && (prev===null || (prev.t==='op' && prev.v!==')'));
+        if(isUnary && op==='-'){ st.push({t:'op',v:'~'}); }
+        else if(isUnary && op==='+'){ /* noop */ }
+        else {
+          while(st.length && st[st.length-1].t==='op' && st[st.length-1].v!=='(' && st[st.length-1].v!==')' &&
+                (PREC[st[st.length-1].v] > PREC[op] || (PREC[st[st.length-1].v]===PREC[op] && !RIGHT[op]))){
+            out.push(st.pop());
+          }
+          st.push({t:'op',v:op});
+        }
+      }
+      prev=tk;
+    });
+    while(st.length){ const o=st.pop(); if(o.v==='('||o.v===')') throw new Error('括号不匹配'); out.push(o); }
+    return out;
+  }
+
+  function evalRPN(rpn){
+    const st=[];
+    rpn.forEach(tk=>{
+      if(tk.t==='sep'){ st.push({sep:true}); return; } // 函数参数边界标记，保留在栈上
+      if(tk.t==='num'){ st.push(tk.v); return; }
+      if(tk.v==='~'){ st.push(-st.pop()); return; }
+      if(tk.t==='fn'){
+        if(!FUNCS.hasOwnProperty(tk.v)) throw new Error('未知函数：'+tk.v);
+        const args=[];
+        while(st.length && !(st[st.length-1] && st[st.length-1].sep)) args.unshift(st.pop());
+        if(st.length && st[st.length-1] && st[st.length-1].sep) st.pop();
+        if(args.length===0) throw new Error('函数缺少参数：'+tk.v);
+        st.push(FUNCS[tk.v](...args));
+        return;
+      }
+      // 二元运算符
+      if(st.length<2) throw new Error('表达式不完整');
+      const b=st.pop(), a=st.pop();
+      let r; switch(tk.v){
+        case '+':r=a+b;break; case '-':r=a-b;break; case '*':r=a*b;break;
+        case '/': if(b===0) throw new Error('除以 0'); r=a/b; break;
+        case '%': if(b===0) throw new Error('模 0'); r=a%b; break;
+        case '^':r=Math.pow(a,b);break;
+        default: throw new Error('未知运算符：'+tk.v);
+      }
+      st.push(r);
+    });
+    if(st.length!==1) throw new Error('表达式有误');
+    return st[0];
+  }
+
+  function evaluate(expr){ const v=evalRPN(toRPN(tokenize(expr))); if(typeof v!=='number'||!isFinite(v)) throw new Error('结果无效（'+v+'）'); return v; }
+  function fmt(n){ return Number.isInteger(n) ? n.toString() : (+n.toPrecision(12)).toString(); }
+  function esc(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function run(){
+    const lines=$('inp').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const out=$('out'); out.innerHTML='';
+    if(lines.length===0){ out.innerHTML='<span style="color:var(--muted)">请输入表达式</span>'; return; }
+    let results=[], ok=0;
+    lines.forEach(line=>{
+      const div=document.createElement('div'); div.className='line';
+      try{
+        const v=evaluate(line); const txt=fmt(v);
+        div.innerHTML='<span class="e">'+esc(line)+'</span><span class="r">'+esc(txt)+'</span>';
+        results.push(line+' = '+txt); ok++;
+      }catch(e){
+        div.innerHTML='<span class="e">'+esc(line)+'</span><span class="err">⚠ '+esc(e.message)+'</span>';
+      }
+      out.appendChild(div);
+    });
+    $('st').textContent='✓ 计算 '+lines.length+' 行，成功 '+ok+' 行';
+    window.__results=results;
+  }
+
+  const chips=['pi','e','sqrt()','sin()','cos()','log()','ln()','^','round(,)','max(,)','min(,)'];
+  const chipBox=$('chips');
+  chips.forEach(c=>{ const b=document.createElement('span'); b.className='chip'; b.textContent=c;
+    b.addEventListener('click',()=>{ const ta=$('inp'); ta.value += (ta.value && !ta.value.endsWith('\n')?'\n':'')+c; ta.focus(); run(); });
+    chipBox.appendChild(b); });
+
+  $('run').addEventListener('click',run);
+  $('copy').addEventListener('click',()=>{ if(window.__results&&window.__results.length){ navigator.clipboard&&navigator.clipboard.writeText(window.__results.join('\n')); $('st').textContent='✓ 已复制结果'; } });
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
+  $('inp').addEventListener('input',run);
+  run();
+})();
+</script>
+</body>
+</html>

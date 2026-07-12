@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片尺寸调整 · Image Resizer</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=number],select,input[type=file]{background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus,select:focus{border-color:var(--accent)}
+  input[type=file]{width:100%;padding:8px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted)}
+  .kv .v{color:var(--text);text-align:right}
+  .preview{max-width:100%;border:1px solid var(--border);border-radius:8px;margin-top:10px;background:
+    repeating-conic-gradient(#1c2026 0% 25%, #14171d 0% 50%) 50%/18px 18px;display:block}
+  .drop{border:1.5px dashed var(--border);border-radius:10px;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
+  .drop.over{border-color:var(--accent);color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+  .check input{width:16px;height:16px}
+  .mini{width:96px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ 图片尺寸调整</h1>
+    <div class="sub">本地缩放 / 改尺寸 / 转格式 · 不上传 · 纯浏览器处理</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">① 选择图片</div>
+      <div class="drop" id="drop">点击或拖拽图片到此处</div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <div class="pane-head" style="margin-top:14px">② 尺寸设置</div>
+      <div class="row">
+        <label>宽</label><input type="number" id="w" class="mini" min="1" value="800">
+        <label>高</label><input type="number" id="h" class="mini" min="1" value="600">
+        <label class="check"><input type="checkbox" id="lock" checked> 锁定比例</label>
+      </div>
+      <div class="row">
+        <label>或直接按百分比</label><input type="number" id="pct" class="mini" min="1" max="500" value="100"><label>%</label>
+      </div>
+      <div class="row">
+        <label>输出格式</label>
+        <select id="fmt"><option value="keep">保持原格式</option><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option><option value="image/webp">WebP</option></select>
+        <label id="qlab">质量</label><input type="number" id="qual" class="mini" min="10" max="100" value="90"><label>%</label>
+      </div>
+      <div class="row">
+        <button id="apply">应用并预览</button>
+        <button class="ghost" id="download" disabled>下载</button>
+      </div>
+      <div id="info"></div>
+      <canvas id="cv" class="preview" hidden></canvas>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">说明</div>
+      <ul style="color:var(--muted);font-size:13px;line-height:1.8;margin:0;padding-left:18px">
+        <li>所有处理在浏览器本地完成，图片不会上传到任何服务器。</li>
+        <li>“锁定比例”时修改宽度会自动同步高度（反向亦同）。</li>
+        <li>百分比模式会按原始尺寸等比缩放，覆盖宽/高输入。</li>
+        <li>JPEG / WebP 支持质量调节；PNG 为无损，质量参数无效。</li>
+        <li>WebP 在个别旧浏览器不支持导出，可改选 PNG。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let img=null, srcName='image', srcType='image/png', srcW=0, srcH=0, outBlob=null, outUrl=null;
+
+  $('drop').addEventListener('click',()=>$('file').click());
+  ['dragover','dragenter'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('over');}));
+  $('drop').addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) loadFile(f); });
+  $('file').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) loadFile(f); });
+
+  function loadFile(f){
+    if(!f.type.startsWith('image/')){ $('st').textContent='⚠ 请选择图片文件'; return; }
+    srcName=f.name.replace(/\.[^.]+$/,'')||'image'; srcType=f.type;
+    const reader=new FileReader();
+    reader.onload=ev=>{ const im=new Image(); im.onload=()=>{ img=im; srcW=im.naturalWidth; srcH=im.naturalHeight;
+      $('w').value=srcW; $('h').value=srcH; $('pct').value=100;
+      $('fmt').value = (srcType==='image/png')?'image/png':(srcType==='image/jpeg'?'image/jpeg':(srcType==='image/webp'?'image/webp':'keep'));
+      $('st').textContent='✓ 已读取 '+srcW+'×'+srcH; apply(); };
+      im.src=ev.target.result; };
+    reader.readAsDataURL(f);
+  }
+
+  // 锁定比例联动
+  $('w').addEventListener('input',()=>{ if($('lock').checked && srcW){ const r=srcH/srcW; $('h').value=Math.max(1,Math.round($('w').value*r)); } });
+  $('h').addEventListener('input',()=>{ if($('lock').checked && srcH){ const r=srcW/srcH; $('w').value=Math.max(1,Math.round($('h').value*r)); } });
+  $('pct').addEventListener('input',()=>{ const p=Math.max(1,parseFloat($('pct').value)||1); $('w').value=Math.round(srcW*p/100); $('h').value=Math.round(srcH*p/100); });
+  $('fmt').addEventListener('change',()=>{ const keep=$('fmt').value==='keep'; $('qlab').style.opacity = (keep||$('fmt').value==='image/png')?0.4:1; });
+
+  function apply(){
+    if(!img){ $('st').textContent='请先选择图片'; return; }
+    let w=Math.max(1,parseInt($('w').value,10)||srcW);
+    let h=Math.max(1,parseInt($('h').value,10)||srcH);
+    const cv=$('cv'); cv.width=w; cv.height=h;
+    const ctx=cv.getContext('2d');
+    if($('fmt').value==='image/png' || ($('fmt').value==='keep'&&srcType==='image/png')) ctx.fillStyle='#fff',ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img,0,0,w,h);
+    cv.hidden=false;
+    const fmtType = $('fmt').value==='keep'?srcType:$('fmt').value;
+    const isLossy = (fmtType==='image/jpeg'||fmtType==='image/webp');
+    const q = isLossy ? Math.min(1,Math.max(0.1,parseInt($('qual').value,10)/100)) : undefined;
+    cv.toBlob(b=>{
+      outBlob=b;
+      if(outUrl) URL.revokeObjectURL(outUrl);
+      outUrl=URL.createObjectURL(b);
+      const ext = fmtType==='image/jpeg'?'jpg':fmtType==='image/webp'?'webp':'png';
+      window.__dlName = srcName+'_'+w+'x'+h+'.'+ext;
+      $('info').innerHTML =
+        '<div class="kv"><span class="k">原始尺寸</span><span class="v">'+srcW+' × '+srcH+'</span></div>'+
+        '<div class="kv"><span class="k">新尺寸</span><span class="v">'+w+' × '+h+'</span></div>'+
+        '<div class="kv"><span class="k">输出格式</span><span class="v">'+(fmtType.split('/')[1].toUpperCase())+'</span></div>'+
+        '<div class="kv"><span class="k">文件大小</span><span class="v">'+fmtSize(b.size)+'</span></div>';
+      $('download').disabled=false;
+      $('st').textContent='✓ 已生成 '+w+'×'+h+' · '+fmtSize(b.size);
+    }, fmtType, q);
+  }
+  function fmtSize(b){ return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(2)+' MB'; }
+
+  $('apply').addEventListener('click',apply);
+  $('download').addEventListener('click',()=>{ if(!outBlob) return;
+    const a=document.createElement('a'); a.href=outUrl; a.download=window.__dlName; a.click(); $('st').textContent='✓ 已下载 '+window.__dlName; });
+})();
+</script>
+</body>
+</html>

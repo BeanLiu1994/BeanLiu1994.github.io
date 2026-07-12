@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>robots.txt 生成器 · Robots Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text],textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 11px;font-size:14px;outline:none;font-family:inherit}
+  textarea{min-height:200px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+  input[type=text]:focus,textarea:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px}
+  input.sm{flex:1;min-width:120px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button.danger{background:transparent;border:1px solid var(--err);color:var(--err)}
+  button:hover{filter:brightness(1.08)}
+  .grp{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--bg)}
+  .grp h3{margin:0 0 8px;font-size:13px;color:var(--accent)}
+  .rline{display:flex;gap:8px;margin-bottom:6px;align-items:center}
+  .rline select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px}
+  .rline input{flex:1;min-width:80px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .mini{width:80px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🤖 robots.txt 生成器</h1>
+    <div class="sub">可视化配置爬虫规则 · 实时生成 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">规则分组</div>
+      <div id="groups"></div>
+      <button class="ghost" id="addGroup">+ 新增分组</button>
+    </div>
+    <div class="card">
+      <div class="pane-head">全局设置</div>
+      <div class="row"><label>站点地图</label><input type="text" id="sitemap" class="sm" placeholder="https://example.com/sitemap.xml"></div>
+      <div class="row"><label>主机名</label><input type="text" id="host" class="sm" placeholder="https://example.com"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">生成的 robots.txt</div>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="copy">复制</button>
+        <button class="ghost" id="download">下载 robots.txt</button>
+      </div>
+      <p class="pane-head" style="margin-top:10px">提示</p>
+      <ul style="color:var(--muted);font-size:13px;line-height:1.7;margin:0;padding-left:18px">
+        <li>每个分组可指定一个或多个 User-agent，并配置 Allow / Disallow 路径。</li>
+        <li>路径留空表示根目录 <code>/</code>；Disallow 留空表示允许全部。</li>
+        <li>使用 <code>*</code> 作为通配符（百度/Google 均支持）。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let gid=0;
+
+  function addGroup(data){
+    data=data||{agents:'*',delay:'',rules:[{type:'disallow',path:''}]};
+    gid++;
+    const g=document.createElement('div'); g.className='grp'; g.dataset.id=gid;
+    let html='<h3>分组 #'+gid+'</h3>'+
+      '<div class="row"><label>User-agent</label><input type="text" class="agents" value="'+esc(data.agents)+'" placeholder="* 或 Googlebot"></div>'+
+      '<div class="row"><label>Crawl-delay</label><input type="text" class="delay sm" value="'+esc(data.delay)+'" placeholder="可选，如 10"></div>'+
+      '<div class="rules"></div>'+
+      '<button class="ghost addRule" style="margin-top:4px">+ 添加路径规则</button> '+
+      '<button class="danger delGroup">删除分组</button>';
+    g.innerHTML=html;
+    const rulesBox=g.querySelector('.rules');
+    (data.rules&&data.rules.length?data.rules:[{type:'disallow',path:''}]).forEach(r=>addRule(rulesBox,r));
+    g.querySelector('.addRule').addEventListener('click',()=>addRule(rulesBox,{type:'disallow',path:''}));
+    g.querySelector('.delGroup').addEventListener('click',()=>{ g.remove(); build(); });
+    rulesBox.addEventListener('input',build);
+    g.querySelector('.agents').addEventListener('input',build);
+    g.querySelector('.delay').addEventListener('input',build);
+    $('groups').appendChild(g);
+    build();
+  }
+  function addRule(box,r){
+    const row=document.createElement('div'); row.className='rline';
+    row.innerHTML='<select class="rtype"><option value="disallow">Disallow</option><option value="allow">Allow</option></select>'+
+      '<input type="text" class="rpath" placeholder="/admin/">';
+    row.querySelector('.rtype').value=r.type; row.querySelector('.rpath').value=r.path;
+    row.querySelector('.rtype').addEventListener('change',build);
+    row.querySelector('.rpath').addEventListener('input',build);
+    box.appendChild(row);
+  }
+  function build(){
+    const groups=[...document.querySelectorAll('#groups .grp')];
+    let out=[];
+    groups.forEach(g=>{
+      const agents=g.querySelector('.agents').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const delay=g.querySelector('.delay').value.trim();
+      const rules=[...g.querySelectorAll('.rules .rline')].map(r=>({type:r.querySelector('.rtype').value,path:r.querySelector('.rpath').value.trim()}));
+      if(agents.length===0) return;
+      agents.forEach(a=>out.push('User-agent: '+a));
+      rules.forEach(r=>{ if(r.path===''){ out.push((r.type==='allow'?'Allow':'Disallow')+': /'); }
+        else out.push((r.type==='allow'?'Allow':'Disallow')+': '+r.path); });
+      if(delay) out.push('Crawl-delay: '+delay);
+      out.push('');
+    });
+    const sm=$('sitemap').value.trim(); if(sm) out.push('Sitemap: '+sm);
+    const host=$('host').value.trim(); if(host) out.unshift('Host: '+host);
+    const txt=out.join('\n').replace(/\n{3,}/g,'\n\n').trim()+'\n';
+    $('out').value=txt;
+    $('st').textContent='✓ 已生成，'+groups.length+' 个分组';
+    window.__txt=txt;
+  }
+  function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  $('addGroup').addEventListener('click',()=>addGroup());
+  $('sitemap').addEventListener('input',build);
+  $('host').addEventListener('input',build);
+  $('copy').addEventListener('click',()=>{ if(window.__txt){ navigator.clipboard&&navigator.clipboard.writeText(window.__txt); $('st').textContent='✓ 已复制'; } });
+  $('download').addEventListener('click',()=>{ const b=new Blob([window.__txt||''],{type:'text/plain'}); const u=URL.createObjectURL(b);
+    const a=document.createElement('a'); a.href=u; a.download='robots.txt'; a.click(); URL.revokeObjectURL(u); $('st').textContent='✓ 已下载 robots.txt'; });
+
+  // 默认示例分组
+  addGroup({agents:'*',delay:'',rules:[{type:'disallow',path:'/admin/'},{type:'disallow',path:'/private/'}]});
+})();
+</script>
+</body>
+</html>

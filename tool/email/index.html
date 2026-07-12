@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>邮箱地址校验与解析 · Email Validator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea,input[type=text]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit;resize:vertical}
+  textarea:focus,input[type=text]:focus{border-color:var(--accent)}
+  textarea{min-height:90px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--border);font-size:13px}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted)}
+  .kv .v{color:var(--text);word-break:break-all;text-align:right}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+  .badge.ok{background:rgba(62,207,142,.16);color:var(--ok)}
+  .badge.err{background:rgba(255,93,108,.16);color:var(--err)}
+  .badge.warn{background:rgba(255,184,76,.16);color:#ffb84c}
+  .badge.info{background:rgba(79,156,255,.16);color:var(--accent)}
+  .big{font-size:22px;font-weight:700;margin:2px 0 10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  code{background:var(--bg);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📧 邮箱地址校验与解析</h1>
+    <div class="sub">语法校验 · 解析 · 服务商识别 · 常见拼写纠错 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入邮箱（支持多行批量）</div>
+      <textarea id="inp" placeholder="user@example.com&#10;someone@gmail.com">hello.world+tag@gmail.com</textarea>
+      <div class="row">
+        <button id="check">校验 / 解析</button>
+        <button class="ghost" id="mask">生成脱敏预览</button>
+        <button class="ghost" id="clear">清空</button>
+      </div>
+      <div id="summary" class="big"></div>
+      <div id="details"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">脱敏结果</div>
+      <div id="maskOut" class="kv" style="font-size:14px;color:var(--accent)">—</div>
+      <p class="pane-head" style="margin-top:14px">说明</p>
+      <ul style="color:var(--muted);font-size:13px;line-height:1.7;margin:0;padding-left:18px">
+        <li>语法规则参考 RFC 5322 简化版，覆盖绝大多数真实邮箱。</li>
+        <li>服务商基于域名识别（Gmail / Outlook / QQ / 163 等）。</li>
+        <li>“一次性邮箱”基于常见丢弃域名清单做提示，仅供风控参考。</li>
+        <li>拼写纠错仅对域名做常见笔误提示（如 <code>gmai.com</code> → <code>gmail.com</code>）。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  // 常见笔误映射
+  const TYPO = {
+    'gmai.com':'gmail.com','gmail.co':'gmail.com','gmial.com':'gmail.com','gmail.con':'gmail.com',
+    'hotmial.com':'hotmail.com','hotmai.com':'hotmail.com','hotmail.con':'hotmail.com',
+    'outlok.com':'outlook.com','outlook.con':'outlook.com','yaho.com':'yahoo.com','yahoo.con':'yahoo.com',
+    '163.con':'163.com','126.con':'126.com','qq.con':'qq.com','icloud.con':'icloud.com'
+  };
+  const PROVIDER = {
+    'gmail.com':'Google','googlemail.com':'Google','outlook.com':'Microsoft','hotmail.com':'Microsoft',
+    'live.com':'Microsoft','msn.com':'Microsoft','yahoo.com':'Yahoo','yahoo.co.jp':'Yahoo',
+    'icloud.com':'Apple','me.com':'Apple','qq.com':'腾讯 QQ','foxmail.com':'腾讯 Foxmail',
+    '163.com':'网易 163','126.com':'网易 126','yeah.net':'网易 Yeah','sina.com':'新浪',
+    'sina.cn':'新浪','sohu.com':'搜狐','aliyun.com':'阿里云','139.com':'中国移动',
+    '189.cn':'中国电信','proton.me':'Proton','protonmail.com':'Proton','gmx.com':'GMX','zoho.com':'Zoho'
+  };
+  const DISPOSABLE = new Set(['mailinator.com','10minutemail.com','guerrillamail.com','tempmail.com',
+    'temp-mail.org','throwawaymail.com','yopmail.com','getnada.com','trashmail.com','dispostable.com']);
+  // 简化 RFC5322：本地部分与域名（含带点的域名）
+  const RE = /^(?=.{3,254}$)([A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*)@((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,})$/;
+
+  function analyze(raw){
+    const email = raw.trim().toLowerCase();
+    if(!email) return null;
+    const m = email.match(RE);
+    if(!m){
+      let reason = '格式不符合邮箱基本结构';
+      if(email.indexOf('@')<0) reason='缺少 @ 符号';
+      else if((email.match(/@/g)||[]).length>1) reason='包含多个 @';
+      else if(!email.includes('.')) reason='域名缺少顶级域（如 .com）';
+      return {email:raw.trim(),valid:false,reason};
+    }
+    const local = m[1], domain = m[2];
+    const typoDomain = TYPO[domain];
+    const provider = PROVIDER[domain] || (domain.endsWith('.edu')?'教育机构':domain.endsWith('.gov')?'政府':domain.endsWith('.org')?'组织':'其他 / 未知');
+    const disposable = DISPOSABLE.has(domain);
+    const plus = local.includes('+');
+    const tagged = plus ? local.split('+')[1] : null;
+    const baseLocal = local.split('+')[0];
+    return {email:raw.trim(),valid:true,local,domain,baseLocal,plus,tagged,provider,disposable,typoDomain};
+  }
+
+  function render(){
+    const lines = $('inp').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    const box = $('details'); box.innerHTML='';
+    let ok=0, bad=0;
+    if(lines.length===0){ $('summary').textContent='—'; $('summary').className='big'; box.innerHTML='<div class="kv"><span class="k">提示</span><span class="v">请输入至少一个邮箱</span></div>'; $('st').textContent='请输入邮箱'; return; }
+    lines.forEach(line=>{
+      const r = analyze(line);
+      const wrap = document.createElement('div'); wrap.style.marginBottom='12px';
+      if(!r){ return; }
+      if(r.valid){
+        ok++;
+        let html = '<div class="kv"><span class="k">'+escapeHtml(r.email)+'</span><span class="v"><span class="badge ok">有效</span></span></div>';
+        html += '<div class="kv"><span class="k">本地名</span><span class="v">'+escapeHtml(r.local)+(r.plus?' <span class="badge info">+'+escapeHtml(r.tagged)+'</span>':'')+'</span></div>';
+        html += '<div class="kv"><span class="k">域名</span><span class="v">'+escapeHtml(r.domain)+'</span></div>';
+        html += '<div class="kv"><span class="k">服务商</span><span class="v">'+escapeHtml(r.provider)+'</span></div>';
+        if(r.disposable) html += '<div class="kv"><span class="k">风险</span><span class="v"><span class="badge warn">疑似一次性邮箱</span></span></div>';
+        if(r.typoDomain) html += '<div class="kv"><span class="k">建议</span><span class="v"><span class="badge warn">域名笔误？应为 '+escapeHtml(r.typoDomain)+'</span></span></div>';
+        wrap.innerHTML = html;
+      } else {
+        bad++;
+        wrap.innerHTML = '<div class="kv"><span class="k">'+escapeHtml(r.email)+'</span><span class="v"><span class="badge err">无效</span></span></div>'+
+          '<div class="kv"><span class="k">原因</span><span class="v">'+escapeHtml(r.reason)+'</span></div>';
+      }
+      box.appendChild(wrap);
+    });
+    const total = ok+bad;
+    $('summary').textContent = total+' 个 · ✓ '+ok+' 有效 · ✗ '+bad+' 无效';
+    $('summary').className = 'big';
+    $('st').textContent = '✓ 已解析 '+total+' 个邮箱';
+  }
+
+  function mask(){
+    const lines = $('inp').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(lines.length===0){ $('maskOut').textContent='—'; return; }
+    const out = lines.map(line=>{
+      const r = analyze(line);
+      if(!r||!r.valid) return line+' （无效，原样返回）';
+      const u = r.local.length>2 ? r.local[0]+'*'.repeat(Math.max(1,r.local.length-2))+r.local.slice(-1) : r.local[0]+'*';
+      const d = r.domain;
+      return u+'@'+d;
+    });
+    $('maskOut').textContent = out.join('\n');
+    $('st').textContent = '✓ 已生成 '+out.length+' 个脱敏邮箱';
+  }
+  function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  $('check').addEventListener('click',render);
+  $('mask').addEventListener('click',mask);
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; render(); });
+  $('inp').addEventListener('input',render);
+  render();
+})();
+</script>
+</body>
+</html>

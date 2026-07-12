@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML 压缩器 · HTML Minifier</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:200px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:13px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .out{white-space:pre-wrap;word-break:break-all}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin:6px 0}
+  .check input{width:16px;height:16px}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px}
+  .kv .k{color:var(--muted)} .kv .v{color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🗜️ HTML 压缩器</h1>
+    <div class="sub">去除注释与冗余空白 · 体积对比 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入 HTML</div>
+      <textarea id="inp" spellcheck="false" placeholder="粘贴 HTML 代码…"><!DOCTYPE html>
+<html>
+  <head>
+    <title> 示例 </title>
+    <!-- 这是注释 -->
+    <style>
+      body {  margin: 0;  }
+    </style>
+  </head>
+  <body>
+    <h1>  Hello   World  </h1>
+    <p>  一段   文字  </p>
+  </body>
+</html></textarea>
+      <div class="check"><input type="checkbox" id="comments" checked> 删除注释</div>
+      <div class="check"><input type="checkbox" id="between" checked> 删除标签间空白（保守，安全）</div>
+      <div class="check"><input type="checkbox" id="inline"> 同时压缩行内文本空白（激进，可能改变 <pre>/<code> 显示）</div>
+      <div class="row" style="margin-top:8px">
+        <button id="run">压缩</button>
+        <button class="ghost" id="copy">复制</button>
+        <button class="ghost" id="clear">清空</button>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">压缩结果</div>
+      <textarea id="out" class="out" spellcheck="false" readonly></textarea>
+      <div id="stat"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  function minify(html){
+    let s=html;
+    if($('comments').checked) s=s.replace(/<!--[\s\S]*?-->/g,'');
+    if($('between').checked){
+      // 仅去除标签之间（> ... <）的纯空白，对正文与 <pre>/<textarea>/<script>/<style> 内均安全
+      s=s.replace(/>\s+</g,'><');
+    }
+    if($('inline').checked){
+      // 激进：把文本节点内连续空白压成单个空格（不改变标签属性）
+      s=s.replace(/(>)([\s\S]*?)(<)/g,(m,g1,mid,g2)=>{
+        // 不处理 script / style 块内的内容
+        return g1 + mid.replace(/\s+/g,' ').trim() + g2;
+      });
+    }
+    return s.replace(/\n{2,}/g,'\n').trim();
+  }
+  function sz(b){ return b<1024?b+' B':(b/1024).toFixed(1)+' KB'; }
+
+  function run(){
+    const raw=$('inp').value;
+    if(!raw.trim()){ $('out').value=''; $('stat').innerHTML=''; $('st').textContent='请输入 HTML'; return; }
+    const min=minify(raw);
+    $('out').value=min;
+    const before=raw.length, after=min.length;
+    const saved=before>0?Math.round((1-after/before)*100):0;
+    $('stat').innerHTML=
+      '<div class="kv"><span class="k">原始大小</span><span class="v">'+sz(before)+' （'+before+' 字符）</span></div>'+
+      '<div class="kv"><span class="k">压缩后</span><span class="v">'+sz(after)+' （'+after+' 字符）</span></div>'+
+      '<div class="kv"><span class="k">减少</span><span class="v" style="color:var(--ok)">'+saved+'%</span></div>';
+    $('st').textContent='✓ 压缩完成，减少 '+saved+'%';
+    window.__min=min;
+  }
+  $('run').addEventListener('click',run);
+  $('copy').addEventListener('click',()=>{ if(window.__min!==undefined){ navigator.clipboard&&navigator.clipboard.writeText(window.__min); $('st').textContent='✓ 已复制'; } });
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
+  ['comments','between','inline','inp'].forEach(id=>$(id).addEventListener('input',run));
+  run();
+})();
+</script>
+</body>
+</html>

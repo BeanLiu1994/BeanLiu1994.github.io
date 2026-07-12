@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文本自动换行与重排 · Word Wrap</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:150px;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit;resize:vertical}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px}
+  input[type=number]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;width:90px}
+  input[type=number]:focus{border-color:var(--accent)}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:transparent;color:var(--muted);border:none;border-radius:0;padding:7px 12px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .out{white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--border);
+    border-radius:8px;padding:10px 12px;font-size:14px;min-height:80px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin:8px 0}
+  .check input{width:16px;height:16px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📏 文本自动换行与重排</h1>
+    <div class="sub">按宽度折行 / 去除硬回车重排 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入文本</div>
+      <textarea id="inp" placeholder="粘贴要处理的长文本…">在遥远的山村里，住着一位老木匠。他做的桌椅结实又好看，十里八乡的人都来找他。后来，年轻人都进了城，只有他还守着那间小作坊，叮叮当当地，把时光一下一下打磨成了木头的香气。</textarea>
+      <div class="row" style="margin-top:10px">
+        <label>模式</label>
+        <div class="seg" id="mode">
+          <button data-m="word" class="on">按词折行</button>
+          <button data-m="char">按字符折行</button>
+          <button data-m="reflow">去除硬回车重排</button>
+        </div>
+      </div>
+      <div class="row" id="widthRow">
+        <label>每行宽度</label><input type="number" id="width" min="5" max="500" value="30"><label>字/字符</label>
+      </div>
+      <div class="check"><input type="checkbox" id="keepBlank"> 保留空行</div>
+      <div class="row">
+        <button id="run">处理</button>
+        <button class="ghost" id="copy">复制</button>
+        <button class="ghost" id="clear">清空</button>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">结果</div>
+      <div class="out" id="out">—</div>
+      <div id="stat" style="color:var(--muted);font-size:13px;margin-top:8px"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let mode='word';
+
+  function wrapWord(text,width){
+    return text.split('\n').map(par=>{
+      const words=par.split(/(\s+)/); // 保留空白
+      let line='', out=[];
+      words.forEach(tok=>{
+        if(line===''){ line=tok; }
+        else if((Array.from(line+tok).length)<=width){ line+=tok; }
+        else { out.push(line); line=tok; }
+      });
+      if(line!=='') out.push(line);
+      return out.join('\n');
+    }).join('\n');
+  }
+  function wrapChar(text,width){
+    return text.split('\n').map(par=>{
+      const chars=Array.from(par); let out=[];
+      for(let i=0;i<chars.length;i+=width) out.push(chars.slice(i,i+width).join(''));
+      return out.join('\n');
+    }).join('\n');
+  }
+  function reflow(text){
+    // 把换行当作空格，按词重新拼接
+    const paras = text.split(/\n{2,}/);
+    const wrapped = paras.map(p=>{
+      const words=Array.from(p.replace(/\n/g,' ').split(/\s+/).filter(Boolean));
+      let line='', out=[];
+      words.forEach(w=>{
+        if(line==='') line=w;
+        else if(Array.from(line+' '+w).length<=parseInt($('width').value,10)) line+=' '+w;
+        else { out.push(line); line=w; }
+      });
+      if(line!=='') out.push(line);
+      return out.join('\n');
+    });
+    return wrapped.join('\n\n');
+  }
+
+  function run(){
+    const text=$('inp').value;
+    let r;
+    if(mode==='word') r=wrapWord(text,parseInt($('width').value,10));
+    else if(mode==='char') r=wrapChar(text,parseInt($('width').value,10));
+    else r=reflow(text);
+    if(!$('keepBlank').checked) r=r.replace(/\n{3,}/g,'\n\n');
+    $('out').textContent = r || '(空)';
+    const lines=r.split('\n').length;
+    const chars=Array.from(r).length;
+    $('stat').textContent='共 '+lines+' 行 · '+chars+' 字符';
+    $('st').textContent='✓ 已处理';
+    window.__out=r;
+  }
+
+  $('run').addEventListener('click',run);
+  $('copy').addEventListener('click',()=>{ if(window.__out!==undefined){ navigator.clipboard&&navigator.clipboard.writeText(window.__out); $('st').textContent='✓ 已复制'; } });
+  $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
+  $('mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m;
+    [...$('mode').children].forEach(x=>x.classList.toggle('on',x===b));
+    $('widthRow').style.display = (mode==='reflow')?'flex':'flex';
+    run(); });
+  ['inp','width','keepBlank'].forEach(id=>$(id).addEventListener('input',run));
+  run();
+})();
+</script>
+</body>
+</html>

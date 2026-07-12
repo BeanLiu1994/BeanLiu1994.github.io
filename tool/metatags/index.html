@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEO Meta 标签生成器 · Meta Tags</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  input[type=text],textarea,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:9px 11px;font-size:14px;outline:none;font-family:inherit}
+  textarea{min-height:230px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+  input[type=text]:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:84px}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  button:hover{filter:brightness(1.08)}
+  .preview{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;color:#1a1a1a}
+  .preview .pimg{height:150px;background:linear-gradient(135deg,#4f9cff,#3ecf8e);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px}
+  .preview .pbody{padding:14px 16px}
+  .preview .ptitle{font-weight:700;color:#1a0dab;font-size:16px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .preview .purl{color:#006621;font-size:12px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .preview .pdesc{color:#545454;font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .toggle{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+  .toggle input{width:16px;height:16px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔗 SEO Meta 标签生成器</h1>
+    <div class="sub">标准 + Open Graph + Twitter 卡片 · 实时预览 · 纯本地</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">基本信息</div>
+      <div class="row"><label>标题</label><input type="text" id="title" value="我的网站标题"></div>
+      <div class="row"><label>描述</label><input type="text" id="desc" value="一句话介绍你的网站内容和价值。"></div>
+      <div class="row"><label>页面 URL</label><input type="text" id="url" value="https://example.com/page"></div>
+      <div class="row"><label>站点名</label><input type="text" id="site" value="Example"></div>
+      <div class="row"><label>图片 URL</label><input type="text" id="image" value="https://example.com/cover.png"></div>
+      <div class="row"><label>类型</label>
+        <select id="type"><option value="website">website</option><option value="article">article</option><option value="product">product</option></select>
+      </div>
+      <div class="row"><label>语言</label><input type="text" id="locale" value="zh_CN"></div>
+      <div class="row"><label>Twitter</label><input type="text" id="tw" placeholder="@yourname" value="@example"></div>
+      <div class="toggle"><input type="checkbox" id="og" checked> 包含 Open Graph</div>
+      <div class="toggle"><input type="checkbox" id="twc" checked> 包含 Twitter 卡片</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">搜索引擎预览</div>
+      <div class="preview">
+        <div class="pimg" id="pimg">封面图预览</div>
+        <div class="pbody">
+          <div class="ptitle" id="ptitle">—</div>
+          <div class="purl" id="purl">—</div>
+          <div class="pdesc" id="pdesc">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="pane-head">生成的标签</div>
+      <textarea id="out" spellcheck="false" readonly></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="copy">复制</button>
+        <button class="ghost" id="download">下载 meta.html</button>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function build(){
+    const title=$('title').value.trim();
+    const desc=$('desc').value.trim();
+    const url=$('url').value.trim();
+    const site=$('site').value.trim();
+    const image=$('image').value.trim();
+    const type=$('type').value;
+    const locale=$('locale').value.trim();
+    const tw=$('tw').value.trim();
+
+    const lines=[];
+    if(title) lines.push('<title>'+esc(title)+'</title>');
+    if(desc) lines.push('<meta name="description" content="'+esc(desc)+'">');
+    if(url) lines.push('<link rel="canonical" href="'+esc(url)+'">');
+    if($('og').checked){
+      if(title) lines.push('<meta property="og:title" content="'+esc(title)+'">');
+      if(desc) lines.push('<meta property="og:description" content="'+esc(desc)+'">');
+      if(type) lines.push('<meta property="og:type" content="'+esc(type)+'">');
+      if(url) lines.push('<meta property="og:url" content="'+esc(url)+'">');
+      if(image) lines.push('<meta property="og:image" content="'+esc(image)+'">');
+      if(site) lines.push('<meta property="og:site_name" content="'+esc(site)+'">');
+      if(locale) lines.push('<meta property="og:locale" content="'+esc(locale)+'">');
+    }
+    if($('twc').checked){
+      lines.push('<meta name="twitter:card" content="summary_large_image">');
+      if(tw) lines.push('<meta name="twitter:site" content="'+esc(tw)+'">');
+      if(title) lines.push('<meta name="twitter:title" content="'+esc(title)+'">');
+      if(desc) lines.push('<meta name="twitter:description" content="'+esc(desc)+'">');
+      if(image) lines.push('<meta name="twitter:image" content="'+esc(image)+'">');
+    }
+    const html='<!-- 将以下标签放入 <head> 中 -->\n'+lines.join('\n');
+    $('out').value=html;
+    window.__html=html;
+
+    // 预览
+    $('ptitle').textContent=title||'（未填写标题）';
+    $('purl').textContent=url||'example.com';
+    $('pdesc').textContent=desc||'（未填写描述）';
+    if(image){ const im=$('pimg'); im.style.background='center/cover no-repeat url("'+image+'")'; im.textContent=''; }
+    else { const im=$('pimg'); im.style.background='linear-gradient(135deg,#4f9cff,#3ecf8e)'; im.textContent='封面图预览'; }
+    $('st').textContent='✓ 已生成 '+lines.length+' 个标签';
+  }
+  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  ['title','desc','url','site','image','type','locale','tw','og','twc'].forEach(id=>$(id).addEventListener('input',build));
+  $('copy').addEventListener('click',()=>{ if(window.__html){ navigator.clipboard&&navigator.clipboard.writeText(window.__html); $('st').textContent='✓ 已复制'; } });
+  $('download').addEventListener('click',()=>{ const b=new Blob(['<!DOCTYPE html>\n<html><head>\n'+window.__html+'\n</head><body></body></html>'],{type:'text/html'});
+    const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='meta.html'; a.click(); URL.revokeObjectURL(u); $('st').textContent='✓ 已下载 meta.html'; });
+  build();
+})();
+</script>
+</body>
+</html>
