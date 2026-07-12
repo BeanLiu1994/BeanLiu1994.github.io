@@ -283,8 +283,9 @@
     }
     // Flee toward safety. Prefer an immediate free neighbor that is ITSELF outside the blast, so we
     // never step INTO the blast while circling it (which caused the old 1,0<->1,1 oscillation death).
-    // If no immediately-safe neighbor exists, step toward the nearest safe cell (stepping through the
-    // blast is acceptable given the long fuse budget). Returns true if a move was issued.
+    // If no immediately-safe neighbor exists, BFS to find the shortest path to any safe cell, then
+    // take the FIRST step of that path — never rely on greedy stepToward which can step back into
+    // the blast and waste precious fuse time.
     fleeStep(u){
       const needFlee = this.cellDanger(u.r,u.c) || this.blastDist(u.r,u.c) <= BLAST;
       if(!needFlee) return false;
@@ -295,10 +296,33 @@
         safeNb.sort((a,b)=>this.blastDist(b.r,b.c)-this.blastDist(a.r,a.c));
         this.startMove(u,safeNb[0].r,safeNb[0].c); return true;
       }
-      // no immediately-safe neighbor: step toward the nearest safe cell along free cells
-      const s=this.safeCellFrom(u.r,u.c);
-      if(s){ this.stepToward(u,s[0],s[1]); } else { this.randomStep(u); }
-      return true;
+      // no immediately-safe neighbor: BFS to find shortest path to any safe cell
+      // prefer safe cells that have at least one free neighbor (avoid dead-end traps)
+      const prev={}; const q=[[u.r,u.c]]; const seen=new Set([u.r+','+u.c]); let best=null, bestDist=1e9;
+      const hasFreeNb=(r,c)=>{
+        for(const [ddr,ddc] of DIRS){ const nnr=r+ddr,nnc=c+ddc; if(this.freeMove(nnr,nnc,u)) return true; }
+        return false;
+      };
+      while(q.length){ const [cr,cc]=q.shift();
+        for(const [dr,dc] of DIRS){ const nr=cr+dr,nc=cc+dc; const k=nr+','+nc; if(seen.has(k)) continue; if(!this.freeMove(nr,nc,u)) continue; seen.add(k); prev[k]=[cr,cc]; q.push([nr,nc]);
+          if(!this.cellDanger(nr,nc)){
+            const d=Math.abs(nr-u.r)+Math.abs(nc-u.c);
+            const score=d+(hasFreeNb(nr,nc)?0:100); // heavy penalty for dead-end safe cells
+            if(score<bestDist){ bestDist=score; best=[nr,nc]; }
+            if(score===d) break; // found a safe cell with escape room — stop searching
+          }
+        }
+        if(best && bestDist===Math.abs(best[0]-u.r)+Math.abs(best[1]-u.c)) break; // optimal found
+      }
+      if(best){
+        // backtrack to find the first step from current position
+        let cur=best[0]+','+best[1], pk=prev[cur];
+        while(pk && !(pk[0]===u.r&&pk[1]===u.c)){ cur=pk[0]+','+pk[1]; pk=prev[cur]; }
+        const [sr,sc]=cur.split(',').map(Number);
+        this.startMove(u,sr,sc); return true;
+      }
+      // no safe cell reachable at all — take any free neighbor as last resort
+      this.randomStep(u); return true;
     }
     aiEnemy(e){
       if(!e.alive) return;
@@ -318,7 +342,8 @@
       const units=[this.player,...this.enemies].filter(u=>u.alive);
       for(const u of units){
         if(u.moving){ u.moving.t+=dt; if(u.moving.t>=u.moving.dur) u.moving=null;
-          else continue; // 动画未播完：不重新决策，避免每帧打断覆盖导致动画重复/回弹
+          // own-bomb emergency: skip animation delay so the player can chain flee steps rapidly
+          else if(!(u===this.player && u.bomb)) continue;
         }
         // 单位刚走到新格子：若在危险中免冷却立即决策，否则等 cd
         const urgent = this.cellDanger(u.r,u.c);
