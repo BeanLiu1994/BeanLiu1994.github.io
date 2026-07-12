@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>阅读时间估算 · Reading Time</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  textarea{width:100%;min-height:240px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:14px;outline:none;resize:vertical;line-height:1.7;font-family:inherit}
+  textarea:focus{border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:96px}
+  input[type=number]{flex:1;min-width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .big{font-size:34px;font-weight:700;color:var(--accent)}
+  .stats{display:flex;flex-wrap:wrap;gap:18px;color:var(--muted);font-size:14px;margin-top:6px}
+  .stats b{color:var(--text)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>⏱️ 阅读时间估算</h1><div class="sub">按中英文阅读速度估算时长 · 纯本地</div></div></header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">粘贴文章</div>
+      <textarea id="src" placeholder="粘贴你要发布或阅读的内容…"></textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">预计阅读时间</div>
+      <div class="big" id="time">0 分钟</div>
+      <div class="stats">
+        <span>中文字符：<b id="cn">0</b></span>
+        <span>英文单词：<b id="en">0</b></span>
+        <span>总字符：<b id="ch">0</b></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="pane-head">阅读速度（可调整）</div>
+      <div class="row"><label>中文 字/分</label><input type="number" id="cspd" value="300" min="50"></div>
+      <div class="row"><label>英文 词/分</label><input type="number" id="espd" value="200" min="50"></div>
+      <div style="color:var(--muted);font-size:12px">中文按字符计，英文按单词计；结果为两者时间之和。</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  function run(){
+    const text=$('src').value;
+    const cn=(text.match(/[一-鿿]/g)||[]).length;
+    const en=(text.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g)||[]).length;
+    const ch=text.length;
+    const cspd=Math.max(1,parseInt($('cspd').value||300,10));
+    const espd=Math.max(1,parseInt($('espd').value||200,10));
+    const mins=cn/cspd + en/espd;
+    let label;
+    if(mins<1) label=Math.max(1,Math.round(mins*60))+' 秒';
+    else label=Math.round(mins)+' 分钟';
+    $('time').textContent=label;
+    $('cn').textContent=cn; $('en').textContent=en; $('ch').textContent=ch;
+    $('st').textContent='✓ 已估算';
+  }
+  ['src','cspd','espd'].forEach(id=>$(id).addEventListener('input',run));
+  run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文本提取器 · Text Extractor</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+  textarea{width:100%;min-height:200px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:14px;outline:none;resize:vertical;line-height:1.6;font-family:inherit}
+  textarea:focus{border-color:var(--accent)}
+  .types{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+  .types label{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;cursor:pointer}
+  #res{white-space:pre-wrap;word-break:break-all;font-size:14px;line-height:1.8;min-height:60px;color:var(--ok)}
+  .cnt{color:var(--accent);font-weight:700}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>🧲 文本提取器</h1><div class="sub">从大段文本中批量提取邮箱 / 网址 / 手机号 / 数字 / IP · 纯本地</div></div></header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">原始文本</div>
+      <textarea id="src" placeholder="粘贴任意文本，例如网页复制的内容、日志、通讯录…"></textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">提取选项</div>
+      <div class="types">
+        <label><input type="checkbox" data-t="email" checked> 邮箱</label>
+        <label><input type="checkbox" data-t="url" checked> 网址</label>
+        <label><input type="checkbox" data-t="phone" checked> 手机号</label>
+        <label><input type="checkbox" data-t="num"> 数字</label>
+        <label><input type="checkbox" data-t="ip"> IPv4</label>
+      </div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="dedup" checked> 去重</label>
+        <label class="chk"><input type="checkbox" id="sort"> 排序</label>
+      </div>
+      <button id="copy">复制结果</button>
+    </div>
+    <div class="card">
+      <div class="pane-head">提取结果 <span class="cnt" id="c">0 项</span></div>
+      <div id="res">—</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const RE={
+    email:/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+    url:/\bhttps?:\/\/[^\s<>"']+/gi,
+    phone:/(?<!\d)1[3-9]\d{9}(?!\d)/g,
+    num:/(?<!\d)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?!\d)/g,
+    ip:/\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g
+  };
+  function run(){
+    const text=$('src').value;
+    if(!text.trim()){ $('res').textContent='—'; $('c').textContent='0 项'; return; }
+    let all=[];
+    document.querySelectorAll('.types input').forEach(cb=>{
+      if(!cb.checked) return;
+      const m=text.match(RE[cb.dataset.t])||[];
+      m.forEach(v=>all.push(v));
+    });
+    if($('dedup').checked) all=[...new Set(all)];
+    if($('sort').checked) all.sort((a,b)=>a.localeCompare(b,'zh'));
+    $('res').textContent=all.length?all.join('\n'):'（未匹配到内容）';
+    $('c').textContent=all.length+' 项';
+    $('st').textContent='✓ 已提取 '+all.length+' 项';
+  }
+  $('src').addEventListener('input',run);
+  document.querySelectorAll('.types input,#dedup,#sort').forEach(el=>el.addEventListener('change',run));
+  $('copy').onclick=()=>{
+    const t=$('res').textContent;
+    if(!t||t==='—'){ $('st').textContent='没有可复制的内容'; return; }
+    navigator.clipboard.writeText(t).then(()=>$('st').textContent='📋 已复制 '+($('c').textContent),()=>$('st').textContent='复制失败');
+  };
+})();
+</script>
+</body>
+</html>

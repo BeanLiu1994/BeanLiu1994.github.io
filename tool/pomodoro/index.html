@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番茄钟 · Pomodoro Timer</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
+  .timer-wrap{text-align:center;min-width:300px}
+  .ring{position:relative;width:240px;height:240px;margin:0 auto 18px}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .time{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ring .time .t{font-size:52px;font-weight:700;font-variant-numeric:tabular-nums}
+  .ring .time .mode{color:var(--muted);font-size:14px;margin-top:4px}
+  .ctrls{display:flex;gap:10px;justify-content:center;margin:8px 0 14px;flex-wrap:wrap}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  .presets{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+  .presets button{padding:7px 12px;font-size:13px}
+  .presets button.on{border-color:var(--accent);color:var(--accent)}
+  .stats{color:var(--muted);font-size:13px;text-align:center}
+  .stats b{color:var(--text)}
+  .side{width:280px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:78px}
+  input[type=number]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🍅 番茄钟</h1><div class="sub">专注计时 · 纯本地</div></div>
+</header>
+<main>
+  <section class="card timer-wrap">
+    <div class="presets" id="presets">
+      <button data-m="work" class="on">专注 25</button>
+      <button data-m="short">短休 5</button>
+      <button data-m="long">长休 15</button>
+      <button data-m="custom">自定义</button>
+    </div>
+    <div class="ring">
+      <svg width="240" height="240">
+        <circle cx="120" cy="120" r="110" fill="none" stroke="var(--border)" stroke-width="14"/>
+        <circle id="prog" cx="120" cy="120" r="110" fill="none" stroke="var(--accent)" stroke-width="14"
+          stroke-linecap="round" stroke-dasharray="691.15" stroke-dashoffset="0"/>
+      </svg>
+      <div class="time"><div class="t" id="t">25:00</div><div class="mode" id="mode">专注</div></div>
+    </div>
+    <div class="ctrls">
+      <button class="primary" id="start">开始</button>
+      <button id="pause">暂停</button>
+      <button id="reset">重置</button>
+    </div>
+    <div class="stats">已完成番茄：<b id="done">0</b> · 累计专注：<b id="focus">0</b> 分钟</div>
+  </section>
+  <section class="card side">
+    <div class="pane-head">自定义时长（分钟）</div>
+    <div class="row"><label>专注</label><input type="number" id="cw" value="25" min="1"></div>
+    <div class="row"><label>短休</label><input type="number" id="cs" value="5" min="1"></div>
+    <div class="row"><label>长休</label><input type="number" id="cl" value="15" min="1"></div>
+    <div class="row"><label>自动轮替</label><input type="checkbox" id="auto" checked style="width:18px;height:18px"></div>
+    <p style="color:var(--muted);font-size:12px;line-height:1.6">专注结束自动进入短休；每完成 4 个番茄进入一次长休（需开启自动轮替）。</p>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const C = 2*Math.PI*110;
+  let total=25*60, left=25*60, running=false, timer=null, mode='work', cycles=0;
+  const modeName = m => m==='work'?'专注':(m==='short'?'短休':'长休');
+  function fmt(s){ s=Math.max(0,Math.round(s)); const m=Math.floor(s/60), x=s%60;
+    return String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
+  function render(){
+    $('t').textContent=fmt(left);
+    const frac = total? left/total : 0;
+    $('prog').style.strokeDashoffset = (C*(1-frac)).toFixed(2);
+    $('mode').textContent = modeName(mode);
+    $('done').textContent=cycles;
+    const fm = Math.max(1,parseInt($('cw').value||25,10));
+    $('focus').textContent=cycles*fm;
+  }
+  function applyMode(m){
+    mode=m;
+    const min = m==='work'? parseInt($('cw').value||25,10)
+              : m==='short'? parseInt($('cs').value||5,10)
+              : parseInt($('cl').value||15,10);
+    total=min*60; left=total; render();
+  }
+  function tick(){ left--; render(); if(left<=0) finish(); }
+  function finish(){
+    pause();
+    beep();
+    if(mode==='work'){ cycles++; applyMode(cycles%4===0?'long':'short'); }
+    else applyMode('work');
+    $('st').textContent='🔔 '+modeName(mode)+' 时间到！';
+    if($('auto').checked) start();
+  }
+  function start(){ if(running)return; running=true; timer=setInterval(tick,1000); $('st').textContent='▶ 进行中…'; }
+  function pause(){ running=false; if(timer){clearInterval(timer);timer=null;} }
+  function beep(){
+    try{ const ac=new (window.AudioContext||window.webkitAudioContext)();
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.frequency.value=880;o.connect(g);g.connect(ac.destination);
+      g.gain.setValueAtTime(0.001,ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.3,ac.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.5);
+      o.start();o.stop(ac.currentTime+0.5);
+    }catch(e){}
+  }
+  $('start').onclick=start;
+  $('pause').onclick=()=>{pause();$('st').textContent='⏸ 已暂停';};
+  $('reset').onclick=()=>{pause();applyMode(mode);$('st').textContent='↺ 已重置';};
+  $('presets').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+    [...$('presets').children].forEach(x=>x.classList.toggle('on',x===b));
+    applyMode(b.dataset.m==='custom'?'work':b.dataset.m);
+    $('st').textContent='✓ 已切换至 '+modeName(mode);
+  });
+  ['cw','cs','cl'].forEach(id=>$(id).addEventListener('change',()=>{ if(!running) applyMode(mode); }));
+  applyMode('work');
+})();
+</script>
+</body>
+</html>

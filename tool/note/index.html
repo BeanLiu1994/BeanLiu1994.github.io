@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>便签笔记 · Notes</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap;align-items:stretch}
+  .list{flex:0 0 240px;display:flex;flex-direction:column;gap:10px}
+  .list .bar{display:flex;gap:8px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04122b;font-weight:600}
+  .items{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:70vh}
+  .item{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 12px;cursor:pointer;transition:.15s}
+  .item:hover{border-color:var(--accent)}
+  .item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .item .t{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .p{color:var(--muted);font-size:12px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .del{float:right;color:var(--muted);font-size:12px}
+  .editor{flex:1;min-width:300px;display:flex;flex-direction:column;gap:10px}
+  input.title,textarea{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px;font-size:14px;outline:none;font-family:inherit}
+  input.title:focus,textarea:focus{border-color:var(--accent)}
+  input.title{font-size:16px;font-weight:600}
+  textarea{flex:1;min-height:320px;resize:vertical;line-height:1.7}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>📝 便签笔记</h1><div class="sub">多便签 · 自动保存到本机（localStorage）</div></div></header>
+<main>
+  <section class="list">
+    <div class="bar"><button class="primary" id="add" style="flex:1">＋ 新建便签</button></div>
+    <div class="items" id="items"></div>
+  </section>
+  <section class="editor">
+    <input class="title" id="title" placeholder="标题…">
+    <textarea id="body" placeholder="写点什么…（自动保存）"></textarea>
+    <div style="color:var(--muted);font-size:12px" id="meta">—</div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const KEY='wb_notes_v1';
+  let notes=[], cur=null;
+  try{ notes=JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ notes=[]; }
+  function save(){ localStorage.setItem(KEY,JSON.stringify(notes)); }
+  function preview(t){ return (t||'').replace(/\s+/g,' ').slice(0,40)||'（空）'; }
+  function render(){
+    const box=$('items'); box.innerHTML='';
+    if(notes.length===0){ box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">暂无便签，点击「新建」</div>'; return; }
+    notes.forEach(n=>{
+      const d=document.createElement('div'); d.className='item'+(n.id===cur?' active':'');
+      d.innerHTML='<span class="del" data-del="'+n.id+'">✕</span><div class="t"></div><div class="p"></div>';
+      d.querySelector('.t').textContent=n.title||'未命名';
+      d.querySelector('.p').textContent=preview(n.body);
+      d.addEventListener('click',e=>{ if(e.target.dataset.del)return; open(n.id); });
+      d.querySelector('.del').addEventListener('click',e=>{ e.stopPropagation(); del(n.id); });
+      box.appendChild(d);
+    });
+  }
+  function open(id){ cur=id; const n=notes.find(x=>x.id===id); if(!n)return;
+    $('title').value=n.title||''; $('body').value=n.body||'';
+    $('meta').textContent='创建 '+new Date(n.created).toLocaleString()+' · 更新 '+new Date(n.updated).toLocaleString();
+    render();
+  }
+  function del(id){ notes=notes.filter(x=>x.id!==id); if(cur===id)cur=null; save(); render();
+    if(cur===null){ $('title').value='';$('body').value='';$('meta').textContent='—'; }
+    $('st').textContent='🗑 已删除便签'; }
+  function autosave(){
+    if(cur===null) return;
+    const n=notes.find(x=>x.id===cur); if(!n)return;
+    n.title=$('title').value; n.body=$('body').value; n.updated=Date.now();
+    save(); render(); $('st').textContent='💾 已保存 '+new Date().toLocaleTimeString();
+  }
+  $('add').onclick=()=>{
+    const n={id:'n'+Date.now(),title:'',body:'',created:Date.now(),updated:Date.now()};
+    notes.unshift(n); cur=n.id; save(); open(n.id); $('title').focus();
+    $('st').textContent='＋ 已新建便签';
+  };
+  $('title').addEventListener('input',autosave);
+  $('body').addEventListener('input',autosave);
+  if(notes.length) open(notes[0].id); else render();
+})();
+</script>
+</body>
+</html>

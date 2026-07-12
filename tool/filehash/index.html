@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件哈希校验 · File Hash</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .drop{border:1.5px dashed var(--border);border-radius:12px;padding:28px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s}
+  .drop:hover,.drop.over{border-color:var(--accent);color:var(--accent)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:70px}
+  .hash{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;min-height:42px;color:var(--ok)}
+  input[type=text]{flex:1;min-width:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=text]:focus{border-color:var(--accent)}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent)}
+  .meta{color:var(--muted);font-size:13px;line-height:1.7}
+  .match{font-size:14px;font-weight:700}
+  .ok{color:var(--ok)} .bad{color:#ff5d6c}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>🔏 文件哈希校验</h1><div class="sub">计算 SHA-256 / SHA-512（浏览器原生加密，文件不出本机）· 纯本地</div></div></header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">选择文件</div>
+      <div class="drop" id="drop">点击或拖拽文件到此处</div>
+      <input type="file" id="file" hidden>
+      <div class="meta" id="fmeta" style="margin-top:10px">尚未选择文件</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">校验值</div>
+      <div class="row"><label>SHA-256</label><div class="hash" id="h256">—</div></div>
+      <div class="row"><label>SHA-512</label><div class="hash" id="h512">—</div></div>
+    </div>
+    <div class="card">
+      <div class="pane-head">比对（可选：粘贴预期哈希）</div>
+      <div class="row"><input type="text" id="expect" placeholder="粘贴官方提供的 SHA-256 / 512 进行比对"></div>
+      <div class="match" id="cmp">—</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const buf = new Uint8Array(0);
+  async function digest(algo, data){
+    const h=await crypto.subtle.digest(algo, data);
+    return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  function fmtSize(n){ if(n<1024)return n+' B'; if(n<1048576)return (n/1024).toFixed(1)+' KB';
+    if(n<1073741824)return (n/1048576).toFixed(1)+' MB'; return (n/1073741824).toFixed(2)+' GB'; }
+  async function handle(file){
+    if(!file) return;
+    $('fmeta').textContent='正在计算：'+file.name+' · '+fmtSize(file.size);
+    $('st').textContent='⏳ 计算中…';
+    try{
+      const data=await file.arrayBuffer();
+      const [a,b]=await Promise.all([digest('SHA-256',data),digest('SHA-512',data)]);
+      $('h256').textContent=a; $('h512').textContent=b;
+      compare(a,b);
+      $('fmeta').textContent='✓ '+file.name+' · '+fmtSize(file.size)+' · '+new Date().toLocaleString();
+      $('st').textContent='✓ 已计算哈希';
+    }catch(e){ $('st').textContent='⚠ 计算失败：'+e.message; }
+  }
+  function compare(a,b){
+    const ex=$('expect').value.trim().toLowerCase();
+    if(!ex){ $('cmp').textContent='—'; $('cmp').className='match'; return; }
+    const hit = (ex===a)||(ex===b);
+    $('cmp').textContent = hit?'✓ 匹配一致':'✗ 不匹配';
+    $('cmp').className = 'match '+(hit?'ok':'bad');
+  }
+  $('drop').onclick=()=>$('file').click();
+  $('file').onchange=e=>handle(e.target.files[0]);
+  ['dragover','dragenter'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('over');}));
+  $('drop').addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handle(f); });
+  $('expect').addEventListener('input',()=>{ if($('h256').textContent!=='—') compare($('h256').textContent,$('h512').textContent); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数字转中文 · Number to Chinese</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:60px}
+  input[type=text]{flex:1;min-width:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:11px 12px;font-size:16px;outline:none}
+  input[type=text]:focus{border-color:var(--accent)}
+  .out{margin-top:6px;font-size:22px;font-weight:700;color:var(--accent);word-break:break-all;min-height:30px}
+  .out.sub{font-size:18px;color:var(--ok)}
+  .meta{color:var(--muted);font-size:12px;margin-top:6px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header><div><h1>🔢 数字转中文</h1><div class="sub">阿拉伯数字 → 中文读法 / 大写 · 纯本地</div></div></header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入数字</div>
+      <div class="row"><input type="text" id="inp" value="1234567.89" placeholder="例如 1234567.89"></div>
+      <div class="meta">支持整数、小数、负数，最大约 16 位整数。金额大写可用「人民币大写」工具。</div>
+    </div>
+    <div class="card">
+      <div class="pane-head">小写读法</div>
+      <div class="out" id="low">—</div>
+      <button data-c="low">复制</button>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">大写（财务）</div>
+      <div class="out sub" id="up">—</div>
+      <button data-c="up">复制</button>
+    </div>
+    <div class="card">
+      <div class="pane-head">拆分说明</div>
+      <div class="meta" id="info">—</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const LOW=['零','一','二','三','四','五','六','七','八','九'];
+  const UP =['零','壹','贰','叁','肆','伍','陆','柒','捌','玖'];
+  const SMALL=['','十','百','千'];
+  const BIG=['','万','亿','万亿'];
+  function section4(g, d){
+    if(g===0) return '';
+    let s='', zero=false; const str=String(g); const len=str.length;
+    for(let i=0;i<len;i++){ const dig=+str[i], pos=len-1-i;
+      if(dig===0) zero=true; else { if(zero) s+=d[0]; s+=d[dig]+SMALL[pos]; zero=false; } }
+    return s;
+  }
+  function convert(num, d){
+    if(num===0) return d[0];
+    const neg=num<0; num=Math.abs(num);
+    const intPart=Math.floor(num);
+    let str=String(intPart);
+    const groups=[]; let t=str;
+    while(t.length){ groups.unshift(t.slice(-4)); t=t.slice(0,-4); }
+    let out='', needZero=false;
+    for(let i=0;i<groups.length;i++){
+      const g=parseInt(groups[i],10);
+      const lvl=groups.length-1-i;
+      if(g===0){ needZero=true; continue; }
+      const sec=section4(g,d);
+      if(out!=='' && (needZero || g<1000) && !out.endsWith(d[0])) out+=d[0];
+      out+=sec+BIG[lvl];
+      needZero=false;
+    }
+    if(out.startsWith(d[1]+SMALL[1])) out=out.slice(1); // 一十 -> 十
+    let dec='';
+    const decStr=String(num).split('.')[1]||'';
+    if(decStr){ dec=decStr.split('').map(c=>d[+c]).join('').replace(new RegExp(d[0]+'+$'),''); }
+    let res=out+(dec?('点'+dec):'');
+    if(neg) res='负'+res;
+    return res;
+  }
+  function update(){
+    const raw=$('inp').value.trim();
+    if(raw===''){ $('low').textContent='—';$('up').textContent='—';$('info').textContent='—';return; }
+    const num=Number(raw.replace(/,/g,''));
+    if(!isFinite(num)){ $('st').textContent='⚠ 请输入有效数字'; return; }
+    const low=convert(num,LOW), up=convert(num,UP);
+    $('low').textContent=low; $('up').textContent=up;
+    const neg=num<0; const intPart=Math.floor(Math.abs(num));
+    $('info').textContent='符号：'+(neg?'负 ':'')+'整数位 '+String(intPart).length+' 位'
+      +(String(num).includes('.')?(' · 小数位 '+((String(num).split('.')[1])||'').length+' 位'):'');
+    $('st').textContent='✓ 已转换';
+  }
+  document.querySelectorAll('button[data-c]').forEach(b=>b.onclick=()=>{
+    const txt=$(b.dataset.c).textContent;
+    navigator.clipboard.writeText(txt).then(()=>{$('st').textContent='📋 已复制：'+txt;},()=>{$('st').textContent='复制失败，请手动选择';});
+  });
+  $('inp').addEventListener('input',update);
+  update();
+})();
+</script>
+</body>
+</html>
