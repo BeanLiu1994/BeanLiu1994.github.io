@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹华容道 · Unblock</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dd0ff; --accent-glow:#4dd0ff66; --danger:#ff5d6a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 30% 20%, #103048 0%, transparent 55%), radial-gradient(ellipse at 70% 80%, #301040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--danger),#ffb0b8,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.mv .value { color:var(--accent); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:grab; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#021018; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#021018; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹华容道</h1><div class="sub">U N B L O C K &nbsp; T H E &nbsp; C A R</div></div>
+    <div class="score-panel">
+      <div class="score-card mv"><div class="label">Moves</div><div class="value" id="score-mv">0</div></div>
+      <div class="score-card"><div class="label">Best</div><div class="value" id="score-best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="420" height="420"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Unblocked!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">New Puzzle</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Puzzle</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI solving...</span></div>
+  <div class="stats-bar"><span>Slide cars · get the red car out →</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=6, W=420, H=420, CS=W/N;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const PAL=['#4dd0ff','#54e08a','#ffd24d','#b06bff','#ff8c1a','#2ad6c8','#ff5db1','#7ad0ff','#9b59ff'];
+  const REDROW=2;
+
+  class Unblock {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
+      this.moves=0; this.best=this.loadBest(); this.cool=0; this.solIdx=0;
+      this.drag=null;
+      this.loop=this.loop.bind(this);
+      this.bind(); this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{ return localStorage.getItem('unblock_best')||'--'; }catch(e){ return '--'; } }
+    saveBest(v){ try{ localStorage.setItem('unblock_best', v); }catch(e){} }
+    occ(exceptId){
+      const g=Array.from({length:N},()=>Array(N).fill(-1));
+      for(const c of this.cars){ if(c.id===exceptId) continue;
+        for(let i=0;i<c.l;i++){ const r=c.o==='h'?c.r:c.r+i, cc=c.o==='h'?c.c+i:c.c; if(r>=0&&r<N&&cc>=0&&cc<N) g[r][cc]=c.id; } }
+      return g;
+    }
+    cellFree(r,c,exceptId,g){ return r>=0&&r<N&&c>=0&&c<N && (g[r][c]===-1 || g[r][c]===exceptId); }
+    canStep(car,dir,g){
+      g=g||this.occ(car.id);
+      if(car.o==='h'){ const c = dir>0 ? car.c+car.l : car.c-1; return this.cellFree(car.r,c,car.id,g); }
+      else { const r = dir>0 ? car.r+car.l : car.r-1; return this.cellFree(r,car.c,car.id,g); }
+    }
+    stepCar(car,dir){ if(car.o==='h') car.c+=dir; else car.r+=dir; }
+    redExit(){ return this.cars[0].c === N - this.cars[0].l; }
+    genPuzzle(){
+      const specs=[{o:'h',l:2}];
+      const more=[{o:'h',l:2},{o:'v',l:3},{o:'h',l:2},{o:'v',l:2},{o:'h',l:3},{o:'v',l:2},{o:'h',l:2},{o:'v',l:3}];
+      for(let attempt=0; attempt<400; attempt++){
+        const cars=[{id:0,o:'h',l:2,r:REDROW,c:N-2,dr:REDROW,dc:N-2,color:'#ff5d6a'}];
+        const g=Array.from({length:N},()=>Array(N).fill(-1)); g[REDROW][N-2]=0; g[REDROW][N-1]=0;
+        let ok=true;
+        for(let mi=0; mi<more.length; mi++){
+          const sp=more[mi]; let placed=false;
+          for(let t=0;t<60;t++){
+            const r=(Math.random()*N)|0, c=(Math.random()*N)|0;
+            let free=true;
+            for(let i=0;i<sp.l;i++){ const rr=sp.o==='h'?r:r+i, cc=sp.o==='h'?c+i:c; if(rr<0||rr>=N||cc<0||cc>=N||g[rr][cc]!==-1){ free=false; break; } }
+            if(!free) continue;
+            for(let i=0;i<sp.l;i++){ const rr=sp.o==='h'?r:r+i, cc=sp.o==='h'?c+i:c; g[rr][cc]=mi+1; }
+            cars.push({id:mi+1,o:sp.o,l:sp.l,r,c,dr:r,dc:c,color:PAL[mi%PAL.length]}); placed=true; break;
+          }
+          if(!placed){ ok=false; break; }
+        }
+        if(!ok) continue;
+        // scramble
+        const moves=[];
+        for(let k=0;k<26;k++){ const car=cars[(Math.random()*cars.length)|0]; const dir=Math.random()<.5?1:-1; const gg=this.occFor(cars,car.id); if(this.canStepOn(cars,car,dir,gg)){ this.stepCarOn(cars,car,dir); moves.push({id:car.id,dir}); } }
+        this.cars=cars; this.solution=moves.slice().reverse().map(m=>({id:m.id,dir:-m.dir}));
+        if(!this.redExit()) return; // good puzzle
+      }
+      // fallback fixed puzzle
+      this.cars=[{id:0,o:'h',l:2,r:2,c:1,dr:2,dc:1,color:'#ff5d6a'},
+        {id:1,o:'v',l:3,r:0,c:0,dr:0,dc:0,color:PAL[0]},{id:2,o:'h',l:2,r:0,c:3,dr:0,dc:3,color:PAL[1]},
+        {id:3,o:'v',l:2,r:0,c:5,dr:0,dc:5,color:PAL[2]},{id:4,o:'v',l:3,r:1,c:2,dr:1,dc:2,color:PAL[3]},
+        {id:5,o:'h',l:2,r:3,c:0,dr:3,dc:0,color:PAL[4]},{id:6,o:'v',l:2,r:3,c:4,dr:3,dc:4,color:PAL[5]},
+        {id:7,o:'h',l:2,r:4,c:1,dr:4,dc:1,color:PAL[6]},{id:8,o:'v',l:2,r:4,c:3,dr:4,dc:3,color:PAL[7]}];
+      this.solution=[{id:4,dir:1},{id:6,dir:-1},{id:7,dir:1},{id:0,dir:1},{id:0,dir:1},{id:0,dir:1}];
+    }
+    occFor(cars,exceptId){ const g=Array.from({length:N},()=>Array(N).fill(-1)); for(const c of cars){ if(c.id===exceptId) continue; for(let i=0;i<c.l;i++){ const r=c.o==='h'?c.r:c.r+i, cc=c.o==='h'?c.c+i:c.c; if(r>=0&&r<N&&cc>=0&&cc<N) g[r][cc]=c.id; } } return g; }
+    canStepOn(cars,car,dir,g){ if(car.o==='h'){ const c=dir>0?car.c+car.l:car.c-1; return c>=0&&c<N&&g[car.r][c]===-1; } else { const r=dir>0?car.r+car.l:car.r-1; return r>=0&&r<N&&g[r][car.c]===-1; } }
+    stepCarOn(cars,car,dir){ if(car.o==='h') car.c+=dir; else car.r+=dir; }
+    restart(){
+      this.stopAuto(); this.over=false; this.moves=0; this.cool=0; this.solIdx=0; this.drag=null;
+      document.getElementById('overlay-win').classList.remove('active');
+      this.genPuzzle(); this.updateUI();
+    }
+    updateUI(){ document.getElementById('score-mv').textContent=this.moves; document.getElementById('score-best').textContent=this.best; }
+    doMove(id,dir){ const car=this.cars.find(c=>c.id===id); if(!car) return false; if(!this.canStep(car,dir)) return false; this.stepCar(car,dir); this.moves++; this.updateUI(); if(this.redExit()){ this.over=true; this.finish(); } return true; }
+    step(dt){
+      if(this.over) return;
+      // ease display positions
+      for(const c of this.cars){ c.dr+=(c.r-c.dr)*0.28; c.dc+=(c.c-c.dc)*0.28; }
+      if(this.autoPlay){
+        if(this.cool>0) this.cool--;
+        else if(this.solIdx<this.solution.length){ const m=this.solution[this.solIdx]; if(this.doMove(m.id,m.dir)) this.solIdx++; this.cool=10; }
+        else if(!this.over){ this.over=true; this.finish(); }
+      }
+    }
+    finish(){ if(this.autoPlay) this.stopAuto();
+      document.getElementById('win-title').textContent='Unblocked!';
+      document.getElementById('win-msg').textContent='Solved in '+this.moves+' moves';
+      if(this.best==='--' || this.moves<parseInt(this.best)) this.saveBest(String(this.moves));
+      document.getElementById('overlay-win').classList.add('active');
+    }
+    loop(now){
+      const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    cellAt(e){ const r=canvas.getBoundingClientRect(); return {r:clampIdx(((e.clientY-r.top)/r.height*H/CS)|0), c:clampIdx(((e.clientX-r.left)/r.width*W/CS)|0)}; }
+    clampIdx(v){ return v<0?0:(v>=N?N-1:v); }
+    carAt(rc){ for(const c of this.cars){ for(let i=0;i<c.l;i++){ const r=c.o==='h'?c.r:c.r+i, cc=c.o==='h'?c.c+i:c.c; if(r===rc.r&&cc===rc.c) return c; } } return null; }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='#0b1024'; ctx.fillRect(0,0,W,H);
+      // grid
+      ctx.strokeStyle='#1a2240'; ctx.lineWidth=1; for(let i=0;i<=N;i++){ ctx.beginPath(); ctx.moveTo(i*CS,0); ctx.lineTo(i*CS,H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,i*CS); ctx.lineTo(W,i*CS); ctx.stroke(); }
+      // exit
+      ctx.fillStyle='#ff5d6a33'; ctx.fillRect((N-1)*CS+CS*0.4, REDROW*CS, CS*0.6, CS);
+      // cars
+      for(const c of this.cars){
+        const x=c.dc*CS+4, y=c.dr*CS+4, w=(c.o==='h'?c.l*CS:CS)-8, h=(c.o==='v'?c.l*CS:CS)-8;
+        ctx.shadowColor=c.color; ctx.shadowBlur=12; ctx.fillStyle=c.color; this.rr(x,y,w,h,8); ctx.fill(); ctx.shadowBlur=0;
+        ctx.fillStyle='#0a0a1a55'; this.rr(x+5,y+5,w-10,h-10,5); ctx.fill();
+        // direction nub
+        ctx.fillStyle='#ffffffcc';
+        if(c.o==='h'){ ctx.fillRect(x+w/2-2,y+6,4,h-12); } else { ctx.fillRect(x+6,y+h/2-2,w-12,4); }
+      }
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI solving...'; this.solIdx=0; this.cool=8; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){
+      const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); const rc=this.cellAt(e); const car=this.carAt(rc); if(!car) return; this.drag={car, start:pos(e), baseR:car.r, baseC:car.c}; });
+      canvas.addEventListener('pointermove',(e)=>{ if(!this.drag||this.autoPlay||this.over) return; const d=pos(e); const car=this.drag.car;
+        const delta = car.o==='h' ? (d.x - this.drag.start.x)/CS : (d.y - this.drag.start.y)/CS;
+        let shift=Math.round(delta); const dir=shift>0?1:-1;
+        // clamp to max free steps
+        let maxPos=0,maxNeg=0, g=this.occ(car.id);
+        let p=0; while(this.canStepDir(car,1,g)&&p<6){ p++; } maxPos=p;
+        p=0; while(this.canStepDir(car,-1,g)&&p<6){ p++; } maxNeg=p;
+        shift=Math.max(-maxNeg,Math.min(maxPos,shift));
+        if(car.o==='h') car.c=this.drag.baseC+shift; else car.r=this.drag.baseR+shift;
+      });
+      canvas.addEventListener('pointerup',()=>{ if(!this.drag) return; const car=this.drag.car; this.drag=null; if(this.redExit()){ this.moves++; this.updateUI(); this.over=true; this.finish(); } });
+    }
+    canStepDir(car,dir,g){ if(car.o==='h'){ const c=dir>0?car.c+car.l:car.c-1; return c>=0&&c<N&&g[car.r][c]===-1; } else { const r=dir>0?car.r+car.l:car.r-1; return r>=0&&r<N&&g[r][car.c]===-1; } }
+  }
+  window.game=new Unblock();
+})();
+</script>
+</body>
+</html>

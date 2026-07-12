@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06120c" />
+<title>霓虹迷你高尔夫 · Neon Golf</title>
+<style>
+  :root { --bg:#06120c; --surface:#0d1f14; --board:#08200f; --text:#e6fff0; --muted:#7fae93;
+    --accent:#54e08a; --accent-glow:#54e08a66; --danger:#ff6b6b; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 30% 20%, #0c3a22 0%, transparent 55%), radial-gradient(ellipse at 70% 80%, #10331f 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#b6ffcf,#54e08a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.st .value { color:var(--accent); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:crosshair; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#06120cee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#031208; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#031208; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹高尔夫</h1><div class="sub">N E O N &nbsp; M I N I &nbsp; G O L F</div></div>
+    <div class="score-panel">
+      <div class="score-card st"><div class="label">Strokes</div><div class="value" id="score-st">0</div></div>
+      <div class="score-card"><div class="label">Hole</div><div class="value" id="score-hole">1</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="420" height="600"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Course Complete!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI lining up putt...</span></div>
+  <div class="stats-bar"><span id="best-stat">Best: --</span><span id="par-stat">Par 2</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=420, H=600, M=24, BR=9, HR=14, FR=0.985;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+  const LEVELS=[
+    { ball:{x:60,y:H-60}, hole:{x:W-60,y:60}, par:2, walls:[ {x:W/2-14,y:120,w:28,h:H-240} ] },
+    { ball:{x:60,y:H-60}, hole:{x:W-60,y:H-60}, par:3, walls:[ {x:120,y:0,w:24,h:H-160}, {x:280,y:160,w:24,h:H} ] },
+    { ball:{x:60,y:60}, hole:{x:W-60,y:H-60}, par:3, walls:[ {x:100,y:200,w:220,h:24}, {x:200,y:360,w:24,h:240} ] },
+  ];
+
+  class Golf {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
+      this.strokes=0; this.total=0; this.cool=0; this.best=this.loadBest();
+      this.aiming=false; this.aimNow=null;
+      this.loop=this.loop.bind(this);
+      this.bind(); this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{ return localStorage.getItem('golf_best')||'--'; }catch(e){ return '--'; } }
+    saveBest(v){ try{ localStorage.setItem('golf_best', v); }catch(e){} }
+    loadLevel(i){
+      const L=LEVELS[i]; this.walls=L.walls; this.hole={...L.hole}; this.par=L.par;
+      this.ball={x:L.ball.x,y:L.ball.y,vx:0,vy:0,r:BR};
+    }
+    restart(){
+      this.stopAuto(); this.over=false; this.strokes=0; this.total=0; this.cool=0; this.lvl=0;
+      document.getElementById('overlay-win').classList.remove('active');
+      this.loadLevel(0); this.updateUI();
+    }
+    updateUI(){ document.getElementById('score-st').textContent=this.strokes; document.getElementById('score-hole').textContent=(this.lvl+1); document.getElementById('best-stat').textContent='Best: '+this.best; document.getElementById('par-stat').textContent='Par '+this.par; }
+    collideWalls(b){
+      for(const w of this.walls){
+        const cx=clamp(b.x,w.x,w.x+w.w), cy=clamp(b.y,w.y,w.y+w.h);
+        let dx=b.x-cx, dy=b.y-cy; let d=Math.hypot(dx,dy);
+        if(d<b.r){ if(d>0.0001){ const nx=dx/d, ny=dy/d; const vn=b.vx*nx+b.vy*ny; if(vn<0){ b.vx-=2*vn*nx; b.vy-=2*vn*ny; } b.x=cx+nx*b.r; b.y=cy+ny*b.r; }
+          else { b.x=w.x-b.r; b.vx=-Math.abs(b.vx); }
+        }
+      }
+    }
+    bounds(b){ if(b.x<M+b.r){b.x=M+b.r;b.vx=Math.abs(b.vx)*0.9;} if(b.x>W-M-b.r){b.x=W-M-b.r;b.vx=-Math.abs(b.vx)*0.9;} if(b.y<M+b.r){b.y=M+b.r;b.vy=Math.abs(b.vy)*0.9;} if(b.y>H-M-b.r){b.y=H-M-b.r;b.vy=-Math.abs(b.vy)*0.9;} }
+    stopped(b){ return b.vx*b.vx+b.vy*b.vy<0.02; }
+    step(dt){
+      if(this.over) return;
+      const b=this.ball;
+      if(b.vx||b.vy){
+        b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=FR; b.vy*=FR;
+        this.collideWalls(b); this.bounds(b);
+        if(!this.over && Math.hypot(b.x-this.hole.x,b.y-this.hole.y)<HR && Math.hypot(b.vx,b.vy)<6){ this.sink(); return; }
+        if(this.stopped(b)){ b.vx=0; b.vy=0; }
+      } else if(this.cool>0){ this.cool--; if(this.cool===0 && !this.over && this.autoPlay) this.aiPutt(); }
+      else if(!this.over && this.autoPlay){ this.cool=18; }
+    }
+    putt(vx,vy){ this.ball.vx=vx; this.ball.vy=vy; this.strokes++; this.updateUI(); }
+    sink(){
+      this.total+=this.strokes;
+      if(this.lvl>=LEVELS.length-1){ this.over=true; this.finish(); return; }
+      this.lvl++; this.cool=24; this.loadLevel(this.lvl); this.strokes=0; this.updateUI();
+    }
+    simulate(ang,power){
+      const b={x:this.ball.x,y:this.ball.y,vx:Math.cos(ang)*power,vy:Math.sin(ang)*power,r:BR};
+      let steps=0, hit=false;
+      for(let i=0;i<700;i++){ steps++; b.x+=b.vx; b.y+=b.vy; b.vx*=FR; b.vy*=FR; this.collideWalls(b); this.bounds(b);
+        if(Math.hypot(b.x-this.hole.x,b.y-this.hole.y)<HR && Math.hypot(b.vx,b.vy)<6){ hit=true; break; }
+        if(b.vx*b.vx+b.vy*b.vy<0.02) break; }
+      return {x:b.x,y:b.y,hit,steps};
+    }
+    aiPutt(){
+      const h=this.hole; let best=null, bestScore=1e9;
+      for(let a=0;a<96;a++){ const ang=a/96*Math.PI*2;
+        for(const pw of [8,10,12,14]){
+          const s=this.simulate(ang,pw);
+          if(s.hit){ const sc=s.steps*0.01; if(sc<bestScore){ bestScore=sc; best={ang,pw}; } }
+          else { const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<bestScore){ bestScore=d; best={ang,pw}; } }
+        }
+      }
+      if(best) this.putt(Math.cos(best.ang)*best.pw, Math.sin(best.ang)*best.pw);
+    }
+    finish(){ if(this.autoPlay) this.stopAuto();
+      const msg=this.total+' strokes over '+LEVELS.length+' holes';
+      document.getElementById('win-msg').textContent=msg;
+      if(this.best==='--' || this.total<parseInt(this.best)) this.saveBest(String(this.total));
+      document.getElementById('overlay-win').classList.add('active'); }
+    loop(now){
+      const dt=Math.max(0.5,Math.min(2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='#0c2a17'; ctx.fillRect(M,M,W-2*M,H-2*M);
+      for(const w of this.walls){ ctx.fillStyle='#1c4a2e'; ctx.fillRect(w.x,w.y,w.w,w.h); ctx.strokeStyle='#54e08a55'; ctx.lineWidth=2; ctx.strokeRect(w.x,w.y,w.w,w.h); }
+      // hole
+      ctx.shadowColor='#000'; ctx.fillStyle='#031008'; ctx.beginPath(); ctx.arc(this.hole.x,this.hole.y,HR,0,7); ctx.fill();
+      ctx.shadowColor='#54e08a'; ctx.strokeStyle='#54e08a'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(this.hole.x,this.hole.y,HR,0,7); ctx.stroke(); ctx.shadowBlur=0;
+      // flag
+      ctx.strokeStyle='#ffd700'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(this.hole.x,this.hole.y); ctx.lineTo(this.hole.x,this.hole.y-26); ctx.stroke();
+      ctx.fillStyle='#ff5d6a'; ctx.beginPath(); ctx.moveTo(this.hole.x,this.hole.y-26); ctx.lineTo(this.hole.x+14,this.hole.y-21); ctx.lineTo(this.hole.x,this.hole.y-16); ctx.fill();
+      // aim
+      if(this.aiming && this.aimNow){ const dx=this.aimNow.x-this.ball.x, dy=this.aimNow.y-this.ball.y; const dl=Math.hypot(dx,dy)||1; const pw=Math.min(150,dl); ctx.strokeStyle='#ffffff88'; ctx.lineWidth=2; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(this.ball.x,this.ball.y); ctx.lineTo(this.ball.x-dx/dl*pw,this.ball.y-dy/dl*pw); ctx.stroke(); ctx.setLineDash([]); }
+      // ball
+      ctx.shadowColor='#fff'; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,this.ball.r,0,7); ctx.fill(); ctx.shadowBlur=0;
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI lining up putt...'; if(!this.ball.vx && !this.ball.vy && this.cool===0) this.cool=10; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){
+      const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.ball.vx||this.ball.vy) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); this.aiming=true; this.aimNow=pos(e); });
+      canvas.addEventListener('pointermove',(e)=>{ if(!this.aiming) return; this.aimNow=pos(e); });
+      canvas.addEventListener('pointerup',()=>{ if(!this.aiming) return; this.aiming=false; const dx=this.aimNow.x-this.ball.x, dy=this.aimNow.y-this.ball.y; const dl=Math.hypot(dx,dy); if(dl<6) return; const power=Math.min(15, dl*0.05); this.putt(-dx/dl*power, -dy/dl*power); });
+    }
+  }
+  window.game=new Golf();
+})();
+</script>
+</body>
+</html>

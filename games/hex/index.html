@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹六角棋 · Hex</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#ff5d6a; --accent-glow:#ff5d6a66; --blue:#4dd0ff; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #3a1020 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #103048 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#ffb0b8,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.1rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.red .value { color:var(--accent); } .score-card.blue .value { color:var(--blue); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:pointer; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0408; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0408; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹六角棋</h1><div class="sub">H E X &nbsp; C O N N E C T</div></div>
+    <div class="score-panel">
+      <div class="score-card red"><div class="label">Red</div><div class="value" id="score-red">You</div></div>
+      <div class="score-card blue"><div class="label">Blue</div><div class="value" id="score-blue">AI</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="460" height="480"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Red Wins!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI vs AI...</span></div>
+  <div class="stats-bar"><span>Red: top→bottom</span><span>Blue: left→right</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=7, RED=1, BLUE=2;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height, SIZE=34;
+  const MX=(W - SIZE*Math.sqrt(3)*(N-0.5))/2, MY=(H - (SIZE*1.5*N+SIZE))/2;
+  const NB=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+  const idx=(q,r)=>r*N+q;
+  const pix=(q,r)=>({x:MX+SIZE*Math.sqrt(3)*(q+r/2), y:MY+SIZE*1.5*r});
+
+  class Hex {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false; this.winner=0;
+      this.turn=RED; this.cool=0; this.busy=false;
+      this.loop=this.loop.bind(this);
+      this.bind(); this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    restart(){
+      this.stopAuto(); this.over=false; this.winner=0; this.turn=RED; this.cool=0; this.busy=false;
+      this.board=Array(N*N).fill(0);
+      document.getElementById('overlay-win').classList.remove('active');
+    }
+    emptyCells(){ const a=[]; for(let i=0;i<this.board.length;i++) if(this.board[i]===0) a.push(i); return a; }
+    // shortest connection distance for `player` (0 = already connected). owns stones cost 0, empty cost 1, opponent blocks.
+    connDist(player){
+      const own=player, opp=player===RED?BLUE:RED;
+      const dist=Array(N*N).fill(Infinity);
+      const pq=[];
+      for(let r=0;r<N;r++) for(let q=0;q<N;q++){
+        const onSide = player===RED ? (r===0) : (q===0);
+        if(!onSide) continue;
+        const i=idx(q,r); if(this.board[i]===opp) continue;
+        const c = this.board[i]===own?0:1;
+        if(c<dist[i]){ dist[i]=c; pq.push([c,i]); }
+      }
+      while(pq.length){
+        pq.sort((a,b)=>a[0]-b[0]); const [d,u]=pq.shift();
+        if(d>dist[u]) continue;
+        const uq=u%N, ur=(u/N)|0;
+        for(const [dq,dr] of NB){ const q=uq+dq, r=ur+dr; if(q<0||r<0||q>=N||r>=N) continue; const v=idx(q,r); if(this.board[v]===opp) continue; const nd=d+(this.board[v]===own?0:1); if(nd<dist[v]){ dist[v]=nd; pq.push([nd,v]); } }
+      }
+      let best=Infinity;
+      for(let r=0;r<N;r++) for(let q=0;q<N;q++){
+        const onEnd = player===RED ? (r===N-1) : (q===N-1);
+        if(!onEnd) continue; const i=idx(q,r); if(this.board[i]===opp) continue; if(dist[i]<best) best=dist[i];
+      }
+      return best;
+    }
+    place(i,player){ this.board[i]=player; }
+    checkWin(player){ return this.connDist(player)===0; }
+    aiMove(player){
+      const cells=this.emptyCells(); if(cells.length===0){ this.over=true; this.finish(); return; }
+      const opp=player===RED?BLUE:RED; let best=-1e9, ties=[], bestCell=-1;
+      for(const i of cells){ this.board[i]=player; const v=this.connDist(opp)-this.connDist(player); this.board[i]=0;
+        if(v>best+1e-9){ best=v; ties=[i]; bestCell=i; } else if(Math.abs(v-best)<1e-9){ ties.push(i); } }
+      const pick=ties[(Math.random()*ties.length)|0];
+      this.place(pick,player);
+      if(this.checkWin(player)){ this.over=true; this.winner=player; this.finish(); }
+      else { this.turn=opp; }
+    }
+    step(dt){
+      if(this.over) return;
+      if(this.autoPlay || this.turn===BLUE){
+        if(this.cool>0) this.cool--;
+        else if(!this.over){ this.aiMove(this.turn); this.cool=14; }
+      }
+    }
+    finish(){ if(this.autoPlay) this.stopAuto();
+      const win=document.getElementById('overlay-win');
+      const youWin=this.winner===RED;
+      document.getElementById('win-title').textContent= youWin?'Red Wins!':(this.winner===BLUE?'Blue Wins!':'Draw');
+      document.getElementById('win-msg').textContent= this.winner===RED?'You connected top to bottom':'Blue connected left to right';
+      win.classList.add('active');
+    }
+    loop(now){
+      const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    cellAt(e){
+      const r=canvas.getBoundingClientRect();
+      const x=(e.clientX-r.left)/r.width*W, y=(e.clientY-r.top)/r.height*H;
+      let best=-1, bd=1e9;
+      for(let q=0;q<N;q++) for(let rr=0;rr<N;rr++){ const p=pix(q,rr); const d=Math.hypot(p.x-x,p.y-y); if(d<bd){ bd=d; best=idx(q,rr); } }
+      return bd<SIZE*0.95?best:-1;
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      // side labels
+      ctx.fillStyle='#ff5d6a55'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+      for(let q=0;q<N;q++){ const p=pix(q,0); ctx.fillText('▼',p.x,p.y-SIZE*0.7); const b=pix(q,N-1); ctx.fillText('▲',b.x,b.y+SIZE*0.8); }
+      ctx.fillStyle='#4dd0ff55';
+      for(let r=0;r<N;r++){ const p=pix(0,r); ctx.fillText('◀',p.x-SIZE*0.7,p.y+4); const b=pix(N-1,r); ctx.fillText('▶',b.x+SIZE*0.7,b.y+4); }
+      for(let q=0;q<N;q++) for(let r=0;r<N;r++){
+        const p=pix(q,r), i=idx(q,r);
+        ctx.beginPath();
+        for(let k=0;k<6;k++){ const a=Math.PI/180*(60*k-90); const vx=p.x+SIZE*0.86*Math.cos(a), vy=p.y+SIZE*0.86*Math.sin(a); if(k===0)ctx.moveTo(vx,vy); else ctx.lineTo(vx,vy); }
+        ctx.closePath();
+        ctx.fillStyle='#141a30'; ctx.fill(); ctx.strokeStyle='#2a3358'; ctx.lineWidth=1.5; ctx.stroke();
+        const v=this.board[i];
+        if(v){ ctx.shadowColor=v===RED?'#ff5d6a':'#4dd0ff'; ctx.shadowBlur=14; ctx.fillStyle=v===RED?'#ff5d6a':'#4dd0ff';
+          ctx.beginPath(); ctx.arc(p.x,p.y,SIZE*0.6,0,7); ctx.fill(); ctx.shadowBlur=0; }
+      }
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI vs AI...'; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){
+      canvas.addEventListener('pointerdown',(e)=>{
+        if(this.autoPlay||this.over||this.turn!==RED) return;
+        const i=this.cellAt(e); if(i<0||this.board[i]!==0) return;
+        this.place(i,RED);
+        if(this.checkWin(RED)){ this.over=true; this.winner=RED; this.finish(); }
+        else { this.turn=BLUE; this.cool=12; }
+      });
+    }
+  }
+  window.game=new Hex();
+})();
+</script>
+</body>
+</html>

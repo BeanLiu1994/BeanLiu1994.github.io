@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹石头剪刀布 · RPS</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dd0ff; --accent-glow:#4dd0ff66; --danger:#ff5d8a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #103048 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #301040 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#a0e8ff,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 10px; text-align:center; min-width:48px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.2rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.w .value { color:var(--accent); } .score-card.l .value { color:var(--danger); } .score-card.t .value { color:var(--muted); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:1.4rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.95); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#021018; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#021018; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>石头剪刀布</h1><div class="sub">R O C K &nbsp; P A P E R &nbsp; S C I S S O R S</div></div>
+    <div class="score-panel">
+      <div class="score-card w"><div class="label">Win</div><div class="value" id="score-w">0</div></div>
+      <div class="score-card t"><div class="label">Tie</div><div class="value" id="score-t">0</div></div>
+      <div class="score-card l"><div class="label">Lose</div><div class="value" id="score-l">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="420" height="360"></canvas>
+  </div>
+  <div class="controls">
+    <button class="btn" onclick="game.pick(0)">✊</button>
+    <button class="btn" onclick="game.pick(1)">✋</button>
+    <button class="btn" onclick="game.pick(2)">✌️</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI vs AI...</span></div>
+  <div class="stats-bar"><span id="best-stat">Best streak: 0</span><span id="streak-stat">Streak: 0</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=420, H=360;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const EMO=['✊','✋','✌️'];
+  const NAME=['Rock','Paper','Scissors'];
+
+  class RPS {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null;
+      this.wins=0; this.losses=0; this.ties=0; this.streak=0; this.best=this.loadBest();
+      this.youHist=[]; this.aiHist=[]; this.cool=0;
+      this.phase='idle'; this.t=0; this.youPick=-1; this.aiPick=-1; this.result='';
+      this.loop=this.loop.bind(this);
+      this.bind(); this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{ return parseInt(localStorage.getItem('rps_best')||'0')||0; }catch(e){ return 0; } }
+    saveBest(){ try{ localStorage.setItem('rps_best', String(this.best)); }catch(e){} }
+    strategy(hist){ // predict opponent's next as most frequent, play counter
+      if(hist.length===0) return (Math.random()*3)|0;
+      const c=[0,0,0]; for(const m of hist) c[m]++;
+      let p=0; for(let i=1;i<3;i++) if(c[i]>c[p]) p=i;
+      if(Math.random()<0.15) return (Math.random()*3)|0;
+      return (p+1)%3; // counter of predicted (beats[p] = (p+2)%3; to BEAT p we play (p+2)%3... use counter)
+    }
+    pick(choice){
+      if(this.autoPlay||this.phase!=='idle') return;
+      this.startRound(choice);
+    }
+    startRound(youChoice){
+      this.youPick=youChoice;
+      this.aiPick=this.strategy(this.youHist);
+      this.phase='count'; this.t=54;
+    }
+    resolve(){
+      const y=this.youPick, a=this.aiPick;
+      if(y===a) this.result='tie';
+      else if((y+2)%3===a) this.result='win';
+      else this.result='lose';
+      if(this.result==='win'){ this.wins++; this.streak++; if(this.streak>this.best){this.best=this.streak;this.saveBest();} }
+      else if(this.result==='lose'){ this.losses++; this.streak=0; }
+      else { this.ties++; }
+      this.youHist.push(y); this.aiHist.push(a);
+      this.updateUI();
+    }
+    updateUI(){ document.getElementById('score-w').textContent=this.wins; document.getElementById('score-t').textContent=this.ties; document.getElementById('score-l').textContent=this.losses; document.getElementById('best-stat').textContent='Best streak: '+this.best; document.getElementById('streak-stat').textContent='Streak: '+this.streak; }
+    step(dt){
+      if(this.phase==='idle'){
+        if(this.autoPlay){ if(this.cool>0) this.cool--; else { this.startRound(this.strategy(this.aiHist)); } }
+        return;
+      }
+      if(this.t>0) this.t--;
+      if(this.phase==='count' && this.t<=0){ this.resolve(); this.phase='show'; this.t=46; }
+      else if(this.phase==='show' && this.t<=0){ this.phase='idle'; if(this.autoPlay) this.cool=18; }
+    }
+    loop(now){
+      const d=Math.min(40,(now-this.last)); this.last=now;
+      this.step(d); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      // center result / countdown
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      let youEmo='✊', aiEmo='✊', mid='';
+      if(this.phase==='count'){ const n=Math.ceil(this.t/18); mid=String(n); }
+      else if(this.phase==='show'){ youEmo=EMO[this.youPick]; aiEmo=EMO[this.aiPick];
+        mid = this.result==='win'?'YOU WIN':(this.result==='lose'?'AI WINS':'TIE'); }
+      else { mid = this.autoPlay?'Auto playing…':'Your move'; }
+      // AI hand (top)
+      ctx.font='90px serif'; ctx.shadowColor='#ff5d8a'; ctx.shadowBlur=16; ctx.fillStyle='#ff5d8a'; ctx.fillText(aiEmo, W/2, 95);
+      ctx.shadowBlur=0; ctx.font='14px sans-serif'; ctx.fillStyle='#8888aa'; ctx.fillText('AI', W/2, 150);
+      // middle
+      ctx.font='bold 26px sans-serif'; ctx.fillStyle=this.phase==='show'?(this.result==='win'?'#ffd700':(this.result==='lose'?'#ff5d8a':'#8888aa')):'#cfe8ff'; ctx.fillText(mid, W/2, H/2+10);
+      // You hand (bottom)
+      ctx.font='90px serif'; ctx.shadowColor='#4dd0ff'; ctx.shadowBlur=16; ctx.fillStyle='#4dd0ff'; ctx.fillText(youEmo, W/2, H-95);
+      ctx.shadowBlur=0; ctx.font='14px sans-serif'; ctx.fillStyle='#8888aa'; ctx.fillText('You', W/2, H-45);
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI vs AI...'; if(this.phase==='idle') this.cool=8; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){}
+  }
+  window.game=new RPS();
+})();
+</script>
+</body>
+</html>

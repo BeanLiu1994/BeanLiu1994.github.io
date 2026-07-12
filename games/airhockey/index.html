@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a1a" />
+<title>霓虹空气曲棍球 · Air Hockey</title>
+<style>
+  :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
+    --accent:#4dd0ff; --accent-glow:#4dd0ff66; --danger:#ff5d8a; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, #103048 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #301830 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),#a0e8ff,#4dd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
+  .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .score-card.you .value { color:var(--accent); } .score-card.ai .value { color:var(--danger); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:pointer; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a1aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; }
+  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#021018; }
+  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#021018; animation:pg 2s infinite; --glow:var(--accent-glow); }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
+  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
+  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>空气曲棍球</h1><div class="sub">N E O N &nbsp; A I R &nbsp; H O C K E Y</div></div>
+    <div class="score-panel">
+      <div class="score-card you"><div class="label">You</div><div class="value" id="score-you">0</div></div>
+      <div class="score-card ai"><div class="label">AI</div><div class="value" id="score-ai">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="cv" width="420" height="580"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">You Win!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI controls both paddles</span></div>
+  <div class="stats-bar"><span id="best-stat">Best rally: 0</span><span>First to 7</span></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const W=420, H=580, PR=30, PRK=12, GOAL=150, WIN=7;
+  const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
+  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+
+  class AirHockey {
+    constructor(){
+      this.autoPlay=false; this.last=0; this.raf=null; this.over=false; this.rally=0; this.best=this.loadBest();
+      this.loop=this.loop.bind(this);
+      this.bind();
+      this.restart();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+    }
+    loadBest(){ try{ return parseInt(localStorage.getItem('ah_best')||'0')||0; }catch(e){ return 0; } }
+    saveBest(){ try{ localStorage.setItem('ah_best', String(this.best)); }catch(e){} }
+    reset(){
+      this.puck={ x:W/2, y:H/2, vx:(Math.random()<.5?-1:1)*4.6, vy:(Math.random()<.5?-1:1)*2.6 };
+      this.you={ x:W/2, y:H-PR-10, vx:0, vy:0 };
+      this.ai={ x:W/2, y:PR+10, vx:0, vy:0 };
+      this.rally=0; this.serveTo=Math.random()<.5?'you':'ai';
+      this.updateUI();
+    }
+    restart(){
+      this.stopAuto();
+      this.youS=0; this.aiS=0; this.over=false;
+      document.getElementById('overlay-win').classList.remove('active');
+      document.getElementById('overlay-lose').classList.remove('active');
+      this.reset();
+    }
+    updateUI(){ document.getElementById('score-you').textContent=this.youS; document.getElementById('score-ai').textContent=this.aiS; document.getElementById('best-stat').textContent='Best rally: '+this.best; }
+    aiMove(p, isTop, dt){
+      const pk=this.puck;
+      let aimX=pk.x, aimY;
+      const towards=(isTop&&pk.vy<0)||(!isTop&&pk.vy>0);
+      if(towards){
+        aimX = clamp(pk.x + pk.vx*8, PR, W-PR);
+        aimY = isTop ? clamp(pk.y, PR, H/2-PR) : clamp(pk.y, H/2+PR, H-PR);
+      } else {
+        aimX = W/2; aimY = isTop ? H*0.16 : H*0.84;
+      }
+      const sp=6.8*dt;
+      const nx=clamp(aimX-p.x,-sp,sp), ny=clamp(aimY-p.y,-sp,sp);
+      const ox=p.x, oy=p.y; p.x+=nx; p.y+=ny; p.vx=p.x-ox; p.vy=p.y-oy;
+      p.x=clamp(p.x,PR,W-PR); p.y=clamp(p.y, isTop?PR:H/2+PR, isTop?H/2-PR:H-PR);
+    }
+    collide(pad){
+      const pk=this.puck; const dx=pk.x-pad.x, dy=pk.y-pad.y; const d=Math.hypot(dx,dy); const minD=PRK+PR;
+      if(d<minD && d>0.001){
+        const nx=dx/d, ny=dy/d; const dot=pk.vx*nx+pk.vy*ny;
+        if(dot<0){ pk.vx-=2*dot*nx; pk.vy-=2*dot*ny; }
+        pk.x=pad.x+nx*minD; pk.y=pad.y+ny*minD;
+        pk.vx+=pad.vx*0.45; pk.vy+=pad.vy*0.45;
+        let sp=Math.hypot(pk.vx,pk.vy); const MAX=11, MIN=5.2;
+        if(sp>MAX){ pk.vx*=MAX/sp; pk.vy*=MAX/sp; }
+        else if(sp<MIN && sp>0){ pk.vx*=MIN/sp; pk.vy*=MIN/sp; }
+        this.rally++; if(this.rally>this.best){ this.best=this.rally; this.saveBest(); }
+        // auto offense: nudge puck toward opponent's goal
+        if(this.autoPlay){
+          const isTop = pad.y < H/2; const ty = isTop ? H : 0;
+          let gx=W/2-pk.x, gy=ty-pk.y; const gl=Math.hypot(gx,gy)||1; gx/=gl; gy/=gl;
+          let vx=pk.vx, vy=pk.vy; const vl=Math.hypot(vx,vy)||1; vx/=vl; vy/=vl;
+          let bx=vx+gx*0.7, by=vy+gy*0.7; const bl=Math.hypot(bx,by)||1;
+          pk.vx=bx/bl*sp; pk.vy=by/bl*sp;
+        }
+      }
+    }
+    step(dt){
+      if(this.over) return;
+      if(this.autoPlay){ this.aiMove(this.you,false,dt); this.aiMove(this.ai,true,dt); }
+      else this.aiMove(this.ai,true,dt);
+      const pk=this.puck;
+      pk.x+=pk.vx*dt; pk.y+=pk.vy*dt;
+      if(pk.x<PRK){ pk.x=PRK; pk.vx=Math.abs(pk.vx); }
+      if(pk.x>W-PRK){ pk.x=W-PRK; pk.vx=-Math.abs(pk.vx); }
+      if(pk.y<PRK){
+        if(Math.abs(pk.x-W/2)<GOAL/2){ this.score('you'); return; }
+        pk.y=PRK; pk.vy=Math.abs(pk.vy);
+      }
+      if(pk.y>H-PRK){
+        if(Math.abs(pk.x-W/2)<GOAL/2){ this.score('ai'); return; }
+        pk.y=H-PRK; pk.vy=-Math.abs(pk.vy);
+      }
+      this.collide(this.you); this.collide(this.ai);
+    }
+    score(who){
+      if(who==='you') this.youS++; else this.aiS++;
+      this.updateUI();
+      if(this.youS>=WIN||this.aiS>=WIN){ this.over=true; this.finish(); return; }
+      this.reset();
+      // serve toward the side that just conceded
+      this.puck.vy = (who==='you') ? Math.abs(this.puck.vy) : -Math.abs(this.puck.vy);
+    }
+    finish(){
+      if(this.autoPlay) this.stopAuto();
+      const win=document.getElementById('overlay-win'), lose=document.getElementById('overlay-lose');
+      if(this.youS>this.aiS){ document.getElementById('win-title').textContent='You Win!'; document.getElementById('win-msg').textContent=this.youS+' — '+this.aiS; win.classList.add('active'); }
+      else { document.getElementById('lose-msg').textContent=this.youS+' — '+this.aiS; lose.classList.add('active'); }
+    }
+    loop(now){
+      const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      this.step(dt); this.draw();
+      this.raf=requestAnimationFrame(this.loop);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='#1c2a4a'; ctx.lineWidth=2;
+      ctx.strokeRect(8,8,W-16,H-16);
+      ctx.beginPath(); ctx.moveTo(8,H/2); ctx.lineTo(W-8,H/2); ctx.stroke();
+      // goals
+      ctx.fillStyle='#1c2a4a';
+      ctx.fillRect(W/2-GOAL/2,0,GOAL,6); ctx.fillRect(W/2-GOAL/2,H-6,GOAL,6);
+      // puck
+      ctx.shadowColor='#fff'; ctx.shadowBlur=14; ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(this.puck.x,this.puck.y,PRK,0,7); ctx.fill();
+      // paddles
+      ctx.shadowColor='#4dd0ff'; ctx.fillStyle='#4dd0ff'; ctx.beginPath(); ctx.arc(this.you.x,this.you.y,PR,0,7); ctx.fill();
+      ctx.shadowColor='#ff5d8a'; ctx.fillStyle='#ff5d8a'; ctx.beginPath(); ctx.arc(this.ai.x,this.ai.y,PR,0,7); ctx.fill();
+      ctx.shadowBlur=0;
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); const ind=document.getElementById('ai-indicator'); ind.style.display='flex'; document.getElementById('ai-status').textContent='AI controls both paddles'; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    bind(){
+      const move=(e)=>{ if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect();
+        const ox=this.you.x, oy=this.you.y;
+        this.you.x=clamp((e.clientX-r.left)/r.width*W, PR, W-PR);
+        this.you.y=clamp((e.clientY-r.top)/r.height*H, H/2+PR, H-PR);
+        this.you.vx=this.you.x-ox; this.you.vy=this.you.y-oy; };
+      canvas.addEventListener('pointermove',move);
+      canvas.addEventListener('pointerdown',(e)=>{ canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId); move(e); });
+    }
+  }
+  window.game=new AirHockey();
+})();
+</script>
+</body>
+</html>
