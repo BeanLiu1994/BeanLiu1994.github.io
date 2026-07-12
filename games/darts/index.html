@@ -74,13 +74,14 @@
   'use strict';
   const W=360,H=440, CX=W/2, CY=H/2, ROUT=120, RIN=34, RBULL=13;
   const NUM=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+  const OFFMAX=78, CHARGE_PERIOD=1050; // 蓄满周期(ms，三角波 0→1→0)；满蓄落点最大偏移
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
 
   class Darts {
     constructor(){
       this.best=parseInt(localStorage.getItem('dartsBest')||'0');
       this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
-      this.flashes=[]; this.dart=null; this.nextThrow=0; this.t=0;
+      this.flashes=[]; this.dart=null; this.t=0; this.phase='aim'; this._chargeStart=0; this._curPower=0; this._aiCool=0;
       this.aim={x:CX,y:CY}; this.bind();
       this.restart();
       this.last=performance.now(); this.raf=requestAnimationFrame(this.loop.bind(this));
@@ -88,20 +89,26 @@
     restart(){
       this.stopAuto();
       this.total=0; this.round=1; this.dartInRound=1; this.over=false;
-      this.dart=null; this.nextThrow=0; this.flashes=[]; this.aim={x:CX,y:CY};
+      this.dart=null; this.flashes=[]; this.aim={x:CX,y:CY}; this.phase='aim'; this._chargeStart=0; this._curPower=0;
       document.getElementById('overlay-win').classList.remove('active');
       this.updateUI();
     }
     updateUI(){ document.getElementById('score').textContent=this.total; document.getElementById('best').textContent=this.best;
       document.getElementById('round-stat').textContent='Round '+this.round+'/3';
       document.getElementById('dart-stat').textContent='Dart '+this.dartInRound+'/5'; }
-    throwDart(){
+    // 蓄力条(三角波)：按住时长映射到 0→1→0 循环，松手取瞬时值 → 蓄越久偏移越大
+    chargePower(now){ const pt=(now-(this._chargeStart||now))/CHARGE_PERIOD; const frac=((pt%1)+1)%1; return frac<0.5?frac*2:2-frac*2; }
+    throwDart(power){
       if(this.dart||this.over) return;
-      const spread = this.autoPlay? 10 : 22;
-      const tx=this.aim.x + (Math.random()*2-1)*spread;
-      const ty=this.aim.y + (Math.random()*2-1)*spread;
-      this.dart={x0:CX,y0:H+20,x1:tx,y1:ty,p:0,score:0};
+      const p = (power===undefined)? 0 : Math.max(0,Math.min(1,power));
+      const off = p*OFFMAX;                              // 蓄得越久、离准星偏移越大(手抖)
+      const th = Math.random()*Math.PI*2;               // 偏移方向随机
+      const jitter = (3 + p*18);                        // 额外散布也随蓄力放大
+      const tx=this.aim.x + Math.cos(th)*off + (Math.random()*2-1)*jitter;
+      const ty=this.aim.y + Math.sin(th)*off + (Math.random()*2-1)*jitter;
+      this.dart={x0:CX,y0:H+20,x1:tx,y1:ty,p:0,score:0,power:p};
     }
+    release(){ if(this.phase!=='charge') return; const p=this.chargePower(performance.now()); this.phase='aim'; this._curPower=0; this.throwDart(p); }
     land(){
       const d=this.dart; const dx=d.x1-CX, dy=d.y1-CY, dist=Math.hypot(dx,dy);
       let s=0;
@@ -118,10 +125,19 @@
       document.getElementById('overlay-win').classList.add('active'); }
     loop(now){
       const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now; this.t+=dt;
-      // aim
-      if(this.autoPlay){ const ox=Math.sin(this.t*0.05)*6; this.aim.x=CX+ox; this.aim.y=CY+Math.cos(this.t*0.07)*6; }
-      // auto throw
-      if(this.autoPlay && !this.dart && !this.over && now>=this.nextThrow){ this.throwDart(); this.nextThrow=now+850; }
+      // 准星在靶面自动游移(玩家不直接控制落点)
+      const rad=ROUT*0.62;
+      this.aim.x = CX + Math.cos(this.t*0.027)*rad * 0.8 + Math.sin(this.t*0.011)*rad*0.4;
+      this.aim.y = CY + Math.sin(this.t*0.034)*rad * 0.7 + Math.cos(this.t*0.013)*rad*0.45;
+      // 蓄力阶段：实时更新当前功率显示
+      if(this.phase==='charge') this._curPower=this.chargePower(now);
+      // 自动模式：游移到接近靶心且蓄力功率处于低区时按下，功率到目标(小幅)时松开
+      if(this.autoPlay && !this.dart && !this.over){
+        this._aiCool-=dt;
+        const near = Math.hypot(this.aim.x-CX, this.aim.y-CY) < 40;
+        if(this.phase!=='charge' && near && this._aiCool<=0){ this.phase='charge'; this._chargeStart=now; }
+        else if(this.phase==='charge'){ const p=this.chargePower(now); if(p>=0.22){ this.release(); this._aiCool=380; } }
+      }
       if(this.dart){ this.dart.p+=0.06*dt; if(this.dart.p>=1) this.land(); }
       for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].t-=0.04*dt; if(this.flashes[i].t<=0) this.flashes.splice(i,1); }
       this.draw();
@@ -143,21 +159,31 @@
       ctx.beginPath(); ctx.arc(CX,CY,RBULL*0.5,0,7); ctx.fillStyle='#3ecf8e'; ctx.fill();
       // flashes
       for(const f of this.flashes){ ctx.beginPath(); ctx.arc(f.x,f.y,(1-f.t)*22+4,0,7); ctx.strokeStyle='rgba(255,159,67,'+f.t+')'; ctx.lineWidth=3; ctx.stroke(); }
-      // aim
-      if(!this.over){ const ax=this.aim.x, ay=this.aim.y; ctx.strokeStyle='rgba(255,215,0,0.9)'; ctx.lineWidth=2;
+      // aim (参考准星，不直接由指针控制)
+      if(!this.over && !this.dart){ const ax=this.aim.x, ay=this.aim.y;
+        ctx.strokeStyle = this.phase==='charge' ? 'rgba(62,207,142,0.95)' : 'rgba(255,215,0,0.85)'; ctx.lineWidth=2;
         ctx.beginPath(); ctx.moveTo(ax-12,ay); ctx.lineTo(ax+12,ay); ctx.moveTo(ax,ay-12); ctx.lineTo(ax,ay+12); ctx.stroke();
         ctx.beginPath(); ctx.arc(ax,ay,5,0,7); ctx.stroke(); }
+      // 蓄力条(底部)：三角波功率
+      if(!this.over){ const pw = this.phase==='charge'? this._curPower : 0; const bw=W-40, bx=20, by=H-16, bh=8;
+        ctx.fillStyle='rgba(255,255,255,0.10)'; ctx.fillRect(bx,by,bw,bh);
+        const grad=ctx.createLinearGradient(bx,0,bx+bw,0); grad.addColorStop(0,'#3ecf8e'); grad.addColorStop(0.5,'#ffd700'); grad.addColorStop(1,'#ff4d6a');
+        ctx.fillStyle=grad; ctx.fillRect(bx,by,bw*pw,bh);
+        ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1; ctx.strokeRect(bx,by,bw,bh); }
       // flying dart
       if(this.dart){ const p=this.dart.p; const x=this.dart.x0+(this.dart.x1-this.dart.x0)*p, y=this.dart.y0+(this.dart.y1-this.dart.y0)*p;
         ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x-10,y-10); ctx.lineTo(x,y); ctx.stroke();
         ctx.fillStyle='#ff9f43'; ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill(); }
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.nextThrow=0; }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bind(){
-      canvas.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect(); this.aim.x=(e.clientX-r.left)/r.width*W; this.aim.y=(e.clientY-r.top)/r.height*H; });
-      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect(); this.aim.x=(e.clientX-r.left)/r.width*W; this.aim.y=(e.clientY-r.top)/r.height*H; this.throwDart(); });
+      // 按下开始蓄力、松开投出；准星不跟随指针(玩家不直接瞄准)
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; if(this.dart||this.phase==='charge') return; this.phase='charge'; this._chargeStart=performance.now(); });
+      canvas.addEventListener('pointerup',(e)=>{ if(this.autoPlay||this.over) return; this.release(); });
+      canvas.addEventListener('pointerleave',(e)=>{ if(this.autoPlay||this.over) return; this.release(); });
+      canvas.addEventListener('pointercancel',(e)=>{ if(this.autoPlay||this.over) return; this.release(); });
     }
   }
   window.game=new Darts();
