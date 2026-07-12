@@ -81,7 +81,7 @@
   function fitCanvas(){ const w=(canvas.clientWidth||canvas.width||440); const dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=w*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); return w; }
   const lerp=(a,b,t)=>a+(b-a)*t;
 
-  const W=13, H=11, STEP=0.18, FUSE=2.0, BLAST=2;
+  const W=13, H=11, STEP=0.18, FUSE=3.2, BLAST=2;
   const isSolid=(r,c)=> (r<0||c<0||r>=H||c>=W) || (r%2===0&&c%2===0);
   const inB=(r,c)=> r>=0&&c>=0&&r<H&&c<W;
   const DIRS=[[-1,0],[1,0],[0,-1],[0,1]];
@@ -113,7 +113,7 @@
     restart(){ this.reset(); this.stopAuto(); }
     hideOverlay(){ document.getElementById('overlay-end').classList.remove('active'); }
     showOverlay(t,m){ document.getElementById('end-title').textContent=t; document.getElementById('end-msg').textContent=m; document.getElementById('overlay-end').classList.add('active'); }
-    updateIndicators(){ document.getElementById('kills').textContent=this.kills; const b=parseInt(localStorage.getItem('best_bomberman')||'0',10); if(this.kills>b){ b=this.kills; localStorage.setItem('best_bomberman',String(b)); } document.getElementById('best').textContent=b; }
+    updateIndicators(){ document.getElementById('kills').textContent=this.kills; let b=parseInt(localStorage.getItem('best_bomberman')||'0',10); if(this.kills>b){ b=this.kills; try{ localStorage.setItem('best_bomberman',String(b)); }catch(e){} } document.getElementById('best').textContent=b; }
     occupied(r,c,except){ if(this.player.alive&&this.player!==except&&this.player.r===r&&this.player.c===c) return true; for(const e of this.enemies){ if(e.alive&&e!==except&&e.r===r&&e.c===c) return true; } return false; }
     bombAt(r,c){ for(const b of this.bombs){ if(b.r===r&&b.c===c) return true; } return false; }
     freeMove(r,c,except){ return inB(r,c)&&!isSolid(r,c)&&this.grid[r][c]!=='brick'&&!this.bombAt(r,c)&&!this.occupied(r,c,except); }
@@ -170,21 +170,30 @@
     safeCellFrom(r,c){
       const danger=new Set();
       for(const b of this.bombs) for(const k of this.blastCells(b)) danger.add(k);
-      const prev={}; const q=[[r,c]]; const seen=new Set([r+','+c]);
+      // Enqueue EVERY free cell (even ones still inside a blast) so the search can run THROUGH the
+      // blast to reach a safe cell — every neighbor of a bomb is itself in-blast, so a no-push BFS
+      // can never escape and always returns null. Return the first safe, non-start cell found.
+      const q=[[r,c]]; const seen=new Set([r+','+c]);
       while(q.length){ const [cr,cc]=q.shift();
-        if(!(cr===r&&cc===c) && !danger.has(cr+','+cc)) return [cr,cc];
-        for(const [dr,dc] of DIRS){ const nr=cr+dr,nc=cc+dc; const k=nr+','+nc; if(seen.has(k)) continue; if(!this.freeMove(nr,nc,this.player)) continue; if(danger.has(k)) continue; seen.add(k); prev[k]=[cr,cc]; q.push([nr,nc]); }
+        for(const [dr,dc] of DIRS){ const nr=cr+dr,nc=cc+dc; const k=nr+','+nc; if(seen.has(k)) continue; if(!this.freeMove(nr,nc,this.player)) continue; seen.add(k); q.push([nr,nc]);
+          if(!danger.has(k) && !(nr===r&&nc===c)) return [nr,nc];
+        }
       }
       return null;
     }
     hasEscapeAfterBomb(){
-      const sim={r:this.player.r,c:this.player.c}; const sb=this.blastCells(sim);
+      const sb=this.blastCells({r:this.player.r,c:this.player.c});
       const danger=new Set(sb);
       for(const b of this.bombs) for(const k of this.blastCells(b)) danger.add(k);
+      // Allow walking THROUGH blast cells (you run through them briefly before the fuse ends);
+      // we only require reaching a cell that is OUTSIDE the blast. The previous version refused to
+      // step through any in-blast cell, but every neighbor of the bomb is itself in-blast, so it
+      // always returned false and the AI never dared place a bomb -> could never dig or kill.
       const seen=new Set([this.player.r+','+this.player.c]); const q=[[this.player.r,this.player.c]];
       while(q.length){ const [cr,cc]=q.shift();
-        if(!(cr===this.player.r&&cc===this.player.c) && !danger.has(cr+','+cc)) return true;
-        for(const [dr,dc] of DIRS){ const nr=cr+dr,nc=cc+dc; const k=nr+','+nc; if(seen.has(k)) continue; if(!this.freeMove(nr,nc,this.player)) continue; if(danger.has(k)) continue; seen.add(k); q.push([nr,nc]); }
+        for(const [dr,dc] of DIRS){ const nr=cr+dr,nc=cc+dc; const k=nr+','+nc; if(seen.has(k)) continue; if(!this.freeMove(nr,nc,this.player)) continue; seen.add(k); q.push([nr,nc]);
+          if(!danger.has(k)) return true;
+        }
       }
       return false;
     }
@@ -200,15 +209,96 @@
       if(!nb.length) return; const t=nb[Math.floor(Math.random()*nb.length)]; this.startMove(u,t.r,t.c);
     }
     startMove(u,tr,tc){ u.moving={fr:u.r,fc:u.c,tr:tr,tc:tc,t:0,dur:STEP}; u.r=tr; u.c=tc; }
+    nearestEnemyAny(){
+      let best=null, bd=1e9;
+      for(const e of this.enemies){ if(!e.alive) continue; const d=Math.abs(e.r-this.player.r)+Math.abs(e.c-this.player.c); if(d<bd){ bd=d; best=e; } }
+      return best;
+    }
+    // Approach the nearest enemy, digging through bricks with safe bombs when the path is blocked.
+    digToward(en){
+      const p=this.player;
+      if(!en){ this.randomStep(p); return; }
+      // Prefer the axis with the larger delta first.
+      const dr=en.r-p.r, dc=en.c-p.c;
+      const order=[];
+      if(Math.abs(dr)>=Math.abs(dc)){
+        if(dr!==0) order.push([Math.sign(dr),0]);
+        if(dc!==0) order.push([0,Math.sign(dc)]);
+      } else {
+        if(dc!==0) order.push([0,Math.sign(dc)]);
+        if(dr!==0) order.push([Math.sign(dr),0]);
+      }
+      for(const [ddr,ddc] of order){
+        const nr=p.r+ddr, nc=p.c+ddc;
+        if(!inB(nr,nc)) continue;
+        if(this.freeMove(nr,nc,p)){ this.startMove(p,nr,nc); return; }       // walk if clear
+        if(this.grid[nr][nc]==='brick'){                                    // dig: safe bomb clears it
+          if(!p.bomb && this.hasEscapeAfterBomb()){ this.placeBomb(p); return; }
+        }
+      }
+      // Forward blocked (brick unsafe to bomb, or solid). Try a bomb at current cell if a brick is adjacent & escape exists.
+      if(!p.bomb){
+        let adjBrick=false;
+        for(const [ddr,ddc] of DIRS){ const nr=p.r+ddr, nc=p.c+ddc; if(inB(nr,nc)&&this.grid[nr][nc]==='brick'){ adjBrick=true; break; } }
+        if(adjBrick && this.hasEscapeAfterBomb()){ this.placeBomb(p); return; }
+      }
+      // Otherwise just move to the safe free neighbor that best reduces distance, else random.
+      const nb=[];
+      for(const [ddr,ddc] of DIRS){ const nr=p.r+ddr, nc=p.c+ddc; if(this.freeMove(nr,nc,p)){ const d=Math.abs(nr-en.r)+Math.abs(nc-en.c); nb.push({r:nr,c:nc,d}); } }
+      if(nb.length){ nb.sort((a,b)=>a.d-b.d); this.startMove(p,nb[0].r,nb[0].c); }
+      else this.randomStep(p);
+    }
     aiPlayer(){
       if(!this.player.alive) return;
-      if(this.cellDanger(this.player.r,this.player.c)){ const s=this.safeCellFrom(this.player.r,this.player.c); if(s){ this.stepToward(this.player,s[0],s[1]); } return; }
-      const tgt=this.nearestEnemyCell(this.player.r,this.player.c);
-      if(tgt){ const d=Math.abs(tgt.r-this.player.r)+Math.abs(tgt.c-this.player.c);
-        if(d<=BLAST+1 && !this.player.bomb && this.hasEscapeAfterBomb()){ this.placeBomb(this.player); return; }
-        this.stepToward(this.player,tgt.r,tgt.c); return;
+      const p=this.player;
+      // 1) OWN bomb safety is the top priority. While our bomb is live, keep walking AWAY from the
+      //    blast (even after the current cell looks safe) until we are fully outside the blast
+      //    radius. Only then may we switch to hunting. This prevents fleeing out then walking
+      //    straight back into the still-ticking bomb (the old suicide loop).
+      if(p.bomb){
+        if(this.fleeStep(p)) return;
+        return; // reached a safe cell — hold still outside the blast
       }
-      this.randomStep(this.player);
+      // 2) danger from any bomb (e.g. ours still ticking, or an enemy's): flee.
+      if(this.cellDanger(p.r,p.c)){ if(this.fleeStep(p)) return; }
+      // 3) fire a bomb when an enemy is aligned & within blast range (no own bomb is live here).
+      const en=this.nearestEnemyAny();
+      if(en){
+        const d=Math.abs(en.r-p.r)+Math.abs(en.c-p.c);
+        const aligned=(en.r===p.r||en.c===p.c);
+        if(aligned && d<=BLAST && this.hasEscapeAfterBomb()){ this.placeBomb(p); return; }
+      }
+      // 4) approach a reachable enemy along clear cells.
+      const tgt=this.nearestEnemyCell(p.r,p.c);
+      if(tgt){ this.stepToward(p,tgt.r,tgt.c); return; }
+      // 5) enemy not yet reachable through empty cells: dig toward it (clear bricks with safe bombs).
+      if(en){ this.digToward(en); return; }
+      this.randomStep(p);
+    }
+    // keep walking away until at least (BLAST+1) cells from any blast cell
+    blastDist(r,c){
+      let best=1e9;
+      for(const b of this.bombs){ for(const k of this.blastCells(b)){ const parts=k.split(','); const br=+parts[0], bc=+parts[1]; const d=Math.abs(br-r)+Math.abs(bc-c); if(d<best) best=d; } }
+      return best;
+    }
+    // Flee toward safety. Prefer an immediate free neighbor that is ITSELF outside the blast, so we
+    // never step INTO the blast while circling it (which caused the old 1,0<->1,1 oscillation death).
+    // If no immediately-safe neighbor exists, step toward the nearest safe cell (stepping through the
+    // blast is acceptable given the long fuse budget). Returns true if a move was issued.
+    fleeStep(u){
+      const needFlee = this.cellDanger(u.r,u.c) || this.blastDist(u.r,u.c) <= BLAST;
+      if(!needFlee) return false;
+      // candidate safe neighbors (outside blast)
+      const safeNb=[];
+      for(const [dr,dc] of DIRS){ const nr=u.r+dr, nc=u.c+dc; if(this.freeMove(nr,nc,u) && !this.cellDanger(nr,nc)) safeNb.push({r:nr,c:nc}); }
+      if(safeNb.length){
+        safeNb.sort((a,b)=>this.blastDist(b.r,b.c)-this.blastDist(a.r,a.c));
+        this.startMove(u,safeNb[0].r,safeNb[0].c); return true;
+      }
+      // no immediately-safe neighbor: step toward the nearest safe cell along free cells
+      const s=this.safeCellFrom(u.r,u.c);
+      if(s){ this.stepToward(u,s[0],s[1]); } else { this.randomStep(u); }
+      return true;
     }
     aiEnemy(e){
       if(!e.alive) return;
@@ -217,7 +307,7 @@
         if(d<=6){ const step=this.bfsStep(e.r,e.c,this.player.r,this.player.c); if(step){ this.stepToward(e,step.r,step.c); return; } } }
       this.randomStep(e);
     }
-    tick(ts){ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):(16/1000)); this._last=ts; this.update(dt); this.render(); requestAnimationFrame(this._tick); }
+    tick(ts){ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):(16/1000)); this._last=ts; try { this.update(dt); this.render(); } catch(err){ if(this._tickErr!==err){ this._tickErr=err; try{ console.error('boom tick error:', err); }catch(e){} } } requestAnimationFrame(this._tick); }
     update(dt){
       // bombs + fx
       for(const b of this.bombs.slice()){ b.timer-=dt; if(b.timer<=0) this.explode(b); }
@@ -227,8 +317,16 @@
       // units
       const units=[this.player,...this.enemies].filter(u=>u.alive);
       for(const u of units){
-        if(u.moving){ u.moving.t+=dt; if(u.moving.t>=u.moving.dur) u.moving=null; continue; }
-        u.cd-=dt; if(u.cd>0) continue; u.cd=STEP;
+        if(u.moving){ u.moving.t+=dt; if(u.moving.t>=u.moving.dur) u.moving=null;
+          // A unit already fleeing should still be allowed to chain the next step the instant it
+          // arrives (no cd pause), otherwise it idles inside a blast cell and dies. So fall through
+          // to re-decide only when it just finished a move AND is still in danger.
+          if(!(u===this.player ? this.cellDanger(u.r,u.c) : this.cellDanger(u.r,u.c))) continue;
+        }
+        // If this unit is in danger, override the cooldown and act every frame so it can run out
+        // of the blast without pausing inside it.
+        const urgent = this.cellDanger(u.r,u.c);
+        if(!urgent){ u.cd-=dt; if(u.cd>0) continue; u.cd=STEP; }
         if(u===this.player){ if(this.autoPlay) this.aiPlayer(); }
         else this.aiEnemy(u);
       }
