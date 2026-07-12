@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日饮水量计算器 · Daily Water Intake</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --warn:#e5c07b; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:96px}
+  input[type=number]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px;flex-wrap:wrap}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .big{font-size:44px;font-weight:800;text-align:center;color:var(--accent)}
+  .unit{text-align:center;color:var(--muted);font-size:14px;margin-top:2px}
+  .glasses{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:14px 0}
+  .glass{font-size:22px}
+  .glass.off{filter:grayscale(1);opacity:.25}
+  .note{color:var(--muted);font-size:13px;line-height:1.7}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin-bottom:10px;cursor:pointer}
+  .check input{width:16px;height:16px;accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>💧 每日饮水量计算器</h1>
+    <div class="sub">根据体重与活动量估算 · 纯本地 · Daily Water Intake</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入</div>
+      <div class="row"><label>体重</label><input type="number" id="weight" placeholder="65" value="65"> <span>kg</span></div>
+      <div class="row"><label>运动强度</label>
+        <div class="seg" id="act">
+          <button data-a="0" class="on">久坐</button>
+          <button data-a="1">轻度</button>
+          <button data-a="2">中度</button>
+          <button data-a="3">高强度</button>
+        </div>
+      </div>
+      <div class="row"><label>每日运动</label><input type="number" id="exercise" placeholder="0" value="30"> <span>分钟</span></div>
+      <label class="check"><input type="checkbox" id="hot"> 炎热 / 干燥环境（额外 +500 ml）</label>
+      <label class="check"><input type="checkbox" id="preg"> 孕期（额外 +300 ml）</label>
+      <label class="check"><input type="checkbox" id="bf"> 哺乳期（额外 +700 ml）</label>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">建议饮水量</div>
+      <div class="big" id="ml">—</div>
+      <div class="unit" id="l">约 — 升 / 天</div>
+      <div class="glasses" id="glasses"></div>
+      <div class="note" id="advice"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let act=0;
+  function render(){
+    const w=parseFloat($('weight').value);
+    if(!w||w<=0){ $('ml').textContent='—'; $('l').textContent='约 — 升 / 天'; $('glasses').innerHTML=''; $('advice').textContent='请输入有效的体重。'; return; }
+    const ex=Math.max(0,parseFloat($('exercise').value)||0);
+    // 基础：体重(kg) × 35ml
+    let ml=w*35;
+    // 运动：每 30 分钟约 +350ml
+    ml += (ex/30)*350;
+    // 强度微调
+    ml += [0,200,450,800][act];
+    if($('hot').checked) ml+=500;
+    if($('preg').checked) ml+=300;
+    if($('bf').checked) ml+=700;
+    ml=Math.round(ml/10)*10;
+    $('ml').textContent=ml.toLocaleString()+' ml';
+    $('l').textContent='约 '+(ml/1000).toFixed(2)+' 升 / 天';
+    const per=250;
+    const n=Math.max(1,Math.round(ml/per));
+    let g='';
+    for(let i=0;i<Math.min(n,16);i++) g+='<span class="glass">🥤</span>';
+    $('glasses').innerHTML=g+'<span class="glass off">🥤</span>'.repeat(Math.max(0,16-n)).slice(0,0);
+    if(n>16) $('glasses').innerHTML+='<span style="color:var(--muted);font-size:13px;align-self:center">… 共 '+n+' 杯 (每杯 250ml)</span>';
+    $('advice').innerHTML='按每杯 250ml 计，约需 <b style="color:var(--text)">'+n+' 杯</b>。<br>少量多次、清晨与餐间补水最佳；运动出汗后请酌情增加。此估算仅供参考，具体请遵医嘱。';
+    $('st').textContent='✓ 建议每日饮水 '+ml.toLocaleString()+' ml';
+  }
+  $('act').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; act=+b.dataset.a;
+    [...$('act').children].forEach(x=>x.classList.toggle('on',x===b)); render(); });
+  ['weight','exercise'].forEach(id=>$(id).addEventListener('input',render));
+  ['hot','preg','bf'].forEach(id=>$(id).addEventListener('change',render));
+  render();
+})();
+</script>
+</body>
+</html>

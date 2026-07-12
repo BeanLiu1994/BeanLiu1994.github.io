@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON → Go 结构体 · JSON to Go Struct</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --key:#7ec6ff; --str:#9ece6a; --num:#e5c07b; --bool:#c586c0; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff}
+  main{flex:1;display:flex;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .pane.left{border-right:1px solid var(--border)}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;padding:16px;font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6;tab-size:2}
+  #output{flex:1;overflow:auto;padding:16px;font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6;white-space:pre;margin:0}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  @media(max-width:720px){main{flex-direction:column}.pane.left{border-right:0;border-bottom:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🐹 JSON → Go 结构体</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · JSON to Go Struct</div>
+  </div>
+  <div class="toolbar">
+    <div class="seg" id="num">
+      <button data-n="smart" class="on">智能数字</button>
+      <button data-n="float">全 float64</button>
+    </div>
+    <button id="btnGen" class="primary">生成</button>
+    <button id="btnCopy">复制</button>
+    <button id="btnSample">示例</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head"><span>输入 JSON</span><span class="hint" id="inMeta">0 字符</span></div>
+    <textarea id="input" placeholder='{"name":"Tom","age":18,"tags":["a","b"],"profile":{"city":"NJ"}}' spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>Go 代码</span><span class="hint" id="outMeta"></span></div>
+    <pre id="output"></pre>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const input=$('input'), output=$('output'), status=$('status');
+  let numMode='smart';
+  function setStatus(m,t){ status.textContent=m; status.className='status'+(t?' '+t:''); }
+  const nameCount={};
+  function cap(s){ let r=(s||'').replace(/[^A-Za-z0-9]/g,' ').trim().split(/\s+/).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(''); if(!r) r='Field'; return r; }
+  function singular(s){ return s.replace(/ies$/,'y').replace(/ses$/,'s').replace(/s$/,'')||s; }
+  function uniqueName(n){ if(!nameCount[n]){nameCount[n]=1;return n;} nameCount[n]++; return n+nameCount[n]; }
+  const structs=[];
+  function baseType(v){
+    if(typeof v==='string') return 'string';
+    if(typeof v==='boolean') return 'bool';
+    if(typeof v==='number') return (numMode==='float'||!Number.isInteger(v))?'float64':'int64';
+    return 'interface{}';
+  }
+  function goType(v,key){
+    if(v===null) return 'interface{}';
+    if(Array.isArray(v)){
+      if(v.length===0) return '[]interface{}';
+      const ets=v.map(x=> (x&&typeof x==='object') ? goObjectType(x, singular(key||'Item')) : baseType(x));
+      const uniq=[...new Set(ets)];
+      if(uniq.length===1) return '[]'+uniq[0];
+      return '[]interface{}';
+    }
+    if(typeof v==='object') return goObjectType(v, key||'Item');
+    return baseType(v);
+  }
+  function goObjectType(o,name){
+    name=uniqueName(cap(name));
+    const fields=Object.entries(o).map(([k,v])=>({name:k,go:goType(v,k),json:k}));
+    structs.push({name,fields});
+    return name;
+  }
+  function gen(){
+    const t=input.value.trim(); if(!t){output.textContent='';setStatus('等待输入…');return;}
+    try{
+      const data=JSON.parse(t); structs.length=0; for(const k in nameCount)delete nameCount[k];
+      let root;
+      if(Array.isArray(data)) root=goType(data,'Root');
+      else if(data&&typeof data==='object') root=goObjectType(data,'Root');
+      else { output.textContent='// 输入应为 JSON 对象或数组'; setStatus('✗ 输入不是对象/数组','err'); return; }
+      const code=structs.map(s=>'type '+s.name+' struct {\n'+s.fields.map(f=>'\t'+cap(f.name)+' '+f.go+' `json:"'+f.json+'"`').join('\n')+'\n}').join('\n\n');
+      output.textContent=code; $('outMeta').textContent=structs.length+' 个结构体'; setStatus('✓ 已生成 '+structs.length+' 个结构体','ok');
+    }catch(e){ output.textContent=''; setStatus('✗ '+e.message,'err'); }
+  }
+  $('num').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; numMode=b.dataset.n; [...$('num').children].forEach(x=>x.classList.toggle('on',x===b)); gen(); });
+  $('btnGen').onclick=gen;
+  $('btnClear').onclick=()=>{ input.value=''; output.textContent=''; $('outMeta').textContent=''; setStatus('就绪'); input.focus(); };
+  $('btnCopy').onclick=async()=>{ if(!output.textContent){setStatus('没有可复制的内容','err');return;} try{ await navigator.clipboard.writeText(output.textContent); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('btnSample').onclick=()=>{ input.value=JSON.stringify({id:1,name:"Peng Liu",admin:true,tags:["go","web"],profile:{city:"Nanjing",repos:42},scores:[95.5,88]}); gen(); };
+  input.addEventListener('input',()=>{ $('inMeta').textContent=input.value.length+' 字符'; });
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

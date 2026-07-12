@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOML ⇄ JSON · TOML Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --key:#7ec6ff; --str:#9ece6a; --num:#e5c07b; --bool:#c586c0; --null:#ff8080; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{flex:1;display:flex;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .pane.left{border-right:1px solid var(--border)}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;padding:16px;font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6;tab-size:2}
+  #output{flex:1;overflow:auto;padding:16px;font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6;white-space:pre;margin:0}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .tok-key{color:var(--key)} .tok-str{color:var(--str)} .tok-num{color:var(--num)} .tok-bool{color:var(--bool)} .tok-null{color:var(--null)}
+  @media(max-width:720px){main{flex-direction:column}.pane.left{border-right:0;border-bottom:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔧 TOML ⇄ JSON</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · TOML Converter</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnToJson" class="primary">TOML → JSON</button>
+    <button id="btnToToml">JSON → TOML</button>
+    <button id="btnCopy">复制</button>
+    <button id="btnSample">示例</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head"><span>输入 Input</span><span class="hint" id="inMeta">0 字符</span></div>
+    <textarea id="input" placeholder="在此粘贴 TOML 或 JSON…" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Output</span><span class="hint" id="outMeta"></span></div>
+    <pre id="output"></pre>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const input=$('input'), output=$('output'), status=$('status');
+  function setStatus(m,t){ status.textContent=m; status.className='status'+(t?' '+t:''); }
+  function esc(s){ return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function highlight(obj){
+    const s=JSON.stringify(obj,null,2);
+    return s.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|null|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+      m=>{ let c='tok-num'; if(/^"/.test(m)) c=/:$/.test(m)?'tok-key':'tok-str'; else if(/true|false/.test(m)) c='tok-bool'; else if(/null/.test(m)) c='tok-null'; return '<span class="'+c+'">'+esc(m)+'</span>'; });
+  }
+
+  /* ---------- TOML parser (common subset) ---------- */
+  function parseString(s,i){
+    const q=s[i]; const triple=s[i+1]===q&&s[i+2]===q;
+    let j=triple?i+3:i+1; let out='';
+    if(triple){ if(s[j]==='\n')j++; else if(s[j]==='\r'&&s[j+1]==='\n')j+=2; }
+    while(j<s.length){
+      if(triple){ if(s[j]===q&&s[j+1]===q&&s[j+2]===q){j+=3;break;} }
+      else if(s[j]===q){ j++; break; }
+      if(q==='"'&&s[j]==='\\'){
+        if(triple && (s[j+1]==='\n'||(s[j+1]==='\r'&&s[j+2]==='\n'))){
+          if(s[j+1]==='\n')j+=2; else j+=3; while(j<s.length&&/[ \t]/.test(s[j]))j++; continue;
+        }
+        const e=s[j+1]; const map={n:'\n',t:'\t',r:'\r',b:'\b',f:'\f','"':'"','\\':'\\','/':'/'};
+        if(map[e]!==undefined){out+=map[e];j+=2;}
+        else if(e==='u'){out+=String.fromCharCode(parseInt(s.substr(j+2,4),16));j+=6;}
+        else if(e==='U'){out+=String.fromCodePoint(parseInt(s.substr(j+2,8),16));j+=10;}
+        else {out+=e;j+=2;}
+      } else { out+=s[j]; j++; }
+    }
+    return [out,j];
+  }
+  function parseKey(s,i){
+    if(s[i]==='"'||s[i]==="'") return parseString(s,i);
+    let j=i; while(j<s.length&&/[A-Za-z0-9_-]/.test(s[j]))j++;
+    return [s.slice(i,j),j];
+  }
+  function parseValue(s,i){
+    while(i<s.length&&/\s/.test(s[i]))i++;
+    const c=s[i];
+    if(c==='"') return parseString(s,i);
+    if(c==="'") return parseString(s,i);
+    if(c==='[') return parseArray(s,i);
+    if(c==='{') return parseInline(s,i);
+    if(c==='t'&&s.startsWith('true',i)) return [true,i+4];
+    if(c==='f'&&s.startsWith('false',i)) return [false,i+5];
+    return parseNumOrDate(s,i);
+  }
+  function parseArray(s,i){
+    let j=i+1,arr=[];
+    while(j<s.length){
+      while(j<s.length&&/[\s,]/.test(s[j]))j++;
+      if(s[j]===']'){j++;break;}
+      const r=parseValue(s,j); arr.push(r[0]); j=r[1];
+      while(j<s.length&&/\s/.test(s[j]))j++;
+      if(s[j]===','){j++;continue;}
+      if(s[j]===']'){j++;break;}
+    }
+    return [arr,j];
+  }
+  function parseInline(s,i){
+    let j=i+1,obj={};
+    while(j<s.length){
+      while(j<s.length&&/[\s,]/.test(s[j]))j++;
+      if(s[j]==='}'){j++;break;}
+      const kr=parseKey(s,j); let key=kr[0]; j=kr[1];
+      while(j<s.length&&/\s/.test(s[j]))j++;
+      if(s[j]==='=')j++;
+      while(j<s.length&&/\s/.test(s[j]))j++;
+      const r=parseValue(s,j); obj[key]=r[0]; j=r[1];
+      while(j<s.length&&/[\s,]/.test(s[j]))j++;
+      if(s[j]==='}'){j++;break;}
+    }
+    return [obj,j];
+  }
+  function parseNumOrDate(s,i){
+    const dt=/^\d{4}-\d{2}-\d{2}([Tt ]\d{2}:\d{2}(:\d{2})?(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?/.exec(s.slice(i));
+    if(dt&&dt[0].length>=10&&/\d/.test(s[i])) return [dt[0],i+dt[0].length];
+    if(s[i]==='0'&&(s[i+1]==='x'||s[i+1]==='X'||s[i+1]==='o'||s[i+1]==='O'||s[i+1]==='b'||s[i+1]==='B')){
+      const base={x:16,o:8,b:2}[s[i+1].toLowerCase()]; let k=i+2;
+      while(k<s.length&&/[0-9a-fA-F_]/.test(s[k]))k++;
+      const num=parseInt(s.slice(i+2,k).replace(/_/g,''),base); return [isNaN(num)?0:num,k];
+    }
+    const numRe=/^[+-]?(\d+(_\d+)*)(\.\d+(_\d+)*)?([eE][+-]?\d+(_\d+)*)?/.exec(s.slice(i));
+    if(numRe&&numRe[0]) return [parseFloat(numRe[0].replace(/_/g,'')),i+numRe[0].length];
+    let k=i; while(k<s.length&&!/[\s,\]\}]/.test(s[k]))k++; return [s.slice(i,k),k];
+  }
+  function parseDottedKey(s){
+    s=s.trim(); const parts=[]; let i=0;
+    while(i<s.length){
+      if(s[i]==='"'||s[i]==="'"){ const r=parseString(s,i); parts.push(r[0]); i=r[1]; }
+      else { let j=i; while(j<s.length&&s[j]!=='.')j++; parts.push(s.slice(i,j).trim()); i=j; }
+      while(i<s.length&&s[i]==='.')i++;
+    }
+    return parts;
+  }
+  function assignKey(obj,path,val){ let o=obj; for(let k=0;k<path.length-1;k++)o=o[path[k]]=o[path[k]]||{}; o[path[path.length-1]]=val; }
+  function parseTOML(text){
+    const root={}; let cur=root; let i=0; const n=text.length;
+    while(i<n){
+      while(i<n&&/\s/.test(text[i]))i++;
+      if(i>=n)break;
+      if(text[i]==='\n'){i++;continue;}
+      if(text[i]==='#'){ while(i<n&&text[i]!=='\n')i++; continue; }
+      if(text[i]==='['){
+        const arr=text[i+1]==='['; let j=i+(arr?2:1); let end=j;
+        while(end<n&&text[end]!==']')end++;
+        const header=text.slice(j,end).trim(); i=end+(arr?2:1);
+        while(i<n&&text[i]!=='\n')i++;
+        const parts=header.split('.').map(p=>{ p=p.trim(); if(p[0]==='"'||p[0]==="'")return parseString(p,0)[0]; return p; });
+        if(arr){ let o=root; for(let k=0;k<parts.length-1;k++)o=o[parts[k]]=o[parts[k]]||{}; const last=parts[parts.length-1]; if(!Array.isArray(o[last]))o[last]=[]; const neo={}; o[last].push(neo); cur=neo; }
+        else { let o=root; for(const p of parts)o=o[p]=o[p]||{}; cur=o; }
+        continue;
+      }
+      const eq=text.indexOf('=',i); if(eq<0){ while(i<n&&text[i]!=='\n')i++; continue; }
+      const keyPath=parseDottedKey(text.slice(i,eq)); i=eq+1;
+      const r=parseValue(text,i); i=r[1];
+      while(i<n&&text[i]!=='\n')i++;
+      assignKey(cur,keyPath,r[0]);
+    }
+    return root;
+  }
+
+  /* ---------- JSON -> TOML ---------- */
+  function toTOML(obj){
+    const lines=[];
+    const keyName=k=>/^[A-Za-z0-9_-]+$/.test(k)?k:JSON.stringify(k);
+    function prim(v){
+      if(v===null) return '""';
+      if(typeof v==='boolean') return v?'true':'false';
+      if(typeof v==='number') return String(v);
+      if(typeof v==='string') return JSON.stringify(v);
+      if(Array.isArray(v)) return '['+v.map(prim).join(', ')+']';
+      if(typeof v==='object') return '{'+Object.entries(v).map(([k,x])=>keyName(k)+' = '+prim(x)).join(', ')+'}';
+      return JSON.stringify(String(v));
+    }
+    function isTableArr(v){ return Array.isArray(v)&&v.length>0&&v.every(x=>x&&typeof x==='object'); }
+    function emit(path,val){
+      if(isTableArr(val)){ for(const it of val){ lines.push('[['+path.map(keyName).join('.')+']]'); body(path,it); } }
+      else if(val&&typeof val==='object'){ if(path.length)lines.push('['+path.map(keyName).join('.')+']'); body(path,val); }
+      else if(path.length) lines.push(keyName(path[path.length-1])+' = '+prim(val));
+    }
+    function body(pp,val){
+      const subs=[];
+      for(const [k,v] of Object.entries(val)){
+        if(v&&typeof v==='object'){ if(Array.isArray(v)&&!isTableArr(v)) lines.push(keyName(k)+' = '+prim(v)); else subs.push([k,v]); }
+        else lines.push(keyName(k)+' = '+prim(v));
+      }
+      for(const [k,v] of subs) emit(pp.concat(k),v);
+    }
+    body([],obj);
+    return lines.join('\n');
+  }
+
+  function toJSON(){ const t=input.value.trim(); if(!t){output.innerHTML='';setStatus('等待输入…');return;}
+    try{ const obj=parseTOML(t); output.innerHTML=highlight(obj); const s=JSON.stringify(obj); $('outMeta').textContent=s.length+' 字符'; setStatus('✓ TOML 解析成功','ok'); }
+    catch(e){ output.textContent=''; setStatus('✗ '+e.message,'err'); } }
+  function toT(){ const t=input.value.trim(); if(!t){output.innerHTML='';setStatus('等待输入…');return;}
+    try{ const obj=JSON.parse(t); const s=toTOML(obj); output.textContent=s; $('outMeta').textContent=s.length+' 字符'; setStatus('✓ 已转换为 TOML','ok'); }
+    catch(e){ output.textContent=''; setStatus('✗ '+e.message,'err'); } }
+
+  $('btnToJson').onclick=toJSON;
+  $('btnToToml').onclick=toT;
+  $('btnClear').onclick=()=>{ input.value=''; output.innerHTML=''; $('outMeta').textContent=''; setStatus('就绪'); input.focus(); };
+  $('btnCopy').onclick=async()=>{ if(!output.textContent){setStatus('没有可复制的内容','err');return;} try{ await navigator.clipboard.writeText(output.textContent); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('btnSample').onclick=()=>{ input.value='# 示例 TOML\ntitle = "TOML 示例"\n[server]\nhost = "127.0.0.1"\nports = [8080, 8081]\n\n[owner]\nname = "Tom"\ndobs = [1979, 5, 27]\n\n[[products]]\nname = "Hammer"\nprice = 19.9\n\n[[products]]\nname = "Nail"\nprice = 1.2'; toJSON(); };
+  input.addEventListener('input',()=>{ $('inMeta').textContent=input.value.length+' 字符'; });
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

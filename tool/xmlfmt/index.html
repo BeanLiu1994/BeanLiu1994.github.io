@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XML 格式化 / 压缩 · XML Formatter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+    --tag:#7ec6ff; --attr:#e5c07b; --str:#9ece6a; --txt:#e6e6e6; --com:#9aa4b2; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  label.indent{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+  select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+  main{flex:1;display:flex;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .pane.left{border-right:1px solid var(--border)}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:1px}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;padding:16px;font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6;tab-size:2}
+  #output{flex:1;overflow:auto;padding:16px;font-family:"SF Mono",Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.6;white-space:pre;margin:0}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .tok-tag{color:var(--tag)} .tok-attr{color:var(--attr)} .tok-str{color:var(--str)} .tok-txt{color:var(--txt)} .tok-com{color:var(--com);font-style:italic}
+  @media(max-width:720px){main{flex-direction:column}.pane.left{border-right:0;border-bottom:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧾 XML 格式化 / 压缩</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · XML Formatter</div>
+  </div>
+  <div class="toolbar">
+    <label class="indent">缩进
+      <select id="indent"><option value="2">2 空格</option><option value="4">4 空格</option><option value="\t">Tab</option></select>
+    </label>
+    <button id="btnFmt" class="primary">格式化</button>
+    <button id="btnMin">压缩</button>
+    <button id="btnCopy">复制</button>
+    <button id="btnSample">示例</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head"><span>输入 Input</span><span class="hint" id="inMeta">0 字符</span></div>
+    <textarea id="input" placeholder="在此粘贴 XML…" spellcheck="false"></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Output</span><span class="hint" id="outMeta"></span></div>
+    <pre id="output"></pre>
+  </section>
+</main>
+<div class="status" id="status">等待输入…</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const input=$('input'), output=$('output'), status=$('status');
+  function setStatus(m,t){ status.textContent=m; status.className='status'+(t?' '+t:''); }
+  // 用 DOMParser 解析并美化/压缩
+  function parseXML(text){
+    const doc=new DOMParser().parseFromString(text,'application/xml');
+    const err=doc.querySelector('parsererror');
+    if(err) throw new Error(err.textContent.split('\n')[0]||'XML 解析错误');
+    return doc;
+  }
+  function esc(s){ return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function serialize(node,indent,level){
+    const pad=indent.repeat(level);
+    if(node.nodeType===3){ // text
+      const t=node.nodeValue;
+      if(t.trim()==='') return null;
+      return pad+esc(t.trim());
+    }
+    if(node.nodeType===8){ return pad+'<!--'+node.nodeValue+'-->'; }
+    if(node.nodeType!==1) return null;
+    const name=node.nodeName;
+    let attrs='';
+    for(const a of node.attributes) attrs+=' '+a.name+'="'+esc(a.value)+'"';
+    const children=[...node.childNodes].map(c=>serialize(c,indent,level+1)).filter(x=>x!==null);
+    const txt=node.childNodes.length===1 && node.firstChild.nodeType===3 && node.firstChild.nodeValue.trim()!==''
+      ? esc(node.firstChild.nodeValue.trim()) : null;
+    if(children.length===0){
+      return pad+'<'+name+attrs+'/>';
+    }
+    if(txt!==null){
+      return pad+'<'+name+attrs+'>'+txt+'</'+name+'>';
+    }
+    return pad+'<'+name+attrs+'>\n'+children.join('\n')+'\n'+pad+'</'+name+'>';
+  }
+  function highlightXML(str){
+    return str
+      .replace(/(&lt;!--[\s\S]*?--&gt;)/g,'<span class="tok-com">$1</span>')
+      .replace(/(&lt;\/?)([a-zA-Z_:][\w:.-]*)(\s[^&]*?)?(\/?&gt;)/g,
+        (m,p1,tag,attrs,p4)=>p1+'<span class="tok-tag">'+tag+'</span>'+
+          (attrs?attrs.replace(/([\w:-]+)(=)(&quot;[^&]*?&quot;)/g,'<span class="tok-attr">$1</span>$2<span class="tok-str">$3</span>'):'')+p4)
+      .replace(/&gt;/g,'&gt;');
+  }
+  function run(minify){
+    const text=input.value.trim();
+    if(!text){ output.innerHTML=''; $('outMeta').textContent=''; setStatus('等待输入…'); return; }
+    try{
+      const doc=parseXML(text);
+      const root=doc.documentElement;
+      const indent=minify?'':($('indent').value==='\\t'?'\t':$('indent').value==='\t'?'\t':' '.repeat(+$('indent').value));
+      let body=serialize(root,indent,0);
+      if(minify){ body=body.replace(/\n\s*/g,' ').replace(/\s+/g,' ').replace(/>\s+</g,'><').trim(); }
+      const xmlDecl='<?xml version="1.0" encoding="UTF-8"?>\n';
+      const full=minify?body:(xmlDecl+body+'\n');
+      output.textContent=full;
+      output.innerHTML=highlightXML(esc(full));
+      $('outMeta').textContent=full.length+' 字符';
+      setStatus('✓ XML '+(minify?'已压缩':'已格式化'),'ok');
+    }catch(e){ output.textContent=''; $('outMeta').textContent=''; setStatus('✗ '+e.message,'err'); }
+  }
+  $('btnFmt').onclick=()=>run(false);
+  $('btnMin').onclick=()=>run(true);
+  $('btnClear').onclick=()=>{ input.value=''; run(false); input.focus(); };
+  $('btnCopy').onclick=async()=>{ if(!output.textContent){setStatus('没有可复制的内容','err');return;} try{ await navigator.clipboard.writeText(output.textContent); setStatus('✓ 已复制','ok'); }catch(e){ setStatus('复制失败：'+e.message,'err'); } };
+  $('btnSample').onclick=()=>{ input.value='<?xml version="1.0"?><note><to>Tom</to><from>Jane</from><body>Hello <b>world</b>!</body></note>'; run(false); };
+  input.addEventListener('input',()=>{ $('inMeta').textContent=input.value.length+' 字符'; });
+  $('indent').addEventListener('change',()=>run(false));
+  setStatus('等待输入…');
+})();
+</script>
+</body>
+</html>

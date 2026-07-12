@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG 头像生成器 · SVG Avatar Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:64px}
+  input[type=text],input[type=number]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;outline:none}
+  input[type=text]:focus,input[type=number]:focus{border-color:var(--accent)}
+  input[type=color]{width:42px;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer;padding:2px}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px;flex-wrap:wrap}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .preview{display:flex;align-items:center;justify-content:center;min-height:160px;padding:20px}
+  .out pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;overflow:auto;font-family:"SF Mono",Consolas,Monaco,monospace;font-size:12px;line-height:1.6;white-space:pre-wrap;margin:0;max-height:260px}
+  button.act{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer}
+  button.act:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🟦 SVG 头像生成器</h1>
+    <div class="sub">首字母 + 渐变背景 · 可下载 · 纯本地 · Avatar Generator</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">内容</div>
+      <div class="row"><label>文字</label><input type="text" id="txt" value="PL" maxlength="3"></div>
+      <div class="row"><label>字号</label><input type="range" id="fs" min="20" max="80" value="48"><span id="fsv">48</span></div>
+      <div class="row"><label>尺寸</label><input type="range" id="sz" min="64" max="256" value="128"><span id="szv">128</span></div>
+      <div class="row"><label>形状</label>
+        <div class="seg" id="shape"><button data-s="circle" class="on">圆形</button><button data-s="rounded">圆角</button><button data-s="square">方形</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="pane-head">配色</div>
+      <div class="row"><label>渐变A</label><input type="color" id="c1" value="#4f9cff"><input type="text" id="c1x" value="#4f9cff" style="max-width:90px"></div>
+      <div class="row"><label>渐变B</label><input type="color" id="c2" value="#7b5cff"><input type="text" id="c2x" value="#7b5cff" style="max-width:90px"></div>
+      <div class="row"><label>文字色</label><input type="color" id="fc" value="#ffffff"><input type="text" id="fcx" value="#ffffff" style="max-width:90px"></div>
+      <div class="row"><label>角度</label><input type="range" id="ang" min="0" max="360" value="135"><span id="angv">135°</span></div>
+      <div class="row" style="gap:8px"><button class="act" id="rand">🎲 随机配色</button></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">预览</div>
+      <div class="preview" id="pv"></div>
+    </div>
+    <div class="card out">
+      <div class="pane-head" style="display:flex;justify-content:space-between;align-items:center">SVG 代码
+        <span><button class="act primary" id="copy" style="padding:4px 10px;font-size:12px">复制</button>
+        <button class="act" id="dl" style="padding:4px 10px;font-size:12px">下载</button></span>
+      </div>
+      <pre id="code"></pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let shape='circle';
+  function clampHex(v){ v=v.trim(); if(!v.startsWith('#'))v='#'+v; if(/^#[0-9a-fA-F]{3}$/.test(v)) v='#'+v.slice(1).split('').map(c=>c+c).join(''); return /^#[0-9a-fA-F]{6}$/.test(v)?v.toLowerCase():'#000000'; }
+  function rnd(){ return '#'+Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0'); }
+  function build(){
+    const txt=($('txt').value||'A').toUpperCase();
+    const fs=+$('fs').value, sz=+$('sz').value, ang=+$('ang').value;
+    const c1=clampHex($('c1x').value), c2=clampHex($('c2x').value), fc=clampHex($('fcx').value);
+    const rad = shape==='circle'?sz/2 : shape==='rounded'?Math.round(sz*0.18):0;
+    const cx=sz/2, cy=sz/2;
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'">\n'+
+      '  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1" gradientTransform="rotate('+ang+' .5 .5)">\n'+
+      '    <stop offset="0%" stop-color="'+c1+'"/>\n    <stop offset="100%" stop-color="'+c2+'"/>\n  </linearGradient></defs>\n'+
+      '  <rect width="'+sz+'" height="'+sz+'" rx="'+rad+'" ry="'+rad+'" fill="url(#g)"/>\n'+
+      '  <text x="'+cx+'" y="'+cy+'" font-family="Arial, Helvetica, sans-serif" font-size="'+fs+'" font-weight="700" fill="'+fc+'" text-anchor="middle" dominant-baseline="central">'+txt+'</text>\n</svg>';
+    $('code').textContent=svg;
+    $('pv').innerHTML=svg;
+    $('st').textContent='✓ 已生成 '+sz+'×'+sz+' 头像';
+    return svg;
+  }
+  function bindColor(p,b){ $(p).addEventListener('input',()=>{$(b).value=$(p).value;build();}); $(b).addEventListener('input',()=>{$(p).value=clampHex($(b).value);build();}); }
+  bindColor('c1','c1x'); bindColor('c2','c2x'); bindColor('fc','fcx');
+  ['txt','fs','sz','ang'].forEach(id=>$(id).addEventListener('input',()=>{ $('fsv').textContent=$('fs').value; $('szv').textContent=$('sz').value; $('angv').textContent=$('ang').value+'°'; build(); }));
+  $('shape').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;shape=b.dataset.s;[...$('shape').children].forEach(x=>x.classList.toggle('on',x===b));build();});
+  $('rand').onclick=()=>{ const set=(p,b)=>{const c=rnd();$(p).value=c;$(b).value=c;}; set('c1','c1x'); set('c2','c2x'); build(); };
+  $('copy').onclick=async()=>{ try{ await navigator.clipboard.writeText($('code').textContent); $('st').textContent='✓ 已复制 SVG'; }catch(e){ $('st').textContent='复制失败：'+e.message; } };
+  $('dl').onclick=()=>{ const blob=new Blob([$('code').textContent],{type:'image/svg+xml'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='avatar.svg'; a.click(); URL.revokeObjectURL(a.href); $('st').textContent='✓ 已下载 avatar.svg'; };
+  build();
+})();
+</script>
+</body>
+</html>

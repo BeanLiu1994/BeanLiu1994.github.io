@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>颜文字面板 · Kaomoji Board</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --warn:#e5c07b; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tabs button{background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:6px 14px;font-size:13px;cursor:pointer}
+  .tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .search{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;outline:none;width:100%;max-width:360px}
+  .search:focus{border-color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  .item{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 12px;text-align:center;cursor:pointer;font-size:20px;line-height:1.3;transition:.15s;user-select:none}
+  .item:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .item.copied{border-color:var(--ok);color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>😊 颜文字面板</h1>
+    <div class="sub">点击即可复制 · 纯本地 · Kaomoji Board</div>
+  </div>
+  <input class="search" id="search" placeholder="🔍 搜索（如 happy / 哭 / 猫）">
+</header>
+<main>
+  <div class="tabs" id="tabs"></div>
+  <div class="grid" id="grid"></div>
+  <div class="hint">提示：点击任意表情复制到剪贴板；上方可输入关键词筛选。</div>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const DATA={
+    happy:[['(◕‿◕)','开心'],['(◠‿◠)','微笑'],['(≧▽≦)','超开心'],['(✿◡‿◡)','害羞笑'],['＼(^o^)／','举手欢呼'],['(ﾉ◕ヮ◕)ﾉ','开心'],['(•‿•)','满足'],['٩(◕‿◕)۶','抱抱']],
+    sad:[['(╥﹏╥)','哭泣'],['(；￣Д￣)','无语'],['(︶︿︶)','委屈'],['(｡•́︿•̀｡)','难过'],['(>﹏<)','崩溃'],['(¬_¬)','不屑'],['(╯︵╰,)','沮丧'],['(´；ω；`)','呜呜']],
+    love:[['(♡˙︶˙♡)','爱心'],['(◕ω◕✿)','喜欢'],['(｡♥‿♥｡)','爱'],['(✿ ♥‿♥)','心动'],['ヽ(♡‿♥‿♡)ノ','飞吻'],['(づ｡◕‿‿◕｡)づ','抱抱你'],['♡(˃͈ દ ˂͈ ༶ )','暗恋']],
+    surprised:[['(⊙_⊙)','震惊'],['(○o○)','瞪眼'],['(@_@)','眩晕'],['Σ(°△°|||)','惊呆'],['(☉_☉)','注视'],['ヽ(°〇°)ﾉ','诧异']],
+    sleepy:[['(－ω－)','困'],['(-_-)zzz','睡觉'],['(´∀｀)','放松'],['(×_×)','头晕'],['(～﹃～)','流口水'],['(。-ω-)','发呆']],
+    angry:[['(╬ಠ益ಠ)','暴怒'],['(ノಠ益ಠ)ノ','挥拳'],['(≖_≖ )','不满'],['(╯°□°）╯','掀桌'],['(҂◡_◡)','生气'],['(҂`ﮪ´)︻デ═一','瞄准']],
+    cool:[['(⌐■_■)','酷'],['( •_•)>⌐■-■','耍帅'],['(^_−)☆','眨眼'],['(✯◡✯)','得意'],['(ノ^o^)ノ','嗨']],
+    cat:[['(=^･ω･^=)','猫'],['(=｀ω´=)','猫脸'],['(=^‿^=)','猫笑'],['(^･o･^)','猫头'],['(=^-ω-^=)','喵']],
+    wave:[['(・∀・)','招手'],['(⌒ω⌒)','招手'],['ヾ(•ω•`)o','挥手'],['(◕‿◕✿)','打招呼'],['(っ◔◡◔)っ','比心']],
+    think:[['(・_・)','思考'],['(￣～￣)','想想'],['(҂◉◡◉)','琢磨'],['(⊙…⊙)','沉思'],['(・∀・)','考虑']],
+    cry:[['(ಥ﹏ಥ)','泪'],['(;﹏;)','哭脸'],['(๑•́ ₃ •̀๑)','委屈哭'],['(╥╯﹏╰╥)','大哭']],
+    dance:[['(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧','跳舞'],['ヽ(°〇°)ﾉ','蹦跳'],['(ノ^o^)ノ','摇摆'],['ヾ(≧▽≦*)o','开心跳']],
+    shrug:[['(・_・)','耸肩'],['¯\\_(ツ)_/¯','无奈耸肩'],['(¬_¬)','摊手'],['(・∀・)','耸肩']]
+  };
+  const NAMES={happy:'开心',sad:'难过',love:'喜欢',surprised:'惊讶',sleepy:'困倦',angry:'生气',cool:'酷',cat:'猫',wave:'招呼',think:'思考',cry:'哭泣',dance:'跳舞',shrug:'无奈'};
+  let cur='happy';
+  function buildTabs(){
+    $('tabs').innerHTML=Object.keys(DATA).map(k=>'<button data-k="'+k+'" class="'+(k===cur?'on':'')+'">'+NAMES[k]+'</button>').join('');
+    [...$('tabs').children].forEach(b=>b.onclick=()=>{ cur=b.dataset.k; buildTabs(); render(); });
+  }
+  function render(){
+    const q=$('search').value.trim().toLowerCase();
+    let items=DATA[cur];
+    if(q) items=Object.values(DATA).flat().filter(it=>it[0].toLowerCase().includes(q)||it[1].includes(q)||NAMES_MATCH(it,q));
+    if(!items.length){ $('grid').innerHTML='<div class="hint">没有匹配的表情</div>'; return; }
+    $('grid').innerHTML=items.map(it=>'<div class="item" data-v="'+encodeURIComponent(it[0])+'">'+it[0]+'<div class="hint" style="font-size:11px;margin-top:4px">'+it[1]+'</div></div>').join('');
+    [...$('grid').children].forEach(el=>el.onclick=async()=>{
+      const v=decodeURIComponent(el.dataset.v);
+      try{ await navigator.clipboard.writeText(v); }catch(e){ const t=document.createElement('textarea');t.value=v;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove(); }
+      el.classList.add('copied'); setTimeout(()=>el.classList.remove('copied'),600);
+      $('st').textContent='✓ 已复制：'+v;
+    });
+  }
+  function NAMES_MATCH(it,q){ return false; }
+  $('search').addEventListener('input',render);
+  buildTabs(); render();
+})();
+</script>
+</body>
+</html>

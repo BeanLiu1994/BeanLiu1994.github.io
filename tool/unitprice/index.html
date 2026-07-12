@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单位价格比较 · Unit Price Comparator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --warn:#e5c07b; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  td input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;outline:none}
+  td input:focus{border-color:var(--accent)}
+  tr.best td{background:rgba(62,207,142,.10)}
+  tr.best td.name{color:var(--ok);font-weight:700}
+  .ppu{font-weight:700;color:var(--accent)}
+  tr.best .ppu{color:var(--ok)}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:72px}
+  select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px}
+  .note{color:var(--muted);font-size:13px;line-height:1.7}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .del{cursor:pointer;color:var(--muted);border:0;background:transparent;font-size:16px}
+  .del:hover{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🛒 单位价格比较</h1>
+    <div class="sub">换算到统一单位，谁更划算一目了然 · 纯本地 · Unit Price</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head"><span>标准单位</span>
+        <select id="std">
+          <option value="100g">每 100 g</option>
+          <option value="1kg">每 1 kg</option>
+          <option value="100ml">每 100 ml</option>
+          <option value="1L">每 1 L</option>
+          <option value="1个">每 1 个</option>
+          <option value="1片">每 1 片</option>
+        </select>
+      </div>
+      <table id="tbl">
+        <thead><tr><th>名称</th><th>价格(¥)</th><th>数量</th><th>单位</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="add" class="primary">+ 添加商品</button>
+        <button id="sample">载入示例</button>
+        <button id="clear">清空</button>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">结果（按单价升序）</div>
+      <table><thead><tr><th>商品</th><th>单价</th><th>对比</th></tr></thead>
+      <tbody id="out"></tbody></table>
+      <div class="note" style="margin-top:14px" id="advice">添加商品并填写价格、数量与单位，系统会按所选标准单位换算单价，绿色为最划算。</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  // 单位到「克 / 毫升 / 个」的系数
+  const TOBASE={'g':1,'kg':1000,'mg':0.001,'ml':1,'L':1000,'cl':10,'个':1,'片':1,'块':1,'包':1,'支':1,'瓶':1,'罐':1,'袋':1};
+  function addRow(d={}){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><input class="name" placeholder="商品" value="'+(d.name||'')+'"></td>'+
+      '<td><input class="price" type="number" placeholder="0" value="'+(d.price??'')+'"></td>'+
+      '<td><input class="qty" type="number" placeholder="0" value="'+(d.qty??'')+'"></td>'+
+      '<td><input class="unit" placeholder="g/kg/ml/L/个…" value="'+(d.unit||'')+'"></td>'+
+      '<td><button class="del">✕</button></td>';
+    tr.querySelector('.del').onclick=()=>{ tr.remove(); render(); };
+    ['name','price','qty','unit'].forEach(c=>tr.querySelector('.'+c).addEventListener('input',render));
+    $('rows').appendChild(tr);
+  }
+  function stdFactor(std){
+    // 返回「1 个标准单位 = 多少基准单位(g/ml/个)」
+    const map={'100g':100,'1kg':1000,'100ml':100,'1L':1000,'1个':1,'1片':1};
+    return map[std];
+  }
+  function render(){
+    const std=$('std').value;
+    const sf=stdFactor(std);
+    const rows=[...$('rows').children].map(tr=>{
+      const name=tr.querySelector('.name').value.trim();
+      const price=parseFloat(tr.querySelector('.price').value);
+      const qty=parseFloat(tr.querySelector('.qty').value);
+      let unit=tr.querySelector('.unit').value.trim().toLowerCase();
+      if(!unit) unit='个';
+      const base=TOBASE[unit];
+      if(!name||isNaN(price)||isNaN(qty)||!base||qty<=0) return null;
+      // 总基准单位 = qty * base；单价(标准单位) = price / (总基准/base标准)
+      const totalBase=qty*base;
+      const ppu=price/(totalBase/sf);
+      return {name,ppu};
+    }).filter(Boolean);
+    rows.sort((a,b)=>a.ppu-b.ppu);
+    const min=rows.length?rows[0].ppu:0;
+    $('out').innerHTML=rows.map((r,i)=>{
+      const pct=min?Math.round((r.ppu/min-1)*100):0;
+      const bar=i===0?'🏆':'';
+      return '<tr class="'+(i===0?'best':'')+'"><td class="name">'+escapeHtml(r.name)+' '+bar+'</td>'+
+        '<td class="ppu">¥'+r.ppu.toFixed(2)+'</td>'+
+        '<td style="color:var(--muted)">'+(i===0?'最划算':('贵 '+pct+'%'))+'</td></tr>';
+    }).join('');
+    if(rows.length){ const b=rows[0]; $('advice').innerHTML='<b style="color:var(--ok)">'+escapeHtml(b.name)+'</b> 最划算，单价 ¥'+b.ppu.toFixed(2)+'/'+std+'。';
+      $('st').textContent='✓ 已比较 '+rows.length+' 件商品，最划算：'+b.name; }
+    else { $('advice').textContent='添加商品并填写价格、数量与单位，系统会按所选标准单位换算单价，绿色为最划算。'; $('st').textContent='就绪'; }
+  }
+  function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  $('std').addEventListener('change',render);
+  $('add').onclick=()=>addRow();
+  $('clear').onclick=()=>{ $('rows').innerHTML=''; render(); };
+  $('sample').onclick=()=>{
+    $('rows').innerHTML='';
+    [['咖啡A',39.9,200,'g'],['咖啡B',59,300,'g'],['咖啡C',25,100,'g']].forEach(addRow);
+    render();
+  };
+  // 初始 3 行
+  addRow();addRow();addRow();
+  render();
+})();
+</script>
+</body>
+</html>

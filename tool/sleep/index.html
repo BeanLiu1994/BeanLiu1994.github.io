@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>睡眠周期计算器 · Sleep Cycle Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --warn:#e5c07b; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:84px}
+  input[type=time]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=time]:focus{border-color:var(--accent)}
+  .seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .times{display:flex;flex-direction:column;gap:8px}
+  .t{display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+  .t .hm{font-size:18px;font-weight:700;color:var(--accent)}
+  .t .cyc{color:var(--muted);font-size:13px}
+  .t.best{border-color:var(--ok)}
+  .t.best .hm{color:var(--ok)}
+  .note{color:var(--muted);font-size:13px;line-height:1.7}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌙 睡眠周期计算器</h1>
+    <div class="sub">以 90 分钟睡眠周期推算 · 纯本地 · Sleep Cycle</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">模式</div>
+      <div class="seg" id="mode">
+        <button data-m="wake" class="on">我要几点起床</button>
+        <button data-m="sleep">我现在去睡</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="pane-head" id="lbl">起床时间</div>
+      <div class="row"><label id="lbl2">起床</label><input type="time" id="time" value="07:00"></div>
+      <div class="row"><label>入睡耗时</label><input type="number" id="fall" placeholder="15" value="15" min="0"> <span>分钟</span></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head" id="outHead">推荐入睡时间</div>
+      <div class="times" id="times"></div>
+      <div class="note" style="margin-top:14px">成年人每晚约需 5–6 个完整周期（7.5–9 小时）。在周期边界醒来通常更清醒。入睡耗时指从上床到真正睡着的平均时间。</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let mode='wake';
+  const CYCLE=90, FALL_BASE=15;
+  function fmt(d){ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  function render(){
+    const [hh,mm]=$('time').value.split(':').map(Number);
+    if(isNaN(hh)) return;
+    const fall=Math.max(0,parseInt($('fall').value)||0);
+    let html='';
+    if(mode==='wake'){
+      $('outHead').textContent='推荐入睡时间（倒推）';
+      // 起床时间 - fall - n*cycle
+      for(let n=6;n>=4;n--){
+        const d=new Date(); d.setHours(hh,mm,0,0);
+        d.setMinutes(d.getMinutes()-fall-n*CYCLE);
+        const best=n===5;
+        html+='<div class="t'+(best?' best':'')+'"><span class="hm">'+fmt(d)+'</span><span class="cyc">'+(best?'推荐 · ':'')+n+' 个周期 · 睡眠 '+(n*CYCLE/60).toFixed(1)+'h</span></div>';
+      }
+    } else {
+      $('outHead').textContent='推荐起床时间（顺推）';
+      for(let n=4;n<=6;n++){
+        const d=new Date(); d.setHours(hh,mm,0,0);
+        d.setMinutes(d.getMinutes()+fall+n*CYCLE);
+        const best=n===5;
+        html+='<div class="t'+(best?' best':'')+'"><span class="hm">'+fmt(d)+'</span><span class="cyc">'+(best?'推荐 · ':'')+n+' 个周期 · 睡眠 '+(n*CYCLE/60).toFixed(1)+'h</span></div>';
+      }
+    }
+    $('times').innerHTML=html;
+    $('st').textContent='✓ 已按 '+(mode==='wake'?'起床':'入睡')+' '+fmt(new Date(0,0,0,hh,mm))+' 计算';
+  }
+  $('mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m;
+    [...$('mode').children].forEach(x=>x.classList.toggle('on',x===b));
+    $('lbl').textContent=mode==='wake'?'起床时间':'入睡时间';
+    $('lbl2').textContent=mode==='wake'?'起床':'入睡';
+    $('outHead').textContent=mode==='wake'?'推荐入睡时间（倒推）':'推荐起床时间（顺推）';
+    render(); });
+  ['time','fall'].forEach(id=>$(id).addEventListener('input',render));
+  render();
+})();
+</script>
+</body>
+</html>

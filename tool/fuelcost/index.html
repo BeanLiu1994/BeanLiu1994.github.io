@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>油费里程计算器 · Fuel & Mileage Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --warn:#e5c07b; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  label{color:var(--muted);font-size:13px;min-width:108px}
+  input[type=number]{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .seg button{background:transparent;border:0;color:var(--muted);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .big{font-size:40px;font-weight:800;text-align:center;color:var(--accent)}
+  .sub2{text-align:center;color:var(--muted);font-size:14px;margin-top:2px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  .m{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+  .m .k{color:var(--muted);font-size:12px}
+  .m .v{font-size:20px;font-weight:700;color:var(--text);margin-top:4px}
+  .note{color:var(--muted);font-size:13px;line-height:1.7}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⛽ 油费里程计算器</h1>
+    <div class="sub">路程 × 油耗 × 油价 · 纯本地 · Fuel &amp; Mileage</div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入</div>
+      <div class="row"><label>里程</label><input type="number" id="dist" placeholder="100" value="100"> <span>km</span></div>
+      <div class="row"><label>油耗</label><input type="number" id="eff" placeholder="7" value="7" step="0.1"> <span id="effu">L/100km</span></div>
+      <div class="row"><label>油价</label><input type="number" id="price" placeholder="7.8" value="7.8" step="0.01"> <span>¥/L</span></div>
+      <div class="row"><label>方式</label>
+        <div class="seg" id="mode">
+          <button data-m="l100" class="on">百公里油耗</button>
+          <button data-m="mpg">MPG(美)</button>
+        </div>
+      </div>
+      <label class="check" style="display:flex;gap:8px;color:var(--muted);font-size:13px;cursor:pointer"><input type="checkbox" id="round" style="accent-color:var(--accent)"> 往返（里程 ×2）</label>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">结果</div>
+      <div class="big" id="cost">—</div>
+      <div class="sub2" id="fuel">约 — 升</div>
+      <div class="grid2">
+        <div class="m"><div class="k">每公里成本</div><div class="v" id="perkm">—</div></div>
+        <div class="m"><div class="k">每 100km 油费</div><div class="v" id="per100">—</div></div>
+      </div>
+      <div class="note" style="margin-top:14px" id="advice">输入里程、油耗与油价即可估算油费。切换 MPG 模式时油耗按美国加仑换算（1 gal≈3.785 L，1 mile≈1.609 km）。</div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  let mode='l100';
+  function render(){
+    let dist=parseFloat($('dist').value);
+    let eff=parseFloat($('eff').value);
+    const price=parseFloat($('price').value);
+    if(isNaN(dist)||dist<=0){ clear(); $('advice').textContent='请输入有效的里程。'; return; }
+    if($('round').checked) dist*=2;
+    let lPer100;
+    if(mode==='l100'){ lPer100=eff; }
+    else { // MPG(US) -> L/100km
+      if(!eff||eff<=0){ clear(); return; }
+      lPer100=235.214583/(eff); // 235.214583 / mpg
+    }
+    if(isNaN(lPer100)||lPer100<=0||isNaN(price)||price<=0){ clear(); return; }
+    const liters=dist/100*lPer100;
+    const cost=liters*price;
+    $('cost').textContent='¥ '+cost.toFixed(2);
+    $('fuel').textContent='约 '+liters.toFixed(2)+' 升';
+    $('perkm').textContent='¥ '+(cost/dist).toFixed(2);
+    $('per100').textContent='¥ '+(lPer100*price).toFixed(2);
+    $('st').textContent='✓ 单程/往返 '+dist.toFixed(0)+' km，油费约 ¥'+cost.toFixed(2);
+  }
+  function clear(){ $('cost').textContent='—'; $('fuel').textContent='约 — 升'; $('perkm').textContent='—'; $('per100').textContent='—'; }
+  $('mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m;
+    [...$('mode').children].forEach(x=>x.classList.toggle('on',x===b));
+    $('effu').textContent=mode==='l100'?'L/100km':'MPG'; $('eff').value=mode==='l100'?'7':'34'; render(); });
+  ['dist','eff','price','round'].forEach(id=>$(id).addEventListener('input',render));
+  $('round').addEventListener('change',render);
+  render();
+})();
+</script>
+</body>
+</html>
