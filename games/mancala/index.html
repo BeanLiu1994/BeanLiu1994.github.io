@@ -107,15 +107,21 @@
     hideOverlay(){ document.getElementById('overlay-end').classList.remove('active'); }
     updateUI(){ document.getElementById('s1').textContent=this.b[6]; document.getElementById('s2').textContent=this.b[13]; }
     posFor(size){
-      const m=14, top=18, bot=size*300/440-18; const cx=size/2; const side=size*0.115;
-      const storeR={x:size-m-26,y:(top+bot)/2}; const storeL={x:m+26,y:(top+bot)/2};
-      const pits=[]; const n=6; const span=size-2*(m+side)-60; const step=span/(n-1);
-      const left=m+side+30;
-      for(let i=0;i<n;i++){ pits[i]={x:left+i*step,y:bot}; } // bottom 0..5 left->right
-      for(let i=0;i<n;i++){ pits[12-i]={x:left+i*step,y:top}; } // top 7..12 right->left
-      return {pits, storeR, storeL, side};
+      const W=size, H=size*300/440, m=10, n=6;
+      const storeW=W*0.105, storeH=H-2*m;
+      const storeR={x:W-m-storeW/2, y:H/2, w:storeW, h:storeH};
+      const storeL={x:m+storeW/2, y:H/2, w:storeW, h:storeH};
+      const areaL=storeL.x+storeW/2+8, areaR=storeR.x-storeW/2-8;
+      const areaW=areaR-areaL;
+      let pitR=Math.min(areaW/13.5,(H-2*m)/4.4); if(pitR<8) pitR=8;
+      const leftStart=areaL+pitR, stepX=(areaW-2*pitR)/(n-1);
+      const topY=m+pitR, botY=H-m-pitR;
+      const pits=[]; for(let i=0;i<14;i++) pits.push(null);
+      for(let i=0;i<n;i++){ pits[i]={x:leftStart+i*stepX,y:botY}; }       // bottom 0..5 (left->right)
+      for(let i=0;i<n;i++){ pits[12-i]={x:leftStart+i*stepX,y:topY}; }    // top 7..12 (pit12 left, pit7 right)
+      return {pits, storeR, storeL, pitR, H};
     }
-    pitAt(px,py){ const size=this.size; const {pits,storeR,storeL,side}=this.posFor(size); const rect=canvas.getBoundingClientRect(); const x=px-rect.left, y=py-rect.top; const rr=side*1.05; for(let i=0;i<14;i++){ if(i===6||i===13) continue; if(pits[i]&&Math.hypot(x-pits[i].x,y-pits[i].y)<rr) return i; } return -1; }
+    pitAt(px,py){ const size=this.size; const {pits,storeR,storeL,pitR}=this.posFor(size); const rect=canvas.getBoundingClientRect(); const x=px-rect.left, y=py-rect.top; const rr=pitR*1.08; for(let i=0;i<14;i++){ if(i===6||i===13) continue; if(pits[i]&&Math.hypot(x-pits[i].x,y-pits[i].y)<rr) return i; } return -1; }
     doMove(pit){ if(this.over||this.phase!=='play') return; if(this.turn===1 && (pit<0||pit>5)) return; const r=applyState(this.b,this.turn,pit); this.b=r.b; this.lastPit=pit; this.over=r.over; this.winner=r.winner||0; this.turn=r.extra?this.turn:opp(this.turn); this.phase='anim'; this.busy=0.45; this.updateUI(); if(this.over) this.showEnd(); }
     showEnd(){ const w=this.winner; document.getElementById('end-title').textContent=w===1?'You Win!':(w===2?'AI Wins':'Draw'); document.getElementById('end-msg').textContent='You '+this.b[6]+' · AI '+this.b[13]; document.getElementById('overlay-end').classList.add('active'); }
     chooseAuto(){ NODES=0; if(this.over) return; const m=bestMove(this.b,this.turn,7); if(m<0){ this.over=true; this.winner=this.b[6]>this.b[13]?1:2; this.showEnd(); return; } this.doMove(m); }
@@ -130,19 +136,20 @@
       if(this.autoPlay){ this.autoAccum+=dt; if(this.autoAccum>=0.55){ this.autoAccum=0; this.chooseAuto(); } }
     }
     bindInput(){ const wrap=document.getElementById('board-wrap'); wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.phase!=='play') return; const pit=this.pitAt(e.clientX,e.clientY); if(pit<0) return; e.preventDefault(); this.doMove(pit); }); window.addEventListener('resize',()=>{ this.size=fitCanvas(); }); }
-    render(){ const size=this.size, h=size*300/440; ctx.clearRect(0,0,size,h); const {pits,storeR,storeL,side}=this.posFor(size);
+    render(){ const size=this.size, h=size*300/440; ctx.clearRect(0,0,size,h); const {pits,storeR,storeL,pitR}=this.posFor(size);
       // board bg
       ctx.fillStyle='#0c1622'; this.rr(6,6,size-12,h-12,18); ctx.fill();
-      const drawPit=(x,y,seeds,hl)=>{ ctx.save(); if(hl){ctx.shadowColor='#7cff9b';ctx.shadowBlur=18;} const g=ctx.createRadialGradient(x-side*0.3,y-side*0.3,side*0.2,x,y,side); g.addColorStop(0,'#1c2c24'); g.addColorStop(1,'#0a1410'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,side,0,Math.PI*2); ctx.fill(); ctx.restore();
-        const n=Math.round(seeds); this.drawSeeds(x,y,Math.min(n,12),side);
-        if(n>12){ ctx.fillStyle='#bfffd0'; ctx.font='bold '+(side*0.5)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(n,x,y); }
+      const drawPit=(x,y,seeds,hl)=>{ const r=pitR; ctx.save(); if(hl){ctx.shadowColor='#7cff9b';ctx.shadowBlur=14;} const g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.2,x,y,r); g.addColorStop(0,'#1c2c24'); g.addColorStop(1,'#0a1410'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.restore();
+        const n=Math.round(seeds); this.drawSeeds(x,y,Math.min(n,12),r);
+        if(n>12){ ctx.fillStyle='#bfffd0'; ctx.font='bold '+(r*0.5)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(n,x,y); }
       };
       for(let i=0;i<14;i++){ if(i===6||i===13) continue; const mine=(i>=0&&i<=5); const activeTurn = (this.turn===1&&mine)||(this.turn===2&&!mine); const hl=(this.lastPit===i)||(!this.autoPlay&&activeTurn); drawPit(pits[i].x,pits[i].y,this.disp[i],hl&&this.phase==='play'); }
-      // stores
-      const sr=storeR, sl=storeL; const sw=size*0.09, sh=h*0.34;
-      ctx.fillStyle='#15241c'; this.rr(sr.x-sw/2,sr.y-sh/2,sw,sh,12); ctx.fill(); ctx.fillStyle='#15241c'; this.rr(sl.x-sw/2,sl.y-sh/2,sw,sh,12); ctx.fill();
-      this.drawSeeds(sr.x,sr.y,Math.min(Math.round(this.disp[6]),14),sw*0.5); this.drawSeeds(sl.x,sl.y,Math.min(Math.round(this.disp[13]),14),sw*0.5);
-      ctx.fillStyle='#7cff9b'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(Math.round(this.disp[6]),sr.x,sr.y); ctx.fillStyle='#ffb14d'; ctx.fillText(Math.round(this.disp[13]),sl.x,sl.y);
+      // stores (vertical rounded rects on left/right)
+      const sr=storeR, sl=storeL;
+      ctx.fillStyle='#15241c'; this.rr(sr.x-sr.w/2,sr.y-sr.h/2,sr.w,sr.h,12); ctx.fill();
+      ctx.fillStyle='#15241c'; this.rr(sl.x-sl.w/2,sl.y-sl.h/2,sl.w,sl.h,12); ctx.fill();
+      this.drawSeeds(sr.x,sr.y,Math.min(Math.round(this.disp[6]),16),sr.w*0.42); this.drawSeeds(sl.x,sl.y,Math.min(Math.round(this.disp[13]),16),sl.w*0.42);
+      ctx.fillStyle='#7cff9b'; ctx.font='bold '+(sr.w*0.42)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(Math.round(this.disp[6]),sr.x,sr.y); ctx.fillStyle='#ffb14d'; ctx.fillText(Math.round(this.disp[13]),sl.x,sl.y);
     }
     drawSeeds(x,y,n,r){ if(n<=0) return; ctx.fillStyle='#caa86a'; for(let i=0;i<n;i++){ const a=(i*2.39996); const rr=r*0.62; const sx=x+Math.cos(a)*rr, sy=y+Math.sin(a)*rr; ctx.beginPath(); ctx.arc(sx,sy,r*0.20,0,Math.PI*2); ctx.fill(); } }
     rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
