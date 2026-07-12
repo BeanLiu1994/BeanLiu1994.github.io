@@ -196,7 +196,11 @@ class G{
   toggleAuto(){
     this.autoPlay=!this.autoPlay;
     if(this.autoPlay){
-      if(this.phase==='done'||this.won){ this.reset(); }
+      // Always replay the precomputed solution from a pristine board.
+      // The solution is computed for the starting position; if the board
+      // diverged from manual moves, replaying it would place a big disk on
+      // a smaller one ("big-on-small"). Resetting here guarantees legality.
+      this.reset();
       this._autoAcc=0;
     }else{
       this.stopAuto();
