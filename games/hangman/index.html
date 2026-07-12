@@ -121,8 +121,9 @@
     drawKeys(){
       for(const b of this.keysEl.children){ b.className=''; if(this.guessed.has(b.dataset.l)){ if(this.word.includes(b.dataset.l)) b.classList.add('good'); else b.classList.add('bad'); } else if(this.over) b.classList.add('dis'); }
     }
-    guess(l){
-      if(this.autoPlay||this.over||this.guessed.has(l)) return;
+    guess(l, fromAuto){
+      if(this.over||this.guessed.has(l)) return;
+      if(this.autoPlay && !fromAuto) return;
       this.guessed.add(l);
       if(!this.word.includes(l)){ this.wrong++; }
       this.drawKeys(); this.render(); this.draw();
@@ -170,7 +171,6 @@
     autoStep(){
       if(!this.autoPlay||this.over) return;
       const correct=this.word.split('').filter(ch=>this.guessed.has(ch));
-      const wrongL=this.word.split('').filter(ch=>!this.word.includes(ch)); // none
       const guessedArr=[...this.guessed];
       // candidate filter
       const cands=WORDS.filter(w=>{
@@ -184,7 +184,7 @@
       let best=null,bv=-1; for(const ch in freq){ if(freq[ch]>bv){ bv=freq[ch]; best=ch; } }
       if(!best){ this.stopAuto(); return; }
       document.getElementById('ai-status').textContent='AI guesses "'+best.toUpperCase()+'"';
-      this.guess(best);
+      this.guess(best, true);
       if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),750);
     }
   }
