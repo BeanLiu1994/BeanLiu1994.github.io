@@ -256,39 +256,61 @@
     }
     stopTick(){ if(this.tickTimer){ clearInterval(this.tickTimer); this.tickTimer=null; } }
 
-    // ---- AI: El-Tetris style weights ----
+    // ---- AI: El-Tetris (Dellacherie) full evaluation ----
     bestPlacement(){
       let best=null, bestScore=-Infinity;
       const cells0=SHAPES[this.cur.type].cells;
       for(let rot=0; rot<4; rot++){
         const cells=rot===0?cells0:rotateNCells(cells0,rot);
         if(this.cur.type==='O'&&rot>0) continue;
-        // column range
-        let minX=99,maxX=-99; cells.forEach(([x])=>{ if(x<minX)minX=x; if(x>maxX)maxX=x; });
+        let minX=99,maxX=-99,minY=99; cells.forEach(([x,y])=>{ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; });
         for(let ox=-minX; ox<COLS-maxX; ox++){
           // drop
           let y=-1; while(!this.collides(cells,ox,y+1)) y++;
-          if(this.collides(cells,ox,y)) continue;
+          if(this.collides(cells,ox,y) || y<0) continue; // y<0 means it tops out here
           const test=this.board.map(r=>r.slice());
           for(const [cx,cy] of cells){ test[y+cy][ox+cx]=1; }
-          const s=this.evaluate(test);
+          // landing height = how far up the topmost cell of the piece lands
+          const landing=ROWS-(y+minY);
+          const s=this.evaluate(test, landing);
           if(s>bestScore){ bestScore=s; best={cells,x:ox,y,rot}; }
         }
       }
       return best;
     }
-    evaluate(b){
-      const agg=[]; let holes=0, aggH=0, lines=0, bump=0, prev=null;
+    // Dellacherie features: landingHeight(+), rowsCleared(REWARDED), rowTransitions,
+    // columnTransitions, holes, bumpiness. Using the canonical El-Tetris weights.
+    evaluate(b, landing){
+      const heights=new Array(COLS).fill(0);
+      let holes=0;
       for(let x=0;x<COLS;x++){
-        let h=0; let seen=false;
-        for(let y=0;y<ROWS;y++){ if(b[y][x]){ if(!seen){ h=ROWS-y; seen=true; } } else if(seen){ holes++; } }
-        agg.push(h); aggH+=h;
-        if(prev!==null) bump+=Math.abs(h-prev); prev=h;
+        let seen=false;
+        for(let y=0;y<ROWS;y++){
+          if(b[y][x]){ if(!seen){ heights[x]=ROWS-y; seen=true; } }
+          else if(seen){ holes++; }
+        }
       }
+      let bump=0;
+      for(let x=0;x<COLS-1;x++) bump+=Math.abs(heights[x]-heights[x+1]);
+      let lines=0;
       for(let y=0;y<ROWS;y++) if(b[y].every(c=>c)) lines++;
-      // weights (El-Tetris): landingHeight -4.5, rows -3.4, holes -7.9, bump -3.4
-      const landing = bestLanding(agg,b);
-      return landing*-4.5 + lines*-3.4 + holes*-7.9 + bump*-3.4;
+      // row transitions: horizontal switches filled<->empty per row
+      let rowT=0;
+      for(let y=0;y<ROWS;y++){
+        let prev=1;
+        for(let x=0;x<COLS;x++){ const cur=b[y][x]?1:0; rowT+=Math.abs(cur-prev); prev=cur; }
+        rowT+=Math.abs(1-prev);
+      }
+      // column transitions
+      let colT=0;
+      for(let x=0;x<COLS;x++){
+        let prev=0;
+        for(let y=0;y<ROWS;y++){ const cur=b[y][x]?1:0; colT+=Math.abs(cur-prev); prev=cur; }
+        colT+=Math.abs(0-prev);
+      }
+      const W_LAND=-4.500158825082766, W_LINE=3.4181268101392694, W_ROW=-3.2178882868487753,
+            W_COL=-9.348695305445199, W_HOLE=-7.899265427351652, W_BUMP=-3.3855972247263626;
+      return W_LAND*landing + W_LINE*lines + W_ROW*rowT + W_COL*colT + W_HOLE*holes + W_BUMP*bump;
     }
 
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
@@ -406,7 +428,6 @@
   }
   function rotateNCells(cells,n){ let c=cells.map(c=>[...c]); for(let i=0;i<n;i++) c=rotateCells(c); return c; }
   function sameCells(a,b){ if(a.length!==b.length) return false; const sa=a.map(c=>c.join(',')).sort().join('|'); const sb=b.map(c=>c.join(',')).sort().join('|'); return sa===sb; }
-  function bestLanding(agg,b){ let m=99; agg.forEach(h=>{ if(h<m) m=h; }); return m; }
   window.game=new Tetris();
 })();
 </script>
