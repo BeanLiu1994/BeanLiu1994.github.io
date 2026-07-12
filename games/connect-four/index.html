@@ -202,7 +202,7 @@
       ctx.shadowBlur=0; ctx.fillStyle='#ffffff33'; ctx.beginPath(); ctx.arc(cx-r*0.28,cy-r*0.28,r*0.3,0,7); ctx.fill();
       ctx.restore();
     }
-    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); else if(!this.anim&&this.current==='R') this.autoStep(); this.startAuto(); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); if(!this.anim&&this.current==='R') this.autoStep(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bindInput(){
