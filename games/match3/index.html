@@ -82,7 +82,7 @@
   const COLS=8, ROWS=8, NCOL=6;
   const GEMS=['#ff5d8f','#5ce1ff','#7cff9b','#ffd76a','#a98bff','#ff9b5c'];
   const GEM_GLOW=['#ff5d8f','#5ce1ff','#7cff9b','#ffd76a','#a98bff','#ff9b5c'];
-  const SWAP_MS=170, CLEAR_MS=190, FALL_MS=200, AUTO_DELAY=420;
+  const SWAP_MS=0.17, CLEAR_MS=0.19, FALL_MS=0.20, AUTO_DELAY=0.42;
   const canvas=document.getElementById('game');
   const ctx=canvas.getContext('2d');
   function fitCanvas(){
@@ -165,8 +165,8 @@
       requestAnimationFrame(this._tick);
     }
     animate(dt){
-      const k=1-Math.pow(0.001,dt/1000); // smoothing
-      const ks=1-Math.pow(0.0015,dt/1000);
+      const k=1-Math.pow(0.001,dt); // smoothing (dt already in seconds)
+      const ks=1-Math.pow(0.0015,dt);
       for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
         this.dispR[r][c]=lerp(this.dispR[r][c],r,k);
         this.dispC[r][c]=lerp(this.dispC[r][c],c,k);
@@ -204,7 +204,11 @@
           this.phase='fall'; this.pt=0;
         }
       } else if(this.phase==='fall'){
-        if(this.pt>=FALL_MS){ this.phase='idle'; this.pt=0; this.sel=null; }
+        if(this.pt>=FALL_MS){
+          // cascade: if gravity created new matches, keep clearing
+          if(this.findMatches().size>0){ this.phase='clear'; this.pt=0; }
+          else { this.phase='idle'; this.pt=0; this.sel=null; }
+        }
       }
     }
     pointerToCell(px,py){
