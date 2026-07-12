@@ -137,8 +137,8 @@
       } else if(p.toUpperCase()==='N'){ for(const [dr,dc] of KN){ const nr=r+dr,nc=c+dc; if(inB(nr,nc)){ const t=bd[nr][nc]; if(t==='.'||colorOf(t)!==me) moves.push({fr:r,fc:c,tr:nr,tc:nc}); } } }
       else if(p.toUpperCase()==='K'){ for(const [dr,dc] of KINGD){ const nr=r+dr,nc=c+dc; if(inB(nr,nc)){ const t=bd[nr][nc]; if(t==='.'||colorOf(t)!==me) moves.push({fr:r,fc:c,tr:nr,tc:nc}); } }
         // castling
-        if(me===WHITE&&r===7&&c===4){ if(s.castle.wK&&bd[7][5]==='.'&&bd[7][6]==='.'&&bd[7][7]==='R'&&!attacked(bd,7,4,op(WHITE))&&!attacked(bd,7,5,op(WHITE))&&!attacked(bd,7,6,op(WHITE))) moves.push({fr:7,fc:4,tr:7,tc:6,castle:'K'}); if(s.castle.wQ&&bd[7][3]==='.'&&bd[7][2]==='.'&&bd[7][1]==='.'&&bd[7][0]==='R'&&!attacked(bd,7,4,op(WHITE))&&!attacked(bd,7,3,op(WHITE))&&!attacked(bd,7,2,op(WHITE))) moves.push({fr:7,fc:4,tr:7,tc:2,castle:'Q'}); }
-        if(me===BLACK&&r===0&&c===4){ if(s.castle.bK&&bd[0][5]==='.'&&bd[0][6]==='.'&&bd[0][7]==='r'&&!attacked(bd,0,4,op(BLACK))&&!attacked(bd,0,5,op(BLACK))&&!attacked(bd,0,6,op(BLACK))) moves.push({fr:0,fc:4,tr:0,tc:6,castle:'k'}); if(s.castle.bQ&&bd[0][3]==='.'&&bd[0][2]==='.'&&bd[0][1]==='.'&&bd[0][0]==='r'&&!attacked(bd,0,4,op(BLACK))&&!attacked(bd,0,3,op(BLACK))&&!attacked(bd,0,2,op(BLACK))) moves.push({fr:0,fc:4,tr:0,tc:2,castle:'q'}); }
+        if(me===WHITE&&r===7&&c===4){ if(s.castle.wK&&bd[7][5]==='.'&&bd[7][6]==='.'&&bd[7][7]==='R'&&!attacked(bd,7,4,opp(WHITE))&&!attacked(bd,7,5,opp(WHITE))&&!attacked(bd,7,6,opp(WHITE))) moves.push({fr:7,fc:4,tr:7,tc:6,castle:'K'}); if(s.castle.wQ&&bd[7][3]==='.'&&bd[7][2]==='.'&&bd[7][1]==='.'&&bd[7][0]==='R'&&!attacked(bd,7,4,opp(WHITE))&&!attacked(bd,7,3,opp(WHITE))&&!attacked(bd,7,2,opp(WHITE))) moves.push({fr:7,fc:4,tr:7,tc:2,castle:'Q'}); }
+        if(me===BLACK&&r===0&&c===4){ if(s.castle.bK&&bd[0][5]==='.'&&bd[0][6]==='.'&&bd[0][7]==='r'&&!attacked(bd,0,4,opp(BLACK))&&!attacked(bd,0,5,opp(BLACK))&&!attacked(bd,0,6,opp(BLACK))) moves.push({fr:0,fc:4,tr:0,tc:6,castle:'k'}); if(s.castle.bQ&&bd[0][3]==='.'&&bd[0][2]==='.'&&bd[0][1]==='.'&&bd[0][0]==='r'&&!attacked(bd,0,4,opp(BLACK))&&!attacked(bd,0,3,opp(BLACK))&&!attacked(bd,0,2,opp(BLACK))) moves.push({fr:0,fc:4,tr:0,tc:2,castle:'q'}); }
       } else {
         const dirs=p.toUpperCase()==='B'?BISHD:(p.toUpperCase()==='R'?ROOKD:KINGD.concat(BISHD));
         for(const [dr,dc] of dirs){ let nr=r+dr,nc=c+dc; while(inB(nr,nc)){ const t=bd[nr][nc]; if(t==='.') moves.push({fr:r,fc:c,tr:nr,tc:nc}); else { if(colorOf(t)!==me) moves.push({fr:r,fc:c,tr:nr,tc:nc}); break; } nr+=dr;nc+=dc; } }
@@ -211,19 +211,27 @@
   const PIECE_SYM={P:'♙',N:'♘',B:'♗',R:'♖',Q:'♕',K:'♔',p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'};
   class Chess{
     constructor(){ this.autoPlay=false; this.bindInput(); this.restart(); this._tick=this.tick.bind(this); requestAnimationFrame(this._tick); }
-    restart(){ this.stopAuto(); this.size=fitCanvas(); this.cell=this.size/8; this.s=startState(); this.moveCount=0; this.over=false; this.sel=null; this.legal=[]; this.lastMove=null; this.check=false; this.phase='play'; this.autoAccum=0; this.moving=null; this.moving2=null; this.hideOverlay(); this.updateUI(); }
+    restart(){ this.stopAuto(); this.size=fitCanvas(); this.cell=this.size/8; this.s=startState(); this.moveCount=0; this.over=false; this.sel=null; this.legal=[]; this.lastMove=null; this.check=false; this.phase='play'; this.autoAccum=0; this.moving=null; this.moving2=null; this.fifty=0; this.hideOverlay(); this.updateUI(); }
     hideOverlay(){ document.getElementById('overlay-end').classList.remove('active'); }
     updateUI(){ document.getElementById('move').textContent=this.moveCount; document.getElementById('turn').textContent=this.s.turn===WHITE?'W':'B'; }
     squareAt(px,py){ const rect=canvas.getBoundingClientRect(); const c=Math.floor((px-rect.left)/(rect.width/8)), r=Math.floor((py-rect.top)/(rect.height/8)); if(inB(r,c))return[r,c]; return null; }
     doMove(m){ this.lastMove=m; const piece=this.s.bd[m.fr][m.fc];
-      this.moving={fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc,piece,promo:m.promo,cap:(this.s.bd[m.tr][m.tc]!=='.'||m.ep),dur:0.30,t:0};
+      const captured = this.s.bd[m.tr][m.tc]!=='.' || m.ep;
+      const pawnMoved = piece.toUpperCase()==='P';
+      this.fifty = captured||pawnMoved ? 0 : this.fifty+1;
+      this.moving={fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc,piece,promo:m.promo,cap:(captured),dur:0.30,t:0};
       if(m.castle){ const rr=m.castle==='K'?7:(m.castle==='Q'?7:0); const rc=(m.castle==='K'||m.castle==='k')?7:0; const tr=m.castle==='K'?5:(m.castle==='Q'?3:0); this.moving2={fr:rr,fc:rc,tr:rr,tc:tr,piece:this.s.bd[rr][rc],dur:0.30,t:0}; }
       this.s=applyMove(this.s,m); this.moveCount++; this.over=this.isEnd(); this.check=!this.over&&inCheck(this.s,this.s.turn);
       this.sel=null; this.legal=[]; this.updateUI(); this.phase='anim';
       if(this.over) this.showEnd();
     }
-    isEnd(){ const legal=genLegal(this.s); if(legal.length>0) return false; return true; }
-    showEnd(){ const mate=inCheck(this.s,this.s.turn); const title=mate?'Checkmate':(this.moveCount>400?'Draw':'Game Over'); const msg=mate?((this.s.turn===WHITE?'Black':'White')+' wins'):'No legal moves'; document.getElementById('end-title').textContent=title; document.getElementById('end-msg').textContent=msg; document.getElementById('overlay-end').classList.add('active'); }
+    isEnd(){ const legal=genLegal(this.s); if(legal.length===0) return true; if(this.fifty>=100) return true; if(this.moveCount>=500) return true; return false; }
+    showEnd(){ const mate=inCheck(this.s,this.s.turn); let title, msg;
+      if(mate){ title='Checkmate'; msg=(this.s.turn===WHITE?'Black':'White')+' wins'; }
+      else if(this.fifty>=100){ title='Draw'; msg='50-move rule'; }
+      else if(this.moveCount>=500){ title='Draw'; msg='Move limit reached'; }
+      else { title='Draw'; msg='No legal moves'; }
+      document.getElementById('end-title').textContent=title; document.getElementById('end-msg').textContent=msg; document.getElementById('overlay-end').classList.add('active'); }
     chooseAuto(){ NODES=0; const m=bestMove(this.s, 3); if(!m){ this.over=true; this.showEnd(); return; } this.doMove(m); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; }
