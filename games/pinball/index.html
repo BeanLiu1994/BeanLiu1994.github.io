@@ -77,17 +77,42 @@
   const W=360,H=560;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const G=0.32, R=8, MAXV=11;
+  const FL=0.45, LLEN=64; // flipper rest half-angle & length
 
-  function makeBall(){ return { x:W/2, y:H-120, vx:(Math.random()*2-1)*2, vy:-7.5, alive:true }; }
+  function makeBall(){ return { x:W/2+ (Math.random()*2-1)*40, y:70, vx:(Math.random()*2-1)*2, vy:2.5, alive:true }; }
+
+  // Static table walls (oriented segments). Ball bounces off, never leaks.
+  function buildWalls(){
+    const Lp=108, Rp=252, fy=500; // flipper pivots, on the funnel ends
+    return [
+      // boundary is a SINGLE continuous chain so the ball never wedges in a corner:
+      // left:  arch -> upper wall down -> funnel inward to the left flipper pivot
+      {x1:4, y1:40, x2:4, y2:360},        // left upper wall
+      {x1:W-4, y1:40, x2:W-4, y2:360},    // right upper wall
+      {x1:4, y1:40, x2:W/2, y2:4},       // lit arch top-left
+      {x1:W-4, y1:40, x2:W/2, y2:4},     // lit arch top-right
+      // funnel walls: from the wall-bottom down-inward to each flipper pivot (no wall below, no side pocket)
+      {x1:4, y1:360, x2:Lp, y2:fy},
+      {x1:W-4, y1:360, x2:Rp, y2:fy},
+    ];
+  }
 
   class Pinball {
     constructor(){
       this.best=parseInt(localStorage.getItem('pbBest')||'0');
       this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
-      this.bumpers=[{x:W/2,y:150,r:24},{x:W*0.28,y:230,r:20},{x:W*0.72,y:230,r:20}];
+      this.walls=buildWalls();
+      this.bumpers=[{x:W/2,y:150,r:24},{x:W*0.30,y:240,r:20},{x:W*0.70,y:240,r:20}];
       this.lflash=[0,0,0];
-      this.flip=[{px:W*0.30,py:H-64,len:62,rest:0.42,up:-0.5,ang:0.42,active:false},
-                  {px:W*0.70,py:H-64,len:62,rest:Math.PI-0.42,up:Math.PI+0.5,ang:Math.PI-0.42,active:false}];
+      // slingshots: small triangles guarding the funnel mouth (give a kick)
+      const Lp=108, Rp=252, fy=500;
+      this.slings=[
+        {x:95, y:430, bx:62, by:430, tx:88, ty:472, dir:1},
+        {x:W-95, y:430, bx:W-62, by:430, tx:W-88, ty:472, dir:-1},
+      ];
+      this.sflash=[0,0];
+      this.flip=[{px:Lp,py:fy,len:LLEN,rest:FL,up:-0.5,ang:FL,active:false},
+                 {px:Rp,py:fy,len:LLEN,rest:Math.PI-FL,up:Math.PI+0.5,ang:Math.PI-FL,active:false}];
       this.loop=this.loop.bind(this);
       this.bind();
       this.restart();
@@ -96,7 +121,7 @@
     restart(){
       this.stopAuto();
       this.score=0; this.lives=3; this.over=false;
-      this.ball=makeBall(); this.sinceDrain=0;
+      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0;
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');
       this.updateUI();
@@ -104,12 +129,29 @@
     updateUI(){ document.getElementById('score').textContent=this.score; document.getElementById('best').textContent=this.best;
       document.getElementById('lives-stat').textContent='Lives: '+('♥'.repeat(this.lives)||'—'); }
     tip(f){ return { x:f.px+Math.cos(f.ang)*f.len, y:f.py+Math.sin(f.ang)*f.len }; }
+    // reflect ball off all static walls (bounce + energy retention)
+    bounceWalls(b){
+      for(const w of this.walls){
+        const dx=w.x2-w.x1, dy=w.y2-w.y1; const ll=dx*dx+dy*dy;
+        let t=((b.x-w.x1)*dx+(b.y-w.y1)*dy)/ll; t=Math.max(0,Math.min(1,t));
+        const cx=w.x1+dx*t, cy=w.y1+dy*t; const ddx=b.x-cx, ddy=b.y-cy; const d=Math.hypot(ddx,ddy);
+        const th=R+2; if(d<th){ const n=Math.max(d,0.01); const nx=ddx/n, ny=ddy/n;
+          b.x=cx+nx*th; b.y=cy+ny*th; const dot=b.vx*nx+b.vy*ny; if(dot<0){ b.vx-=2*dot*nx; b.vy-=2*dot*ny; b.vx*=0.94; b.vy*=0.94; } }
+      }
+    }
+    bounceSlings(b){
+      for(let i=0;i<2;i++){ const s=this.slings[i]; const dx=b.x-s.x, dy=b.y-s.y; const d=Math.hypot(dx,dy);
+        const th=R+16; if(d<th){ const nx=dx/Math.max(d,0.01), ny=dy/Math.max(d,0.01);
+          b.x=s.x+nx*th; b.y=s.y+ny*th; const dot=b.vx*nx+b.vy*ny; b.vx-=2*dot*nx; b.vy-=2*dot*ny;
+          // kick back toward center + upward
+          b.vx=-s.dir*2.6; b.vy=-6.2; this.sflash[i]=1; this.score+=60; this.updateUI(); } }
+    }
     step(dt){
       if(this.over) return;
       // flippers
       for(let i=0;i<2;i++){ const f=this.flip[i];
         if(this.autoPlay){ // AI: press when ball low & approaching this side
-          f.active = this.ball.y>H-180 && this.ball.vy>0 && ((i===0&&this.ball.x<W/2)||(i===1&&this.ball.x>=W/2));
+          f.active = this.ball.y>H-200 && this.ball.vy>0 && ((i===0&&this.ball.x<=W/2)||(i===1&&this.ball.x>W/2));
         }
         const tgt=f.active?f.up:f.rest; const sp=6*dt;
         if(f.ang<tgt) f.ang=Math.min(tgt,f.ang+sp); else if(f.ang>tgt) f.ang=Math.max(tgt,f.ang-sp);
@@ -118,10 +160,12 @@
       b.vy+=G*dt;
       const sp=Math.hypot(b.vx,b.vy); if(sp>MAXV){ b.vx*=MAXV/sp; b.vy*=MAXV/sp; }
       b.x+=b.vx*dt; b.y+=b.vy*dt;
-      // walls
-      if(b.x<R){ b.x=R; b.vx=Math.abs(b.vx)*0.92; }
-      if(b.x>W-R){ b.x=W-R; b.vx=-Math.abs(b.vx)*0.92; }
-      if(b.y<R){ b.y=R; b.vy=Math.abs(b.vy)*0.92; }
+      // outer boundary clamp (safety, shouldn't trigger often now)
+      if(b.x<R){ b.x=R; b.vx=Math.abs(b.vx)*0.9; }
+      if(b.x>W-R){ b.x=W-R; b.vx=-Math.abs(b.vx)*0.9; }
+      if(b.y<R){ b.y=R; b.vy=Math.abs(b.vy)*0.9; }
+      this.bounceWalls(b);
+      this.bounceSlings(b);
       // bumpers
       for(let i=0;i<3;i++){ const bu=this.bumpers[i]; const dx=b.x-bu.x, dy=b.y-bu.y; const d=Math.hypot(dx,dy);
         if(d<b.r+R){ const n=Math.max(d,0.01); const nx=dx/n, ny=dy/n; b.x=bu.x+nx*(bu.r+R); b.y=bu.y+ny*(bu.r+R);
@@ -133,8 +177,17 @@
         const th=7+R; if(d<th){ const n=Math.max(d,0.01); const nx=ddx/n, ny=ddy/n; b.x=cx+nx*th; b.y=cy+ny*th;
           const dot=b.vx*nx+b.vy*ny; b.vx-=2*dot*nx; b.vy-=2*dot*ny;
           if(f.active){ b.vy-=7; b.vx+=(f.px<W/2?-1:1)*2.4; } else { b.vx*=0.96; b.vy*=0.96; } } }
-      // drain
-      if(b.y>H+R){ b.alive=false; this.lives--; this.updateUI();
+      // drain: the ball is lost once it slips below the flipper line and is between
+      // the two pivots (i.e. it fell through the center gap). Also a stuck-loiter backstop.
+      const pivotY=this.flip[0].py;
+      const belowFlippers = b.y > pivotY-6 && b.x>this.flip[0].px && b.x<this.flip[1].px;
+      const atFloor = b.y > H-10;
+      if(b.y > pivotY-34 && b.y < pivotY-6){
+        if(Math.hypot(b.vx,b.vy) < 1.2) this._stuck=(this._stuck||0)+dt; else this._stuck=0;
+      } else this._stuck=0;
+      const stuckTooLong=(this._stuck||0)>150;
+      if(belowFlippers || atFloor || b.y>H+R || stuckTooLong){
+        b.alive=false; this.lives--; this._stuck=0; this.updateUI();
         if(this.lives<=0){ this.over=true; this.gameOver(); }
         else { this.sinceDrain=0; setTimeout(()=>{ if(this.over) return; this.ball=makeBall(); }, 600); }
       }
@@ -151,7 +204,15 @@
     }
     draw(){
       ctx.clearRect(0,0,W,H);
+      // table chrome frame
       ctx.strokeStyle='#2a3566'; ctx.lineWidth=2; ctx.strokeRect(4,4,W-8,H-8);
+      // static walls (funnel + arch)
+      ctx.strokeStyle='#3b4a8a'; ctx.lineWidth=4; ctx.lineCap='round';
+      for(const w of this.walls){ ctx.beginPath(); ctx.moveTo(w.x1,w.y1); ctx.lineTo(w.x2,w.y2); ctx.stroke(); }
+      // slingshots (triangular kickers)
+      for(let i=0;i<2;i++){ const s=this.slings[i]; ctx.fillStyle=this.sflash[i]>0?'#ffd700':'#ff5db1'; ctx.shadowColor='#ff5db1'; ctx.shadowBlur=this.sflash[i]*16;
+        ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(s.bx,s.by); ctx.lineTo(s.tx,s.ty); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0; }
+      // bumpers
       for(let i=0;i<3;i++){ const bu=this.bumpers[i]; const g=ctx.createRadialGradient(bu.x,bu.y,2,bu.x,bu.y,bu.r);
         g.addColorStop(0,'#ffd1f0'); g.addColorStop(1,'#ff5db1'); ctx.fillStyle=g; ctx.shadowColor='#ff5db1'; ctx.shadowBlur=14*this.lflash[i]+6;
         ctx.beginPath(); ctx.arc(bu.x,bu.y,bu.r,0,7); ctx.fill(); ctx.shadowBlur=0; }
