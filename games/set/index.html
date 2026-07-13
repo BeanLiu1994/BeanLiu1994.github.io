@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a1f1a" />
+<title>幻卡组 · Neon Set</title>
+<style>
+  :root { --bg:#0a1f1a; --surface:#0e2a22; --board:#07160f; --text:#eafff5; --muted:#7fbfa6; --accent:#3ecf8e; --accent-glow:#3ecf8e55; --gold:#ffd54a; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #12463a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #06120d 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:520px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#3ecf8e,#4dffd0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06120d; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06120d; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>幻卡组</h1><div class="sub">N E O N &nbsp; S E T</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Sets</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="480" height="360"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">每属性（颜色/形状/数量/填充）须全同或全异。点 3 张成一组。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const COLS=['#ff5d6a','#4d9fff','#ffd54a'], SHAPES=['oval','diamond','squiggle'];
+  function makeDeck(){ const d=[]; for(let c=0;c<3;c++)for(let s=0;s<3;s++)for(let n=0;n<3;n++)for(let f=0;f<3;f++) d.push({c,s,n,f}); return d; }
+  function isSet(a,b,c){ for(let k=0;k<4;k++){ const v=[a[k],b[k],c[k]]; const same=v[0]===v[1]&&v[1]===v[2]; const diff=v[0]!==v[1]&&v[1]!==v[2]&&v[0]!==v[2]; if(!same&&!diff) return false; } return true; }
+  class SetGame {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0;
+      this.best=parseInt(localStorage.getItem('setBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      this.sel=[]; this.anim=0;
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(r.width||480,520)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*0.75; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
+    restart(){ this.stopAuto(); this.score=0; scoreEl.textContent=0; this.sel=[]; this.deck=makeDeck(); this.shuffle(this.deck); this.board=new Array(12).fill(null); for(let i=0;i<12;i++) this.board[i]=this.deck.pop(); this.ensure(); this.status('每属性（颜色/形状/数量/填充）须全同或全异。点 3 张成一组。'); }
+    shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+    findSet(){ for(let i=0;i<this.board.length;i++){ if(!this.board[i])continue; for(let j=i+1;j<this.board.length;j++){ if(!this.board[j])continue; for(let k=j+1;k<this.board.length;k++){ if(!this.board[k])continue; if(isSet(this.board[i],this.board[j],this.board[k])) return [i,j,k]; } } } return null; }
+    ensure(){ let g=0; while(g++<20){ if(this.findSet()) return true; if(this.deck.length){ const need=this.board.filter(x=>!x).length; for(let i=0;i<this.board.length&&this.deck.length;i++){ if(!this.board[i]) this.board[i]=this.deck.pop(); } } else { return false; } } return false; }
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.anim) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top; const idx=this.hit(x,y); if(idx<0) return; this.toggle(idx); }
+    hit(x,y){ const n=this.board.length, cols=(n<=12)?3:4, rows=Math.ceil(n/cols); const cw=this.W/cols, ch=this.H/rows; const ci=Math.floor(x/cw), ri=Math.floor(y/ch); const idx=ri*cols+ci; if(idx>=n) return -1; const px=ci*cw+cw*0.12, py=ri*ch+ch*0.12; const cwid=cw*0.76, chgt=ch*0.76; if(x<px||x>px+cwid||y<py||y>py+chgt) return -1; return idx; }
+    toggle(i){ const p=this.sel.indexOf(i); if(p>=0){ this.sel.splice(p,1); return; } this.sel.push(i); if(this.sel.length===3){ const [a,b,c]=this.sel; if(isSet(this.board[a],this.board[b],this.board[c])) this.applySet([a,b,c]); else { this.flash=0.5; this.status('不是一组，重选。'); this.sel=[]; } } }
+    applySet(idx){ this.anim=0.45; for(const i of idx){ const k=this.board.indexOf(this.board[i]); if(k>=0) this.board[k]=null; } this.score++; scoreEl.textContent=this.score; if(this.score>this.best){ this.best=this.score; localStorage.setItem('setBest',String(this.best)); bestEl.textContent=this.best; } this.sel=[]; const refill=()=>{ for(let i=0;i<this.board.length;i++){ if(!this.board[i]&&this.deck.length) this.board[i]=this.deck.pop(); } if(!this.ensure()){ this.status('🎉 本局结束！共 '+this.score+' 组。'); } }; setTimeout(refill,260); }
+    status(t){ statusEl.textContent=t; }
+    update(dt){ if(this.anim>0) this.anim=Math.max(0,this.anim-dt); if(this.flash>0) this.flash=Math.max(0,this.flash-dt);
+      if(this.autoPlay&&!this.anim&&this.sel.length===0){ this._autoT=(this._autoT||0)-dt; if(this._autoT<=0){ const s=this.findSet(); if(s){ this.sel=s.slice(); setTimeout(()=>this.applySet(s),380); this._autoT=0.9; this._autoProgress++; } else { if(!this.ensure()){ this._autoRound(); } this._autoT=0.5; } } } }
+    _autoRound(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    shape(c,sh,x,y,w,h,fill){ ctx.save(); ctx.translate(x,y); const col=COLORS[c]; ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=2;
+      const draw=(mode)=>{ if(sh===0){ ctx.beginPath(); ctx.ellipse(0,0,w*0.34,h*0.4,0,0,7); if(mode)ctx.fill(); else ctx.stroke(); }
+        else if(sh===1){ ctx.beginPath(); ctx.moveTo(0,-h*0.42); ctx.lineTo(w*0.36,0); ctx.lineTo(0,h*0.42); ctx.lineTo(-w*0.36,0); ctx.closePath(); if(mode)ctx.fill(); else ctx.stroke(); }
+        else { ctx.beginPath(); ctx.moveTo(-w*0.34,-h*0.2); ctx.quadraticCurveTo(w*0.1,-h*0.5,w*0.34,-h*0.2); ctx.quadraticCurveTo(0,-h*0.05,-w*0.34,h*0.2); ctx.quadraticCurveTo(w*0.1,h*0.5,w*0.34,h*0.2); ctx.quadraticCurveTo(0,h*0.05,-w*0.34,-h*0.2); if(mode)ctx.fill(); else ctx.stroke(); } };
+      if(fill===0) draw(false); else if(fill===2) draw(true); else { ctx.save(); ctx.strokeStyle=COLORS[sh]; for(let yy=-h*0.3;yy<h*0.3;yy+=4){ ctx.beginPath(); ctx.moveTo(-w*0.34,yy); ctx.lineTo(w*0.34,yy); ctx.stroke(); } ctx.restore(); draw(false); }
+      ctx.restore();
+    }
+    draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      const n=this.board.length, cols=(n<=12)?3:4, rows=Math.ceil(n/cols); const cw=W/cols, ch=H/rows;
+      for(let i=0;i<n;i++){ const card=this.board[i]; const cx=(i%cols)*cw, cy=Math.floor(i/cols)*ch; const px=cx+cw*0.12, py=cy+ch*0.12, cwid=cw*0.76, chgt=ch*0.76;
+        const seld=this.sel.includes(i); ctx.save(); if(seld){ ctx.shadowColor='#3ecf8e'; ctx.shadowBlur=18; ctx.strokeStyle='#3ecf8e'; ctx.lineWidth=3; } else { ctx.strokeStyle='#ffffff14'; ctx.lineWidth=1.5; }
+        ctx.fillStyle='#0e2a22'; this.rr(px,py,cwid,chgt,8); ctx.fill(); ctx.stroke(); ctx.restore();
+        if(card){ for(let k=0;k<card.n+1;k++){ const yy=py+chgt*(0.32+0.36*k/2); this.shape(card.c,card.s,px+cwid*0.5,yy,cwid*0.62,chgt*0.26,card.f); } }
+      }
+      if(this.anim>0){ ctx.fillStyle='rgba(62,207,142,'+(this.anim*0.12)+')'; ctx.fillRect(0,0,W,H); }
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoT=0.4; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  const COLORS=['#ff5d6a','#4d9fff','#ffd54a'];
+  window.game=new SetGame();
+})();
+</script>
+</body>
+</html>

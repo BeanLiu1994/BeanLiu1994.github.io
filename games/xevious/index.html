@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#05070d" />
+<title>星际战机 · Neon Xevious</title>
+<style>
+  :root { --bg:#05070d; --surface:#0c1018; --board:#03050a; --text:#e8f0ff; --muted:#7d8aa0; --accent:#3ce8a0; --accent2:#ffd54a; --accent-glow:#3ce8a055; --warn:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0c2030 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0a0f16 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.4rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#3ce8a0,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 9px; text-align:center; min-width:52px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04140d; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04140d; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>星际战机</h1><div class="sub">N E O N &nbsp; X E V I O U S</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Wave</div><div class="value" id="score">1</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="400" height="560"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">左右移动躲避并射击空敌，投弹摧毁地面碉堡。自动模式 AI 接管。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const BEST_KEY='xevious_best';
+
+  class Xevious {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.W=400; this.H=560;
+      this.best=parseInt(localStorage.getItem(BEST_KEY)||'0',10)||0; bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      canvas.addEventListener('pointermove',e=>this.onMove(e));
+      canvas.addEventListener('pointerup',e=>this.onUp(e));
+      canvas.addEventListener('pointercancel',e=>this.onUp(e));
+      window.addEventListener('keydown',e=>this.keys[e.key.toLowerCase()]=true);
+      window.addEventListener('keyup',e=>this.keys[e.key.toLowerCase()]=false);
+      this.keys={}; this.ptr={down:false,x:0,y:0,startT:0};
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(240,Math.min(r.width||400,440)); const d=window.devicePixelRatio||1; this.W=w; this.H=Math.round(w*1.4); canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
+
+    restart(){ this.stopAuto(); this.score=0; this.cleared=0; this.lives=3; this.over=false; this.t=0; this._overT=0; this.pb=[]; this.eb=[]; this.enemies=[]; this.ground=[]; this.player={x:this.W/2,y:this.H*0.86,r:this.W*0.035,cd:0,bombs:3};
+      for(let i=0;i<5;i++) this.ground.push({x:this.W*(i+0.5)/5, alive:true});
+      this.spawnList=[]; this.spawnT=0; this.wave=0; this.startWave();
+      scoreEl.textContent=1; this.status('左右移动躲避并射击空敌，投弹摧毁地面碉堡。自动模式 AI 接管。');
+    }
+
+    startWave(){ this.wave++; this._autoProgress=this.cleared; scoreEl.textContent=this.wave;
+      const n=3+this.wave; this.spawnList=[]; for(let i=0;i<n;i++) this.spawnList.push(0.3+Math.random()*0.9); this.spawnT=0; }
+
+    status(t){ statusEl.textContent=t; }
+
+    spawnEnemy(){ const W=this.W; const x=W*0.12+Math.random()*W*0.76; this.enemies.push({x,y:-20,vy:this.H*(0.10+this.wave*0.012),sway:Math.random()*6.28,sw:0.6+Math.random()*0.8,cd:1+Math.random()*1.5,r:W*0.03}); }
+
+    playerFire(){ if(this.player.cd>0) return; const sp=this.H*1.1; this.pb.push({x:this.player.x,y:this.player.y-this.player.r,vy:-sp,r:4}); this.player.cd=0.12; }
+    dropBomb(){ if(this.player.bombs<=0) return; this.eb.push({x:this.player.x,y:this.player.y+this.player.r,vy:this.H*0.7,bomb:true}); this.player.bombs--; }
+
+    update(dt){
+      this.t+=dt;
+      if(this.over){ this._overT-=dt; if(this._overT<=0){ this.resetRound(); } return; }
+      // spawning
+      this.spawnT+=dt;
+      if(this.spawnList.length){ if(this.spawnList[0]<=this.spawnT){ this.spawnList.shift(); this.spawnT=0; this.spawnEnemy(); } }
+      else if(this.enemies.length===0){ this.cleared++; this.startWave(); }
+
+      // controls
+      let moveX=0, moveY=0, doBomb=false;
+      if(this.autoPlay){ const c=this.aiControl(); moveX=c.mx; moveY=c.my; if(c.bomb) this.dropBomb(); }
+      else { const k=this.keys; if(k['arrowleft']||k['a']) moveX-=1; if(k['arrowright']||k['d']) moveX+=1; if(k['arrowup']||k['w']) moveY-=1; if(k['arrowdown']||k['s']) moveY+=1; if(k[' ']||k['b']) doBomb=true; if(this.ptr.down) moveX += Math.sign(this.ptr.x-this.player.x)*Math.min(1,Math.abs(this.ptr.x-this.player.x)/(this.W*0.1)); if(doBomb) this.dropBomb(); }
+
+      const sp=this.W*0.9;
+      this.player.x += moveX*sp*dt;
+      this.player.y += moveY*sp*0.6*dt;
+      this.player.x=Math.max(this.player.r,Math.min(this.W-this.player.r,this.player.x));
+      this.player.y=Math.max(this.H*0.62,Math.min(this.H*0.92,this.player.y));
+      if(this.player.cd>0) this.player.cd-=dt;
+      // auto-fire always
+      this.playerFire();
+
+      // enemies
+      for(const e of this.enemies){ e.y+=e.vy*dt; e.sway+=e.sw*dt; e.x+=Math.sin(e.sway)*this.W*0.10*dt; e.cd-=dt; if(e.cd<=0 && e.y>0 && e.y<this.H*0.7){ e.cd=1.4+Math.random(); this.eb.push({x:e.x,y:e.y+e.r,vy:this.H*0.55}); } }
+      this.enemies=this.enemies.filter(e=>e.y<this.H+20);
+
+      // player bullets
+      for(const b of this.pb){ b.y+=b.vy*dt; for(const e of this.enemies){ if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r*0.5){ e.dead=true; b.dead=true; this.score+=100; this._autoProgress=this.cleared; break; } } if(b.y<-10) b.dead=true; }
+      this.pb=this.pb.filter(b=>!b.dead); this.enemies=this.enemies.filter(e=>!e.dead);
+
+      // enemy bullets / bombs
+      for(const b of this.eb){ b.y+=b.vy*dt;
+        if(b.bomb){ if(b.y>=this.H-this.H*0.12){ for(const g of this.ground){ if(g.alive && Math.abs(g.x-b.x)<this.W*0.06){ g.alive=false; this.score+=150; } } b.dead=true; } }
+        else { if(Math.hypot(b.x-this.player.x,b.y-this.player.y)<this.player.r+b.r*0.4){ b.dead=true; this.hitPlayer(); } if(b.y>this.H+10) b.dead=true; }
+      }
+      this.eb=this.eb.filter(b=>!b.dead);
+
+      if(this.autoPlay && !this.over){ this._aT=(this._aT||0)-dt; }
+    }
+
+    aiControl(){
+      const p=this.player; let mx=0,my=0,bomb=false;
+      // nearest threat (enemy or enemy bullet) in lower region
+      let threat=null,td=1e9;
+      const consider=(x,y)=>{ const d=Math.hypot(x-p.x,y-p.y); if(y>p.y-this.H*0.3 && d<td){ td=d; threat={x,y,d}; } };
+      for(const e of this.enemies) consider(e.x,e.y);
+      for(const b of this.eb) if(!b.bomb) consider(b.x,b.y);
+      if(threat && threat.d<this.H*0.22){ mx = (p.x<threat.x?-1:1); if(threat.d<this.H*0.12) my=-0.6; bomb=false; }
+      else {
+        // align with the lowest (most urgent) enemy above to shoot
+        let tgt=null,ty=-1e9; for(const e of this.enemies){ if(e.y<p.y && e.y>ty){ ty=e.y; tgt=e; } }
+        if(tgt){ mx = Math.sign(tgt.x-p.x)*Math.min(1,Math.abs(tgt.x-p.x)/(this.W*0.08)); }
+        // bomb a ground target directly below
+        for(const g of this.ground){ if(g.alive && Math.abs(g.x-p.x)<this.W*0.05 && p.bombs>0){ bomb=true; break; } }
+      }
+      return {mx,my,bomb};
+    }
+
+    hitPlayer(){ if(this.over) return; this.lives--; if(this.lives<=0){ this.over=true; this._overT=1.4; this.status('游戏结束 · 到达第 '+this.wave+' 波，得分 '+this.score+'。'); if(this.autoPlay) this._autoNext(); } else { this.status('被击中！剩余生命 '+this.lives); } }
+    resetRound(){ this.lives=3; this.over=false; this.player.x=this.W/2; this.player.y=this.H*0.86; this.pb=[]; this.eb=[]; this.enemies=[]; this.spawnList=[]; this.spawnT=0; this.startWave(); }
+
+    onDown(e){ e.preventDefault(); this.ptr.down=true; const r=canvas.getBoundingClientRect(); this.ptr.x=e.clientX-r.left; this.ptr.y=e.clientY-r.top; this.ptr.startT=this.t; }
+    onMove(e){ if(!this.ptr.down) return; const r=canvas.getBoundingClientRect(); this.ptr.x=e.clientX-r.left; this.ptr.y=e.clientY-r.top; }
+    onUp(e){ if(this.ptr.down && (this.t-this.ptr.startT)<0.22) this.dropBomb(); this.ptr.down=false; }
+
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // background stars
+      ctx.fillStyle='#ffffff10';
+      for(let i=0;i<24;i++){ const x=(i*97.3)%W; const y=((i*53.7 + this.t*30)%(H)); ctx.fillRect(x,y,1.5,1.5); }
+      // ground
+      ctx.fillStyle='#0a1410'; ctx.fillRect(0,H-this.H*0.12,W,this.H*0.12);
+      for(const g of this.ground){ if(!g.alive) continue; ctx.strokeStyle='#3ce8a0'; ctx.shadowColor='#3ce8a0'; ctx.shadowBlur=8; ctx.lineWidth=2; ctx.strokeRect(g.x-W*0.045,H-this.H*0.115,W*0.09,this.H*0.07); ctx.shadowBlur=0; }
+      // ground line
+      ctx.strokeStyle='#3ce8a033'; ctx.beginPath(); ctx.moveTo(0,H-this.H*0.12); ctx.lineTo(W,H-this.H*0.12); ctx.stroke();
+      // enemies
+      for(const e of this.enemies){ ctx.save(); ctx.translate(e.x,e.y); ctx.strokeStyle='#ff5db0'; ctx.shadowColor='#ff5db0'; ctx.shadowBlur=10; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,-e.r); ctx.lineTo(e.r,e.r); ctx.lineTo(0,e.r*0.3); ctx.lineTo(-e.r,e.r); ctx.closePath(); ctx.stroke(); ctx.restore(); }
+      // player bullets
+      ctx.strokeStyle='#ffd54a'; ctx.shadowColor='#ffd54a'; ctx.shadowBlur=8; ctx.lineWidth=2; for(const b of this.pb){ ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x,b.y+this.H*0.03); ctx.stroke(); }
+      // enemy bullets
+      for(const b of this.eb){ if(b.bomb) continue; ctx.fillStyle='#ff5d6a'; ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=8; ctx.beginPath(); ctx.arc(b.x,b.y,3,0,7); ctx.fill(); }
+      // bombs
+      for(const b of this.eb){ if(!b.bomb) continue; ctx.fillStyle='#ffd54a'; ctx.shadowColor='#ffd54a'; ctx.shadowBlur=8; ctx.beginPath(); ctx.arc(b.x,b.y,3,0,7); ctx.fill(); }
+      ctx.shadowBlur=0;
+      // player
+      const p=this.player; const pulse=this.autoPlay?(0.5+0.5*Math.sin(this.t*7)):0;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.strokeStyle='#3ce8a0'; ctx.shadowColor='#3ce8a0'; ctx.shadowBlur=12+6*pulse; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(0,-p.r); ctx.lineTo(p.r,p.r); ctx.lineTo(p.r*0.3,p.r*0.4); ctx.lineTo(-p.r*0.3,p.r*0.4); ctx.lineTo(-p.r,p.r); ctx.closePath(); ctx.stroke(); ctx.restore();
+      // HUD
+      ctx.fillStyle='#9aa4b2'; ctx.font='11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText('SCORE '+this.score, 6, 6); ctx.textAlign='right'; ctx.fillText('LIVES '+this.lives+'  BOMB '+this.player.bombs, W-6, 6);
+      if(this.over){ ctx.fillStyle='#000000bb'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#ff5d6a'; ctx.font='bold 26px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('GAME OVER', W/2, H/2); }
+    }
+
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.resetRound(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._aT=0; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    _autoNext(){ /* keep auto across rounds */ }
+  }
+  window.game=new Xevious();
+})();
+</script>
+</body>
+</html>

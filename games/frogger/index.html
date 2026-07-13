@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e14" />
+<title>青蛙过河 · Neon Frogger</title>
+<style>
+  :root { --bg:#0a0e14; --surface:#121821; --board:#070a0f; --text:#e8f0ff; --muted:#7d8aa0; --accent:#3ce8a0; --accent2:#39c0ff; --accent-glow:#3ce8a055; --warn:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #14202e 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0a0f16 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.45rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#3ce8a0,#39c0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 9px; text-align:center; min-width:52px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04140d; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04140d; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>青蛙过河</h1><div class="sub">N E O N &nbsp; F R O G G E R</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Cross</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="390" height="507"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点屏幕方向控制青蛙前进，避开车流、踩着浮木过河到顶端。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const COLS=13, ROWS=13;
+  const BEST_KEY='frogger_best';
+  function mod(a,m){ return ((a%m)+m)%m; }
+  function overlap(a0,a1,b0,b1){ return a1>b0 && b1>a0; }
+
+  class Frogger {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.totalCross=0; this.W=390; this.H=507;
+      this.best=parseInt(localStorage.getItem(BEST_KEY)||'0',10)||0; bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      window.addEventListener('keydown',e=>this.onKey(e));
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||390,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=Math.round(w*ROWS/COLS); canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.T=w/COLS; this.cs=w/COLS; }
+
+    buildLanes(){
+      const lanes=[];
+      for(let r=0;r<ROWS;r++){
+        if(r===0) lanes.push({type:'home'});
+        else if(r===6||r===12) lanes.push({type:'safe'});
+        else if(r>=1&&r<=5){ const v=[34,-42,38,-30,46][r-1]; lanes.push({type:'river', v, tile:3}); }
+        else { const v=[-38,30,-28,34,-26][r-7]; lanes.push({type:'road', v, tile:1.2}); }
+      }
+      for(let r=0;r<ROWS;r++){
+        const L=lanes[r];
+        if(L.type==='river'||L.type==='road'){
+          const n = L.type==='river'?3:2; L.n=n; L.offs=[]; L.w=L.tile*this.T;
+          for(let i=0;i<n;i++) L.offs.push(i*(this.W/n) + ((r%2)? this.W/(n*2):0));
+        }
+      }
+      return lanes;
+    }
+
+    restart(){ this.stopAuto(); this.t=0; this.crossings=0; this.lives=3; this.over=false; this._aT=0; this._stuck=0; this.lanes=this.buildLanes(); this.newFrog(true); this.status('点屏幕方向控制青蛙前进，避开车流、踩着浮木过河到顶端。'); scoreEl.textContent=0; }
+
+    newFrog(full){
+      const c=Math.floor(COLS/2);
+      this.frog={row:12, col:c, x:c*this.T+this.T/2, y:12*this.T+this.T/2, hop:null};
+    }
+
+    status(t){ statusEl.textContent=t; }
+
+    laneXs(row){
+      const L=this.lanes[row]; const out=[];
+      for(let i=0;i<L.n;i++){ out.push(mod(L.offs[i]+this.t*L.v, this.W)); }
+      return out;
+    }
+
+    // is frog horizontally safe to sit on targetRow at x=fx (for hopping up)
+    safeUp(targetRow, fx){
+      if(targetRow===0||targetRow===6||targetRow===12) return true;
+      const L=this.lanes[targetRow];
+      const half=this.T*0.4;
+      if(L.type==='road'){
+        const win=0.45;
+        for(const bx of this.laneXs(targetRow)){
+          for(const cx of [bx,bx-this.W,bx+this.W]){
+            const a0=cx-L.w/2, a1=cx+L.w/2;
+            const b0=cx+L.v*win-L.w/2, b1=cx+L.v*win+L.w/2;
+            const sweep0=Math.min(a0,b0)-half, sweep1=Math.max(a1,b1)+half;
+            if(overlap(sweep0,sweep1, fx, fx)) return false;
+          }
+        }
+        return true;
+      }
+      if(L.type==='river'){
+        for(const bx of this.laneXs(targetRow)){
+          for(const cx of [bx,bx-this.W,bx+this.W]){
+            if(overlap(cx-L.w/2,cx+L.w/2, fx-this.T*0.34, fx+this.T*0.34)) return true;
+          }
+        }
+        return false;
+      }
+      return true;
+    }
+
+    sideSafe(dir, fx){
+      const nx = dir==='left'? fx-this.T : fx+this.T;
+      if(nx < this.T*0.45 || nx > this.W-this.T*0.45) return false;
+      const L=this.lanes[this.frog.row];
+      const half=this.T*0.34;
+      if(L.type==='river'){
+        for(const bx of this.laneXs(this.frog.row)){
+          for(const cx of [bx,bx-this.W,bx+this.W]){ if(overlap(cx-L.w/2,cx+L.w/2, nx-half, nx+half)) return true; }
+        }
+        return false;
+      }
+      if(L.type==='road'){
+        for(const bx of this.laneXs(this.frog.row)){
+          for(const cx of [bx,bx-this.W,bx+this.W]){
+            if(overlap(cx-L.w/2,cx+L.w/2, nx-half, nx+half)) return false;
+          }
+        }
+        return true;
+      }
+      return true;
+    }
+
+    hopFrog(dir){
+      if(this.frog.hop||this.over) return;
+      const T=this.T, f=this.frog;
+      let nr=f.row, nx=f.x, ny=f.y;
+      if(dir==='up'){ nr=f.row-1; ny=nr*T+T/2; }
+      else if(dir==='down'){ nr=f.row+1; ny=nr*T+T/2; }
+      else if(dir==='left'){ nx=f.x-T; }
+      else if(dir==='right'){ nx=f.x+T; }
+      if(nr<0||nr>=ROWS) return;
+      if(nx<this.T*0.4||nx>this.W-this.T*0.4) return;
+      this.applyHop(nr,nx);
+    }
+    moveTo(nr,nx){ if(this.frog.hop||this.over) return; if(nr<0||nr>=ROWS) return; if(nx<this.T*0.4||nx>this.W-this.T*0.4) return; this.applyHop(nr,nx); }
+    applyHop(nr,nx){ const f=this.frog,T=this.T; this.frog.hop={fromX:f.x,fromY:f.y,toX:nx,toY:nr*T+T/2,toRow:nr,toCol:Math.round((nx-T/2)/T),t:0,dur:0.11}; this._stuck=0; }
+
+    cross(){
+      this.crossings++; this.totalCross++; this._autoProgress=this.totalCross;
+      scoreEl.textContent=this.crossings;
+      if(this.crossings>this.best){ this.best=this.crossings; bestEl.textContent=this.best; localStorage.setItem(BEST_KEY,String(this.best)); }
+      this.status('成功过河！已穿越 '+this.totalCross+' 次。');
+      this.newFrog();
+    }
+
+    die(reason){
+      this.lives--;
+      if(this.lives<=0){ this.over=true; this.status('游戏结束 · 穿越 '+this.crossings+' 次。点击 Restart 重新开始。'); if(this.autoPlay) this._autoNext(); return; }
+      this.status((reason||'失败')+'，剩余生命 '+this.lives);
+      this.newFrog();
+    }
+
+    checkDeath(){
+      const f=this.frog; const L=this.lanes[f.row];
+      if(f.x < -this.T*0.42 || f.x > this.W+this.T*0.42){ this.die('被冲走'); return; }
+      if(L.type==='road'){
+        const half=this.T*0.4;
+        for(const bx of this.laneXs(f.row)){
+          for(const cx of [bx,bx-this.W,bx+this.W]){ if(overlap(cx-L.w/2,cx+L.w/2, f.x-half, f.x+half)){ this.die('被车撞'); return; } }
+        }
+      } else if(L.type==='river'){
+        const half=this.T*0.34; let ok=false;
+        for(const bx of this.laneXs(f.row)){
+          for(const cx of [bx,bx-this.W,bx+this.W]){ if(overlap(cx-L.w/2,cx+L.w/2, f.x-half, f.x+half)){ ok=true; break; } }
+          if(ok) break;
+        }
+        if(!ok){ this.die('落水'); return; }
+      }
+    }
+
+    sideX(dir, fx){ return dir==='left'? fx-this.T : fx+this.T; }
+    clearAhead(x, row, win){
+      const L=this.lanes[row]; if(L.type!=='road') return true;
+      const half=this.T*0.4;
+      for(const bx of this.laneXs(row)){
+        for(const cx of [bx,bx-this.W,bx+this.W]){
+          const a0=cx-L.w/2-half, a1=cx+L.w/2+half;
+          const b0=cx+L.v*win-L.w/2-half, b1=cx+L.v*win+L.w/2+half;
+          const s0=Math.min(a0,b0), s1=Math.max(a1,b1);
+          if(s0<x && x<s1) return false;
+        }
+      }
+      return true;
+    }
+    dodge(){
+      const f=this.frog, upRow=f.row-1;
+      if(this.safeUp(upRow, f.x)){ this.hopFrog('up'); return true; }
+      const tries=[['left',f.x-this.T],['right',f.x+this.T],['left',f.x-2*this.T],['right',f.x+2*this.T]];
+      for(const t of tries){ const nx=t[1]; if(nx<this.T*0.4||nx>this.W-this.T*0.4) continue; if(this.clearAhead(nx,f.row,0.6)){ this.moveTo(f.row,nx); return true; } }
+      return false;
+    }
+    decideAuto(){
+      const f=this.frog;
+      if(f.row<=0) return;
+      const upRow=f.row-1;
+      const cand=[];
+      if(f.x>this.T*0.6) cand.push('left');
+      if(f.x<this.W-this.T*0.6) cand.push('right');
+      // dodge an approaching car in the current road row
+      if(this.lanes[f.row].type==='road' && !this.clearAhead(f.x,f.row,0.45)){ if(this.dodge()) return; }
+      // advance up when the row above is safe
+      if(this.safeUp(upRow, f.x)){ this.hopFrog('up'); return; }
+      // reposition sideways to a column where the row above becomes safe (and current row safe there)
+      for(const d of cand){ const nx=this.sideX(d,f.x); if(this.sideSafe(d,f.x) && this.safeUp(upRow, nx)){ this.hopFrog(d); return; } }
+      // river: drift toward centre to avoid being carried off-screen
+      if(this.lanes[f.row].type==='river'){
+        const toward = f.x>this.W/2?'left':'right';
+        if(cand.includes(toward) && this.sideSafe(toward,f.x)){ this.hopFrog(toward); return; }
+        if(f.x<this.T*0.9 || f.x>this.W-this.T*0.9){ this.hopFrog('up'); return; }
+      }
+      // otherwise wait (no safe move right now)
+    }
+
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.over||this.frog.hop) return;
+      const r=canvas.getBoundingClientRect(); const tx=e.clientX-r.left, ty=e.clientY-r.top;
+      const dx=tx-this.frog.x, dy=ty-this.frog.y;
+      if(Math.abs(dy)>=Math.abs(dx)) this.hopFrog(dy<0?'up':'down');
+      else this.hopFrog(dx<0?'left':'right');
+    }
+    onKey(e){ if(this.autoPlay||this.over||this.frog.hop) return;
+      const k=e.key;
+      if(k==='ArrowUp'||k==='w'||k==='W') this.hopFrog('up');
+      else if(k==='ArrowDown'||k==='s'||k==='S') this.hopFrog('down');
+      else if(k==='ArrowLeft'||k==='a'||k==='A') this.hopFrog('left');
+      else if(k==='ArrowRight'||k==='d'||k==='D') this.hopFrog('right');
+    }
+
+    update(dt){
+      this.t += dt;
+      const f=this.frog;
+      if(f.hop){
+        f.hop.t += dt/f.hop.dur;
+        const h=f.hop;
+        f.x=h.fromX+(h.toX-h.fromX)*Math.min(1,h.t);
+        f.y=h.fromY+(h.toY-h.fromY)*Math.min(1,h.t);
+        if(h.t>=1){ f.row=h.toRow; f.col=h.toCol; f.x=h.toX; f.y=h.toY; f.hop=null;
+          const L=this.lanes[f.row];
+          if(L.type==='river'){ let best=null,bd=1e9; for(const bx of this.laneXs(f.row)){ for(const cx of [bx,bx-this.W,bx+this.W]){ const d=Math.abs(cx-f.x); if(d<bd){bd=d;best=cx;} } } if(best!==null && bd < L.w*0.5) f.x=best; }
+          if(f.row===0) this.cross(); }
+      } else {
+        const L=this.lanes[f.row];
+        if(L.type==='river') f.x += L.v*dt;
+        this.checkDeath();
+        if(this.over) return;
+      }
+      if(this.autoPlay && !this.over && !f.hop){
+        this._aT -= dt; if(this._aT<=0){ this._aT=0.2; this.decideAuto(); }
+      }
+    }
+
+    draw(){
+      const T=this.T, W=this.W, H=this.H;
+      ctx.clearRect(0,0,W,H);
+      for(let r=0;r<ROWS;r++){
+        const y=r*T, L=this.lanes[r];
+        let bg='#0c1018';
+        if(L.type==='road') bg='#15151c';
+        else if(L.type==='river') bg='#08202b';
+        else if(L.type==='safe') bg='#10301f';
+        else if(L.type==='home') bg='#2a1140';
+        ctx.fillStyle=bg; ctx.fillRect(0,y,W,T);
+        if(L.type==='road'||L.type==='river'){
+          for(const bx of this.laneXs(r)){
+            for(const cx of [bx,bx-this.W,bx+this.W]){
+              if(cx+ L.w/2 < 0 || cx- L.w/2 > W) continue;
+              if(L.type==='road'){
+                ctx.fillStyle='#ff5d6a'; ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=8;
+                this.roundRect(cx-L.w/2, y+T*0.22, L.w, T*0.56, 5); ctx.fill(); ctx.shadowBlur=0;
+                ctx.fillStyle='#ffe08a'; for(let lx=cx-L.w/2+5; lx<cx+L.w/2-3; lx+=9){ ctx.fillRect(lx, y+T*0.44, 4, T*0.12); }
+              } else {
+                ctx.fillStyle='#7a4a22'; ctx.shadowColor='#3ce8a0'; ctx.shadowBlur=6;
+                this.roundRect(cx-L.w/2, y+T*0.16, L.w, T*0.68, 7); ctx.fill(); ctx.shadowBlur=0;
+                ctx.strokeStyle='#a9712f'; ctx.lineWidth=1; for(let lx=cx-L.w/2+T*0.25; lx<cx+L.w/2; lx+=T*0.4){ ctx.beginPath(); ctx.moveTo(lx,y+T*0.2); ctx.lineTo(lx,y+T*0.8); ctx.stroke(); }
+              }
+            }
+          }
+        } else if(L.type==='home'){
+          ctx.fillStyle='#3ce8a0'; ctx.font='bold '+(T*0.5)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+          for(let c=0;c<COLS;c+=2){ ctx.fillText('★', c*T+T/2, y+T/2); }
+        }
+        if(r>0){ ctx.strokeStyle='#ffffff08'; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+      }
+      // frog
+      const f=this.frog; const pulse = this.autoPlay? (0.5+0.5*Math.sin(this.t*6)) : 0;
+      ctx.save(); ctx.translate(f.x, f.y);
+      ctx.shadowColor='#3ce8a0'; ctx.shadowBlur=10+6*pulse;
+      ctx.fillStyle='#3ce8a0'; const rad=T*0.34;
+      ctx.beginPath(); ctx.arc(0,0,rad,0,7); ctx.fill();
+      ctx.fillStyle='#0a0e14'; ctx.beginPath(); ctx.arc(-rad*0.4,-rad*0.3,rad*0.18,0,7); ctx.arc(rad*0.4,-rad*0.3,rad*0.18,0,7); ctx.fill();
+      ctx.restore();
+      if(this.over){
+        ctx.fillStyle='#000000aa'; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle='#ff5d6a'; ctx.font='bold 26px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('GAME OVER', W/2, H/2);
+      }
+    }
+    roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=this.totalCross||0; this._aT=0.2; this._stuck=0; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+  }
+  window.game=new Frogger();
+})();
+</script>
+</body>
+</html>

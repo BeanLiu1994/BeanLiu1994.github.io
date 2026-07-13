@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c1530" />
+<title>霓虹三骰 · Chuck-a-Luck</title>
+<style>
+  :root { --bg:#0c1530; --surface:#121d40; --board:#0a1126; --text:#eaf2ff; --muted:#8aa0d6; --accent:#4d9fff; --accent-glow:#4d9fff55; --gold:#ffd54a; --red:#ff5d6a; --green:#3ecf8e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #16245a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0a1030 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4d9fff,#8a6bff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:62px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:14px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .dice-row { display:flex; gap:10px; justify-content:center; margin-top:12px; }
+  .die { width:54px; height:54px; border-radius:12px; background:var(--board); border:1px solid #ffffff18; display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:800; color:var(--text); box-shadow:0 0 14px #4d9fff30; }
+  .pick-row { display:flex; gap:6px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+  .pick { width:38px; height:38px; border-radius:9px; background:var(--surface); border:1px solid #ffffff14; color:var(--text); font-weight:800; font-size:1rem; cursor:pointer; transition:all .15s; }
+  .pick.sel { background:var(--accent); border-color:var(--accent); color:#0c1530; box-shadow:0 0 14px var(--accent-glow); }
+  .controls { display:flex; gap:8px; margin-top:12px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0c1530; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0c1530; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:10px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹三骰</h1><div class="sub">C H U C K - A - L U C K</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Chips</div><div class="value" id="score">100</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">100</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="220"></canvas></div>
+  <div class="dice-row" id="dice"></div>
+  <div class="pick-row" id="picks"></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-roll" onclick="game.roll()">Roll</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">选一个数字（1-6），点 Roll。骰子中出现几次该数字就赢几倍（三个同点 10 倍）。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const diceEl=document.getElementById('dice'), picksEl=document.getElementById('picks');
+  const PIPS={1:'⚀',2:'⚁',3:'⚂',4:'⚃',5:'⚄',6:'⚅'};
+  class Chuck {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.best=parseInt(localStorage.getItem('chuckBest')||'100');
+      this.W=420; this.H=220; this.fit();
+      window.addEventListener('resize',()=>this.fit());
+      this.pick=3;
+      for(let n=1;n<=6;n++){ const b=document.createElement('button'); b.className='pick'+(n===this.pick?' sel':''); b.textContent=n; b.onclick=()=>{ if(this.autoPlay)return; this.pick=n; this.refreshPicks(); }; picksEl.appendChild(b); }
+      bestEl.textContent=this.best; this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*0.52; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
+    refreshPicks(){ [...picksEl.children].forEach((b,i)=>b.classList.toggle('sel',(i+1)===this.pick)); this.drawPips(); }
+    restart(){ this.stopAuto(); this.chips=100; this.rolling=false; this.dice=[1,1,1]; this.t=0; this.result=0; this.flash=0; scoreEl.textContent=this.chips; this.drawPips(); this.status('选一个数字（1-6），点 Roll。'); }
+    drawPips(){ diceEl.innerHTML=''; for(let i=0;i<3;i++){ const d=document.createElement('div'); d.className='die'; d.textContent=PIPS[this.dice[i]]||'⚀'; diceEl.appendChild(d); } }
+    status(t){ statusEl.textContent=t; }
+    roll(){
+      if(this.rolling||this.autoPlay||this.chips<=0) return;
+      if(this.chips<1){ this.restart(); return; }
+      this.rolling=true; this.t=0; this.flash=0; this.chips-=1; scoreEl.textContent=this.chips; this.status('🎲 摇骰子中…');
+      this._schedule(900,()=>{ this.rolling=false; const m=this.dice.filter(d=>d===this.pick).length;
+        this.result=m;
+        let win=0; if(m===3) win=10; else if(m>0) win=m; else win=0;
+        this.chips+=win; scoreEl.textContent=this.chips;
+        if(this.chips>this.best){ this.best=this.chips; localStorage.setItem('chuckBest',String(this.best)); bestEl.textContent=this.best; }
+        this.flash=1;
+        this.status(m===0?'未出现 '+this.pick+'，输 1 注。':(m===3?'三个 '+this.pick+'！大赢 '+win+' 注！':this.pick+' 出现 '+m+' 次，赢 '+win+' 注。'));
+        this.drawPips();
+      });
+    }
+    _autoRoll(){ if(this.autoPlay&&!this.rolling){ this.roll(); } }
+    update(dt){
+      if(this.flash>0) this.flash=Math.max(0,this.flash-dt*1.4);
+      if(this.rolling){ this.t+=dt; this.dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; this.drawPips(); }
+      if(this.autoPlay){ this._autoT=(this._autoT||0)-dt; if(this._autoT<=0&&!this.rolling){ this.pick=1+Math.floor(Math.random()*6); this.refreshPicks(); this.roll(); this._autoT=1.6; this._autoProgress++; } }
+    }
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      if(this.flash>0){ ctx.fillStyle='rgba(62,207,142,'+(this.flash*0.18)+')'; ctx.fillRect(0,0,W,H); }
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='#8aa0d6'; ctx.font='bold 13px Segoe UI'; ctx.fillText('赌注押在',W/2,H*0.32);
+      ctx.shadowColor='#4d9fff'; ctx.shadowBlur=16; ctx.fillStyle='#4d9fff'; ctx.font='bold 40px Segoe UI';
+      ctx.fillText(String(this.pick),W/2,H*0.6); ctx.shadowBlur=0;
+      ctx.fillStyle='#8aa0d6'; ctx.font='12px Segoe UI'; ctx.fillText(this.autoPlay?'自动对注中…':'选择下方数字并 Roll',W/2,H*0.84);
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.chips<=0) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoT=0.4; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    _schedule(ms,fn){ setTimeout(()=>{ fn(); },ms); }
+  }
+  window.game=new Chuck();
+})();
+</script>
+</body>
+</html>

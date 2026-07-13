@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#101015" />
+<title>将棋 · Neon Shogi</title>
+<style>
+  :root { --bg:#101015; --surface:#18181f; --board:#0c0c10; --text:#f0f0f5; --muted:#9a9ab0; --accent:#c8a24a; --accent-glow:#c8a24a55; --gold:#ffd54a; --red:#ff5d6a; --blue:#5db4ff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #20202c 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0a0a0e 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:520px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#c8a24a,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 9px; text-align:center; min-width:52px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#101015; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#101015; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>将棋</h1><div class="sub">N E O N &nbsp; S H O G I</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Round</div><div class="value" id="score">1</div></div>
+      <div class="score-card best"><div class="label">Win</div><div class="value" id="best">0-0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="450" height="450"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点选己方（下方）棋子，再点目标格。将死对方王即胜。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const N=9;
+  const KAN={K:'王',R:'飛',B:'角',G:'金',S:'銀',N:'桂',L:'香',P:'歩'};
+  const VAL={K:1000,R:10,B:8,G:6,S:5,N:3,L:2,P:1,'+R':13,'+B':11,'+S':6,'+N':6,'+L':6,'+P':6};
+  function inB(r,c){ return r>=0&&c>=0&&r<N&&c<N; }
+  function fb(color){ return color==='b'?1:-1; }
+  class Shogi {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.W=450; this.H=450;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      this.wins={b:0,w:0};
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(r.width||450,500)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.cs=w/N; }
+    setup(){ const b=[]; for(let r=0;r<N;r++) b.push(new Array(N).fill(null));
+      const back=['L','N','S','G','K','G','S','N','L'];
+      for(let c=0;c<N;c++){ b[0][c]={t:back[c],c:'b',p:false}; b[8][c]={t:back[c],c:'w',p:false}; b[2][c]={t:'P',c:'b',p:false}; b[6][c]={t:'P',c:'w',p:false}; }
+      b[1][1]={t:'B',c:'b',p:false}; b[1][7]={t:'R',c:'b',p:false}; b[7][1]={t:'R',c:'w',p:false}; b[7][7]={t:'B',c:'w',p:false};
+      return b; }
+    restart(){ this.stopAuto(); this.round=1; scoreEl.textContent=1; this.newGame(); this.status('点选己方（下方）棋子，再点目标格。将死对方王即胜。'); }
+    newGame(){ this.board=this.setup(); this.turn='b'; this.sel=null; this.over=null; this.anim=null; this.ply=0; this.lastMove=null; this.winLine=null; }
+    promoZone(r,color){ return color==='b'?r<=2:r>=6; }
+    slide(r,c,dirs,color,max){ const out=[]; for(const [dr,dc] of dirs){ let nr=r+dr,nc=c+dc,k=0; while(inB(nr,nc)){ const o=this.board[nr][nc]; if(!o) out.push([nr,nc]); else { if(o.c!==color) out.push([nr,nc]); break; } nr+=dr;nc+=dc; if(max&&++k>=max) break; } } return out; }
+    movesFor(r,c){ const p=this.board[r][c]; if(!p) return []; const col=p.c, f=fb(col), out=[];
+      const step=(ds)=>{ for(const [dr,dc] of ds) if(inB(r+dr,c+dc)){ const o=this.board[r+dr][c+dc]; if(!o||o.c!==col) out.push([r+dr,c+dc]); } };
+      const slideDirs=(ds,mx)=>out.push(...this.slide(r,c,ds,col,mx));
+      if(p.p){ const base=p.t; if(base==='R'){ slideDirs([[1,0],[-1,0],[0,1],[0,-1]],99); step([[1,1],[1,-1],[-1,1],[-1,-1]]); }
+        else if(base==='B'){ slideDirs([[1,1],[1,-1],[-1,1],[-1,-1]],99); step([[1,0],[-1,0],[0,1],[0,-1]]); }
+        else { step([[f,0],[f,1],[f,-1],[-f,0],[0,1],[0,-1]]); } return out; }
+      switch(p.t){
+        case 'P': step([[f,0]]); break;
+        case 'L': slideDirs([[f,0]],99); break;
+        case 'N': step([[2*f,1],[2*f,-1]]); break;
+        case 'S': step([[f,0],[f,1],[f,-1],[0,1],[0,-1]]); break;
+        case 'G': step([[f,0],[f,1],[f,-1],[-f,0],[0,1],[0,-1]]); break;
+        case 'B': slideDirs([[1,1],[1,-1],[-1,1],[-1,-1]],99); break;
+        case 'R': slideDirs([[1,0],[-1,0],[0,1],[0,-1]],99); break;
+        case 'K': step([[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]); break;
+      } return out; }
+    applyMove(from,to){ const p=this.board[from[0]][from[1]]; const promo=p&&!p.p&&['R','B','S','N','L','P'].includes(p.t)&&this.promoZone(to[0],p.c); this.board[to[0]][to[1]]={t:p.t,c:p.c,p:promo}; this.board[from[0]][from[1]]=null; this.lastMove={from,to}; }
+    kingPos(color){ for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const p=this.board[r][c]; if(p&&p.t==='K'&&p.c===color) return [r,c]; } return null; }
+    attacked(r,c,by){ const saved=this.board[r][c]; this.board[r][c]=null; let res=false; for(let rr=0;rr<N&&!res;rr++)for(let cc=0;cc<N&&!res;cc++){ const p=this.board[rr][cc]; if(p&&p.c===by){ if(this.movesFor(rr,cc).some(m=>m[0]===r&&m[1]===c)){ res=true; break; } } } this.board[r][c]=saved; return res; }
+    inCheck(color){ const k=this.kingPos(color); if(!k) return true; return this.attacked(k[0],k[1],color==='b'?'w':'b'); }
+    legalMoves(color){ const out=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const p=this.board[r][c]; if(!p||p.c!==color) continue; for(const m of this.movesFor(r,c)){ const pc=this.board[r][c], tc=this.board[m[0]][m[1]]; this.board[m[0]][m[1]]={t:pc.t,c:pc.c,p:pc.p||(['R','B','S','N','L','P'].includes(pc.t)&&this.promoZone(m[0],pc.c))}; this.board[r][c]=null; const bad=this.inCheck(color); this.board[r][c]=pc; this.board[m[0]][m[1]]=tc; if(!bad) out.push({from:[r,c],to:m}); } } return out; }
+    evalBoard(color){ let s=0; for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const p=this.board[r][c]; if(!p) continue; const v=VAL[(p.p?'+':'')+p.t]; s+= p.c===color?v:-v; } return s; }
+    bestMove(color){ const lm=this.legalMoves(color); if(!lm.length) return null; let best=null,bs=-1e9; for(const mv of lm){ const pc=this.board[mv.from[0]][mv.from[1]], tc=this.board[mv.to[0]][mv.to[1]]; const promo=!pc.p&&['R','B','S','N','L','P'].includes(pc.t)&&this.promoZone(mv.to[0],pc.c); this.board[mv.to[0]][mv.to[1]]={t:pc.t,c:pc.c,p:promo}; this.board[mv.from[0]][mv.from[1]]=null; let sc=this.evalBoard(color); if(this.inCheck(color==='b'?'w':'b')) sc+=4; this.board[mv.from[0]][mv.from[1]]=pc; this.board[mv.to[0]][mv.to[1]]=tc; sc+=Math.random()*0.5; if(sc>bs){ bs=sc; best=mv; } } return best; }
+    autoStep(){ if(this.over||this.anim) return; if(this.ply>260){ this.over=this.turn; this.status('回合过长，判和。第'+this.round+'局。'); if(this.autoPlay) this._autoNext(); return; } const mv=this.bestMove(this.turn); if(!mv){ this.over=this.turn; this.status((this.turn==='b'?'黑':'白')+'无子可动，'+(this.turn==='b'?'白':'黑')+'胜。'); if(this.autoPlay) this._autoNext(); return; } this.doTurn(mv); this._autoProgress=this.ply; }
+    doTurn(mv){ this.anim={from:this.cp(mv.from),to:this.cp(mv.to),t:0,apply:()=>{ this.applyMove(mv.from,mv.to); this.ply++; const opp=this.turn==='b'?'w':'b'; if(this.legalMoves(opp).length===0){ this.over=opp; this.wins[this.turn]++; bestEl.textContent=this.wins.b+'-'+this.wins.w; this.status((this.turn==='b'?'⚫ 黑':'⚪ 白')+'方将死对方，胜！第'+this.round+'局。'); if(this.autoPlay) this._autoNext(); } else { this.turn=opp; } } }; }
+    cp(rc){ const cs=this.cs; return {x:rc[1]*cs+cs/2,y:rc[0]*cs+cs/2}; }
+    _autoNext(){ this.stopAuto(); this.round++; scoreEl.textContent=this.round; this.newGame(); this.startAuto(); }
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.over||this.anim) return; const r=canvas.getBoundingClientRect(); const c=Math.floor((e.clientX-r.left)/this.cs), rr=Math.floor((e.clientY-r.top)/this.cs); if(!inB(rr,c)) return; if(this.sel){ if(this.legalMoves('w').some(m=>m.from[0]===this.sel[0]&&m.from[1]===this.sel[1]&&m.to[0]===rr&&m.to[1]===c)){ this.doTurn({from:this.sel,to:[rr,c]}); this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].c==='w'){ this.sel=[rr,c]; } else this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].c==='w'){ this.sel=[rr,c]; } }
+    status(t){ statusEl.textContent=t; }
+    update(dt){ if(this.anim){ this.anim.t+=dt/0.28; if(this.anim.t>=1){ const a=this.anim; this.anim=null; a.apply(); } }
+      if(this.autoPlay&&!this.anim&&!this.over){ this._aT=(this._aT||0)-dt; if(this._aT<=0){ this.autoStep(); this._aT=0.45; } } }
+    draw(){ const cs=this.cs,W=this.W; ctx.clearRect(0,0,W,W);
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const x=c*cs,y=r*cs; ctx.fillStyle=((r+c)%2)?'#16161c':'#101016'; ctx.fillRect(x,y,cs,cs); }
+      if(this.lastMove){ const a=this.cp(this.lastMove.from), b=this.cp(this.lastMove.to); ctx.fillStyle='#c8a24a22'; ctx.fillRect(a.x-cs/2,a.y-cs/2,cs,cs); ctx.fillRect(b.x-cs/2,b.y-cs/2,cs,cs); }
+      if(this.sel){ ctx.fillStyle='#c8a24a44'; ctx.fillRect(this.sel[1]*cs,this.sel[0]*cs,cs,cs); for(const m of this.movesFor(this.sel[0],this.sel[1])){ ctx.fillStyle='#c8a24a33'; ctx.beginPath(); ctx.arc(m[1]*cs+cs/2,m[0]*cs+cs/2,cs*0.16,0,7); ctx.fill(); } }
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const p=this.board[r][c]; if(!p) continue; let x=c*cs+cs/2,y=r*cs+cs/2; if(this.anim&&this.lastMove&&this.lastMove.to[0]===r&&this.lastMove.to[1]===c){ const ax=this.anim.from.x,ay=this.anim.from.y,bx=this.anim.to.x,by=this.anim.to.y; x=ax+(bx-ax)*Math.min(1,this.anim.t); y=ay+(by-ay)*Math.min(1,this.anim.t); } this.piece(x,y,cs*0.4,p); }
+    }
+    piece(x,y,rad,p){ ctx.save(); const col=p.c==='b'?'#ffd2a0':'#a0d2ff'; ctx.shadowColor=col; ctx.shadowBlur=8; ctx.fillStyle='#0c0c10'; ctx.beginPath(); ctx.arc(x,y,rad,0,7); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle=col; ctx.font='bold '+(rad*1.15)+'px "Segoe UI",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText((p.p?'成':'')+KAN[p.t],x,y); ctx.restore(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.newGame(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._aT=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Shogi();
+})();
+</script>
+</body>
+</html>

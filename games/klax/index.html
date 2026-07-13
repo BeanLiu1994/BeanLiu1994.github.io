@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06202a" />
+<title>霓虹叠块 · Neon Klax</title>
+<style>
+  :root { --bg:#06202a; --surface:#0a2e3a; --board:#04161d; --text:#e6fbff; --muted:#7fc4d6; --accent:#4dffd0; --accent-glow:#4dffd055; --gold:#ffd54a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0c4a5e 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #04141a 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#4dffd0,#4d9fff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04161d; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04161d; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹叠块</h1><div class="sub">N E O N &nbsp; K L A X</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="360" height="520"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">移动底部滑块接住来块，三块同色成线即消除。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const COLORS=['#ff5d6a','#4d9fff','#6fffd0','#ffd54a'];
+  const COLS=5, ROWS=6;
+  class Klax {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.over=false;
+      this.best=parseInt(localStorage.getItem('klaxBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||360,420)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.44; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.cs=this.W/COLS; }
+    emptyGrid(){ const g=[]; for(let r=0;r<ROWS;r++) g.push(new Array(COLS).fill(0)); return g; }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; scoreEl.textContent=0; this.grid=this.emptyGrid(); this.paddle=2; this.incoming=null; this.dropping=null; this.spawnT=0.4; this.status('移动底部滑块接住来块，三块同色成线即消除。'); }
+    spawn(){ const color=1+Math.floor(Math.random()*COLORS.length); this.incoming={color, x:this.W*0.5, dropping:false}; }
+    restRow(c){ let bottom=ROWS-1; while(bottom>0 && this.grid[bottom][c]===0) bottom--; return bottom; }
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.over) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left; const c=Math.floor(x/this.cs); this.paddle=(c<0)?0:(c>=COLS?COLS-1:c); }
+    bestCol(color){ let best=-1,bc=this.paddle; for(let c=0;c<COLS;c++){ if(this.grid[0][c]!==0) continue; const sc=this.simScore(c,color); if(sc>best){ best=sc; bc=c; } } return bc; }
+    simScore(c,color){ const tmp=this.grid.map(r=>r.slice()); const rr=this.restRow(c); if(rr<0) return -1; tmp[rr][c]=color; const groups=this.findGroups(tmp); let s=0; for(const gr of groups) if(gr.length>=3) s+=gr.length*2; if(s===0){ s=-this.countTop(c,color); } return s; }
+    countTop(c,color){ let n=0; const rr=this.restRow(c); for(let r=rr;r>=0&&r<ROWS;r--){ if(this.grid[r][c]===color) n++; else break; } return n; }
+    findGroups(grid){ const seen=new Set(), groups=[]; const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ const v=grid[r][c]; if(!v) continue; const key=r*COLS+c; if(seen.has(key)) continue; const comp=[]; const st=[[r,c]]; seen.add(key); while(st.length){ const [cr,cc]=st.pop(); comp.push([cr,cc]); for(const [dr,dc] of dirs){ const nr=cr+dr,nc=cc+dc; if(nr<0||nc<0||nr>=ROWS||nc>=COLS) continue; if(grid[nr][nc]!==v) continue; const nk=nr*COLS+nc; if(seen.has(nk)) continue; seen.add(nk); st.push([nr,nc]); } } if(comp.length>=3) groups.push(comp); } return groups; }
+    update(dt){
+      if(this.over) return;
+      if(this.autoPlay){ this._autoT=(this._autoT||0)-dt; if(this._autoT<=0){ if(this.incoming && !this.dropping){ this.paddleTarget=this.bestCol(this.incoming.color); } this._autoT=0.12; } }
+      if(this.autoPlay && this.paddleTarget!==undefined){ if(this.paddle<this.paddleTarget) this.paddle=Math.min(COLS-1,this.paddle+1); else if(this.paddle>this.paddleTarget) this.paddle=Math.max(0,this.paddle-1); }
+      if(!this.dropping){ if(!this.incoming){ this.spawnT-=dt; if(this.spawnT<=0) this.spawn(); }
+        else { const px=this.paddle*this.cs+this.cs/2; const sp=this.W*0.9; this.incoming.x+=Math.sign(px-this.incoming.x)*Math.min(Math.abs(px-this.incoming.x),sp*dt); if(Math.abs(this.incoming.x-px)<4){ const c=this.paddle, rr=this.restRow(c); if(rr<0){ this.gameOver(); } else { this.dropping={color:this.incoming.color, c, y:(this.conveyorY()), vy:0}; this.incoming=null; } } }
+      } else { const d=this.dropping; const targetY=(this.restRow(d.c)+0.5)*this.cs; d.vy+=900*dt; d.y+=d.vy*dt; if(d.y>=targetY){ d.y=targetY; this.grid[this.restRow(d.c)][d.c]=d.color; this.dropping=null; this.resolve(); this.spawnT=0.25; } }
+    }
+    conveyorY(){ return this.cs*0.5; }
+    resolve(){ let any=true,total=0; while(any){ any=false; const groups=this.findGroups(this.grid); let cl=0; for(const gr of groups){ if(gr.length>=3){ for(const [r,c] of gr){ this.grid[r][c]=0; } cl+=gr.length; any=true; } } if(cl){ total+=cl; this.gravity(); } }
+      if(total){ this.score+=total*10; scoreEl.textContent=this.score; if(this.score>this.best){ this.best=this.score; localStorage.setItem('klaxBest',String(this.best)); bestEl.textContent=this.best; } this._autoProgress=this.score; } }
+    gravity(){ for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--){ if(this.grid[r][c]!==0) col.push(this.grid[r][c]); } for(let r=ROWS-1;r>=0;r--){ this.grid[r][c]=col[ROWS-1-r]||0; } } }
+    gameOver(){ this.over=true; const d=this.score; if(d>this.best){ this.best=d; localStorage.setItem('klaxBest',String(this.best)); bestEl.textContent=this.best; } this.status('💥 堆到顶了！得分 '+d+'。'); if(this.autoPlay) this._autoNext(); }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    status(t){ statusEl.textContent=t; }
+    draw(){ const W=this.W,H=this.H,cs=this.cs; ctx.clearRect(0,0,W,H);
+      const top=cs*1.2;
+      ctx.strokeStyle='#4dffd055'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,top); ctx.lineTo(W,top); ctx.stroke();
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ const v=this.grid[r][c]; const x=c*cs,y=top+r*cs; ctx.fillStyle='#ffffff08'; ctx.fillRect(x+2,y+2,cs-4,cs-4); if(v){ this.tile(x+cs/2,y+cs/2,cs*0.4,v); } }
+      const py=top-cs*0.45;
+      if(this.dropping){ const d=this.dropping; this.tile(d.c*cs+cs/2, d.y, cs*0.4, d.color, true); }
+      if(this.incoming){ const it=this.incoming; this.tile(it.x, py, cs*0.4, it.color, true); }
+      const px=this.paddle*cs+cs/2; ctx.save(); ctx.shadowColor='#4dffd0'; ctx.shadowBlur=14; ctx.fillStyle='#4dffd0'; ctx.beginPath(); ctx.moveTo(px-cs*0.4,py-cs*0.4); ctx.lineTo(px+cs*0.4,py-cs*0.4); ctx.lineTo(px,py+cs*0.1); ctx.closePath(); ctx.fill(); ctx.restore();
+      if(this.over){ ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=18; ctx.fillStyle='#ff5d6a'; ctx.font='bold '+(W*0.1)+'px Segoe UI'; ctx.textAlign='center'; ctx.fillText('GAME OVER', W/2, H/2); ctx.restore(); }
+    }
+    tile(x,y,rad,colorIdx,glow){ ctx.save(); const col=COLORS[colorIdx-1]||'#fff'; if(glow){ ctx.shadowColor=col; ctx.shadowBlur=16; } ctx.fillStyle=col; this.rr(x-rad,y-rad,rad*2,rad*2,8); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff55'; this.rr(x-rad*0.5,y-rad*0.5,rad,rad,4); ctx.fill(); ctx.restore(); }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoT=0.2; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Klax();
+})();
+</script>
+</body>
+</html>

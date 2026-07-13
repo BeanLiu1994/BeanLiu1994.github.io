@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#180a26" />
+<title>霓虹跳跳 · Neon Q*bert</title>
+<style>
+  :root { --bg:#180a26; --surface:#23103a; --board:#10061c; --text:#f6eaff; --muted:#b58fd6; --accent:#b06bff; --accent-glow:#b06bff55; --gold:#ffd54a; --red:#ff5d6a; --green:#3ecf8e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3a1660 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0e0618 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#b06bff,#ff6bd0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 9px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#180a26; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#180a26; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>霓虹跳跳</h1><div class="sub">N E O N &nbsp; Q * B E R T</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Level</div><div class="value" id="score">1</div></div>
+      <div class="score-card best"><div class="label">Lives</div><div class="value" id="best">3</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="360" height="460"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">跳到每块方块上把它点亮，躲开红球。点屏幕四个方向键跳跃。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const ROWS=7;
+  function key(r,c){ return r*100+c; }
+  function neighbors(r,c){ const out=[]; if(r+1<ROWS){ out.push([r+1,c]); out.push([r+1,c+1]); } if(r-1>=0){ if(c-1>=0) out.push([r-1,c-1]); if(c<=r-1) out.push([r-1,c]); } return out; }
+  class Qbert {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.W=360; this.H=460;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||360,400)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.28; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.cellW=w*0.118; this.rowH=w*0.108; this.topY=w*0.12; }
+    cubePos(r,c){ return { x:this.W/2+(c-r/2)*this.cellW, y:this.topY+r*this.rowH }; }
+    restart(){ this.stopAuto(); this.level=1; this.lives=3; this.scoreEl=scoreEl; bestEl.textContent=this.lives; scoreEl.textContent=this.level; this.resetLevel(); this.status('跳到每块方块上把它点亮，躲开红球。'); }
+    resetLevel(){ this.done={}; this.player={r:0,c:0}; this.epos={r:ROWS-1,c:Math.floor(Math.random()*(ROWS))}; this.anim=null; this._eT=0.7; this.done[key(0,0)]=true; }
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.anim||this.lives<=0) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left,y=e.clientY-r.top; let best=null,bd=1e9; for(let rr=0;rr<ROWS;rr++)for(let cc=0;cc<=rr;cc++){ const p=this.cubePos(rr,cc); const dd=(p.x-x)**2+(p.y-y)**2; if(dd<bd){ bd=dd; best=[rr,cc]; } } if(best && (Math.abs(best[0]-this.player.r)+Math.abs(best[1]-this.player.c))===1) this.jump(best[0],best[1]); else this.jumpDir(x,y); }
+    jumpDir(x,y){ const cx=this.W/2, cy=this.topY+this.rowH; const ang=Math.atan2(y-cy,x-cx); let tx,ty; if(ang>=-Math.PI*0.75&&ang<-Math.PI*0.25) { tx=this.player.r+1; ty=this.player.c; } else if(ang>=-Math.PI*0.25&&ang<Math.PI*0.25){ tx=this.player.r+1; ty=this.player.c+1; } else if(ang>=Math.PI*0.25&&ang<Math.PI*0.75){ tx=this.player.r-1; ty=this.player.c-1; } else { tx=this.player.r-1; ty=this.player.c; } if(tx>=0&&tx<ROWS&&ty>=0&&ty<=tx) this.jump(tx,ty); }
+    jump(tr,tc){ const from=this.cubePos(this.player.r,this.player.c); const to=this.cubePos(tr,tc); this.anim={from,to,t:0,tr,tc}; }
+    land(){ const {tr,tc}=this.anim; this.player={r:tr,c:tc}; this.done[key(tr,tc)]=true; this.anim=null; this.checkWin(); }
+    moveEnemy(){ let e=neighbors(this.epos.r,this.epos.c).filter(n=>!(n[0]===this.player.r&&n[1]===this.player.c)); if(!e.length){ this.warpEnemy(); return; } const down=e.filter(n=>n[0]>this.epos.r); const pick=(down.length&&Math.random()<0.6)?down[Math.floor(Math.random()*down.length)]:e[Math.floor(Math.random()*e.length)]; this.epos={r:pick[0],c:pick[1]}; }
+    warpEnemy(){ let r,c,t=0; do{ r=Math.floor(Math.random()*ROWS); c=Math.floor(Math.random()*(r+1)); t++; }while(t<60&&r===this.player.r&&c===this.player.c); this.epos={r,c}; }
+    die(){ this.lives--; bestEl.textContent=Math.max(0,this.lives); this.anim=null; if(this.lives<=0){ this.status('💀 被红球抓到！游戏结束。'); if(this.autoPlay) this._autoNext(); } else { this.player={r:0,c:0}; this.status('被红球抓到！剩余生命 '+this.lives); } }
+    checkWin(){ let all=true; for(let r=0;r<ROWS;r++)for(let c=0;c<=r;c++){ if(!this.done[key(r,c)]){ all=false; break; } } if(all){ this.level++; scoreEl.textContent=this.level; this._autoProgress=this.level; this.resetLevel(); this.status('✨ 第 '+(this.level-1)+' 关完成！进入第 '+this.level+' 关。'); } }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
+    autoStep(){ if(this.anim||this.lives<=0) return; let target=null,bd=1e9; const visited={}; const q=[[this.player.r,this.player.c,0]]; visited[key(this.player.r,this.player.c)]=true; while(q.length){ const [r,c,d]=q.shift(); if(!this.done[key(r,c)]&&(r!==this.player.r||c!==this.player.c)){ if(d<bd){ bd=d; target=[r,c]; } } for(const n of neighbors(r,c)){ const k=key(n[0],n[1]); if(!visited[k]){ visited[k]=true; q.push([n[0],n[1],d+1]); } } } if(!target) return; const path=this.bfsPath(this.player.r,this.player.c,target[0],target[1]); if(!path||path.length<2) return; const step=path[1]; if(step[0]===this.epos.r&&step[1]===this.epos.c) return; this.jump(step[0],step[1]); }
+    bfsPath(sr,sc,tr,tc){ const prev={}; const visited={}; const q=[[sr,sc]]; visited[key(sr,sc)]=true; while(q.length){ const [r,c]=q.shift(); if(r===tr&&c===tc){ const path=[[r,c]]; let cur=key(r,c); while(prev[cur]!==undefined){ const [pr,pc]=prev[cur]; path.unshift([pr,pc]); cur=key(pr,pc); } return path; } for(const n of neighbors(r,c)){ const k=key(n[0],n[1]); if(!visited[k]){ visited[k]=true; prev[k]=[r,c]; q.push([n[0],n[1]]); } } } return null; }
+    status(t){ statusEl.textContent=t; }
+    update(dt){
+      if(this.anim){ this.anim.t+=dt/0.10; if(this.anim.t>=1){ this.land(); } }
+      if(!this.over){ this._eT=(this._eT||0)-dt; if(this._eT<=0){ this.moveEnemy(); this._eT=0.7; } }
+      if(this.autoPlay && !this.anim && this.lives>0){ this._aT=(this._aT||0)-dt; if(this._aT<=0){ this.autoStep(); this._aT=0.12; } }
+    }
+    draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      for(let r=0;r<ROWS;r++)for(let c=0;c<=r;c++){ const p=this.cubePos(r,c); const d=this.done[key(r,c)]; ctx.save(); ctx.translate(p.x,p.y); ctx.shadowColor=d?'#3ecf8e':'#b06bff'; ctx.shadowBlur=d?14:8; ctx.fillStyle=d?'#3ecf8e':'#3a2a5e'; const s=this.cellW*0.42; this.diamond(0,0,s); ctx.fill(); ctx.restore(); }
+      const ep=this.cubePos(this.epos.r,this.epos.c); ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=16; ctx.fillStyle='#ff5d6a'; ctx.beginPath(); ctx.arc(ep.x,ep.y,this.cellW*0.3,0,7); ctx.fill(); ctx.restore();
+      let pp; if(this.anim){ const t=this.anim.t; pp={x:this.anim.from.x+(this.anim.to.x-this.anim.from.x)*t, y:this.anim.from.y+(this.anim.to.y-this.anim.from.y)*t- Math.sin(t*Math.PI)*this.cellW*0.5}; } else { pp=this.cubePos(this.player.r,this.player.c); }
+      ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=18; ctx.fillStyle='#ffd54a'; ctx.beginPath(); ctx.arc(pp.x,pp.y,this.cellW*0.34,0,7); ctx.fill(); ctx.restore();
+    }
+    diamond(x,y,s){ ctx.beginPath(); ctx.moveTo(x,y-s); ctx.lineTo(x+s,y); ctx.lineTo(x,y+s); ctx.lineTo(x-s,y); ctx.closePath(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.lives<=0) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._aT=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Qbert();
+})();
+</script>
+</body>
+</html>

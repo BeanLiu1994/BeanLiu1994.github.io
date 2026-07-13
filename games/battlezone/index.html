@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06080d" />
+<title>装甲对决 · Neon Battlezone</title>
+<style>
+  :root { --bg:#06080d; --surface:#0d111a; --board:#04060a; --text:#e8f0ff; --muted:#7d8aa0; --accent:#39c0ff; --accent2:#ff5db0; --accent-glow:#39c0ff55; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0e2233 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #0a0f16 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.4rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#39c0ff,#ff5db0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 9px; text-align:center; min-width:52px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04140d; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04140d; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>装甲对决</h1><div class="sub">N E O N &nbsp; B A T T L E Z O N E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Win</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="440" height="440"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">方向键/WASD 行驶，空格开火；触屏拖动转向并前进。自动模式双坦由 AI 对决。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const BEST_KEY='battlezone_best';
+  function norm(a){ while(a>Math.PI)a-=2*Math.PI; while(a<-Math.PI)a+=2*Math.PI; return a; }
+
+  class Battlezone {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.W=440; this.H=440;
+      this.best=parseInt(localStorage.getItem(BEST_KEY)||'0',10)||0; bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      canvas.addEventListener('pointerup',e=>this.onUp(e));
+      canvas.addEventListener('pointercancel',e=>this.onUp(e));
+      canvas.addEventListener('pointermove',e=>this.onMove(e));
+      window.addEventListener('keydown',e=>this.keys[e.key.toLowerCase()]=true);
+      window.addEventListener('keyup',e=>this.keys[e.key.toLowerCase()]=false);
+      this.keys={}; this.ptr={down:false,x:0,y:0};
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||440,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.M=w*0.06; }
+
+    resetTanks(){
+      const W=this.W, H=this.H, M=this.M;
+      this.player={x:W*0.5,y:H-M*2.2,ang:Math.PI,cd:0,hp:3,r:W*0.032,col:'#39c0ff'};
+      this.enemy={x:W*0.5,y:M*2.2,ang:0,cd:0,hp:3,r:W*0.032,col:'#ff5db0'};
+      this.shells=[]; this.roundOver=false; this._overT=0; this._winner=null;
+    }
+    restart(){ this.stopAuto(); this.wins=0; this.losses=0; this.rounds=0; this.t=0; this.resetTanks(); scoreEl.textContent=0; this.status('方向键/WASD 行驶，空格开火；触屏拖动转向并前进。自动模式双坦由 AI 对决。'); }
+
+    status(t){ statusEl.textContent=t; }
+
+    aiControl(tank, foe){
+      const dAng=norm(Math.atan2(foe.y-tank.y, foe.x-tank.x) - tank.ang);
+      let turn=0; if(Math.abs(dAng)>0.05) turn=Math.sign(dAng);
+      const dist=Math.hypot(foe.x-tank.x, foe.y-tank.y);
+      let thrust=0;
+      // weave offset for dodging
+      const weave=Math.sin(this.t*1.7 + (tank===this.player?0:2))*0.5;
+      const aim=Math.atan2(foe.y-tank.y, foe.x-tank.x)+weave*0.5;
+      const dA2=norm(aim - tank.ang);
+      if(Math.abs(dA2)>0.05) turn=Math.sign(dA2);
+      if(dist>this.W*0.42) thrust=1; else if(dist<this.W*0.22) thrust=-1;
+      let fire=false; if(Math.abs(dAng)<0.13 && tank.cd<=0) fire=true;
+      return {turn,thrust,fire};
+    }
+    manualControl(tank, foe){
+      let turn=0,thrust=0,fire=false;
+      const k=this.keys;
+      if(k['arrowleft']||k['a']) turn-=1;
+      if(k['arrowright']||k['d']) turn+=1;
+      if(k['arrowup']||k['w']) thrust+=1;
+      if(k['arrowdown']||k['s']) thrust-=1;
+      if(k[' ']||k['spacebar']) fire=true;
+      if(this.ptr.down){ const dx=this.ptr.x-tank.x, dy=this.ptr.y-tank.y; const desired=Math.atan2(dy,dx); const dA=norm(desired-tank.ang); if(Math.abs(dA)>0.04) turn=Math.sign(dA); if(Math.hypot(dx,dy)>tank.r*1.6) thrust=1; }
+      if(Math.abs(norm(Math.atan2(foe.y-tank.y,foe.x-tank.x)-tank.ang))<0.15) fire=true;
+      return {turn,thrust,fire};
+    }
+
+    fire(tank){
+      const sp=this.W*0.85;
+      this.shells.push({x:tank.x+Math.cos(tank.ang)*tank.r, y:tank.y+Math.sin(tank.ang)*tank.r, vx:Math.cos(tank.ang)*sp, vy:Math.sin(tank.ang)*sp, owner:tank, life:2.2});
+      tank.cd=0.55;
+    }
+
+    stepTank(tank, ctrl, dt){
+      tank.ang += ctrl.turn * 2.6 * dt;
+      if(ctrl.thrust!==0){ tank.x+=Math.cos(tank.ang)*ctrl.thrust*this.W*0.30*dt; tank.y+=Math.sin(tank.ang)*ctrl.thrust*this.W*0.30*dt; }
+      if(tank.cd>0) tank.cd-=dt;
+      const M=this.M;
+      tank.x=Math.max(M,Math.min(this.W-M,tank.x)); tank.y=Math.max(M,Math.min(this.H-M,tank.y));
+      if(ctrl.fire && tank.cd<=0) this.fire(tank);
+    }
+
+    update(dt){
+      this.t+=dt;
+      if(this.roundOver){ this._overT-=dt; if(this._overT<=0){ this.resetTanks(); } return; }
+      const pC = this.autoPlay? this.aiControl(this.player,this.enemy) : this.manualControl(this.player,this.enemy);
+      const eC = this.aiControl(this.enemy,this.player);
+      this.stepTank(this.player,pC,dt);
+      this.stepTank(this.enemy,eC,dt);
+      // shells
+      const M=this.M;
+      for(const s of this.shells){
+        s.x+=s.vx*dt; s.y+=s.vy*dt; s.life-=dt;
+        const foe = s.owner===this.player? this.enemy : this.player;
+        if(Math.hypot(s.x-foe.x,s.y-foe.y) < foe.r+s.owner.r*0.4){ foe.hp--; s.dead=true; if(foe.hp<=0) this.endRound(s.owner); }
+        if(s.x<0||s.x>this.W||s.y<0||s.y>this.H||s.life<=0) s.dead=true;
+      }
+      this.shells=this.shells.filter(s=>!s.dead);
+      if(this.autoPlay && !this.roundOver){ this._aT=(this._aT||0)-dt; }
+    }
+    endRound(winner){
+      this.rounds++; this._autoProgress=this.rounds;
+      if(winner===this.player) this.wins++; else this.losses++;
+      scoreEl.textContent=this.wins;
+      if(this.wins>this.best){ this.best=this.wins; bestEl.textContent=this.best; localStorage.setItem(BEST_KEY,String(this.best)); }
+      this._winner=winner; this.roundOver=true; this._overT=1.3;
+      this.status((winner===this.player?'你':'对手')+'击毁了敌方坦克！比分 '+this.wins+'-'+this.losses);
+      if(this.autoPlay) this._autoNext();
+    }
+    _autoNext(){ /* keep auto across rounds; roundOver timer resets */ }
+
+    onDown(e){ e.preventDefault(); this.ptr.down=true; const r=canvas.getBoundingClientRect(); this.ptr.x=(e.clientX-r.left); this.ptr.y=(e.clientY-r.top); }
+    onMove(e){ if(!this.ptr.down) return; const r=canvas.getBoundingClientRect(); this.ptr.x=(e.clientX-r.left); this.ptr.y=(e.clientY-r.top); }
+    onUp(e){ this.ptr.down=false; }
+
+    draw(){
+      const W=this.W,H=this.H,M=this.M;
+      ctx.clearRect(0,0,W,H);
+      // arena grid
+      ctx.strokeStyle='#39c0ff22'; ctx.lineWidth=1;
+      for(let i=0;i<=10;i++){ const x=M+(W-2*M)*i/10; ctx.beginPath(); ctx.moveTo(x,M); ctx.lineTo(x,H-M); ctx.stroke(); }
+      for(let i=0;i<=10;i++){ const y=M+(H-2*M)*i/10; ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(W-M,y); ctx.stroke(); }
+      ctx.strokeStyle='#39c0ff66'; ctx.lineWidth=2; ctx.strokeRect(M,M,W-2*M,H-2*M);
+      // shells
+      for(const s of this.shells){ ctx.fillStyle='#ffe08a'; ctx.shadowColor='#ffe08a'; ctx.shadowBlur=10; ctx.beginPath(); ctx.arc(s.x,s.y,3,0,7); ctx.fill(); ctx.shadowBlur=0; }
+      // tanks
+      this.drawTank(this.player); this.drawTank(this.enemy);
+      // hp bars
+      this.drawHp(this.player,W*0.5, M*0.6, '#39c0ff', 1);
+      this.drawHp(this.enemy,W*0.5, H-M*0.6, '#ff5db0', -1);
+      if(this.roundOver){ ctx.fillStyle='#000000aa'; ctx.fillRect(0,0,W,H); ctx.fillStyle=(this._winner===this.player)?'#39c0ff':'#ff5db0'; ctx.font='bold 28px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText((this._winner===this.player)?'YOU WIN':'ENEMY WINS', W/2, H/2); }
+    }
+    drawHp(t,x,y,col,dir){ ctx.fillStyle=col; for(let i=0;i<3;i++){ ctx.globalAlpha = i<t.hp?1:0.25; ctx.fillRect(x-18+i*12, y-6, 9, 5); } ctx.globalAlpha=1; }
+    drawTank(t){ ctx.save(); ctx.translate(t.x,t.y); ctx.rotate(t.ang);
+      ctx.strokeStyle=t.col; ctx.shadowColor=t.col; ctx.shadowBlur=12; ctx.lineWidth=2;
+      const r=t.r; ctx.beginPath(); ctx.moveTo(r,0); ctx.lineTo(-r*0.7,r*0.7); ctx.lineTo(-r*0.4,0); ctx.lineTo(-r*0.7,-r*0.7); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-r*0.9,r*0.95); ctx.lineTo(r*0.2,r*0.95); ctx.moveTo(-r*0.9,-r*0.95); ctx.lineTo(r*0.2,-r*0.95); ctx.stroke();
+      // barrel
+      ctx.beginPath(); ctx.moveTo(r*0.9,0); ctx.lineTo(r*1.7,0); ctx.stroke(); ctx.shadowBlur=0; ctx.restore();
+    }
+
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.roundOver) this.resetTanks(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._aT=0; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Battlezone();
+})();
+</script>
+</body>
+</html>

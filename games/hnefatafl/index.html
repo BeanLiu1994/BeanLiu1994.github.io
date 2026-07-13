@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a1410" />
+<title>维京棋 · Hnefatafl</title>
+<style>
+  :root { --bg:#0a1410; --surface:#0e1e16; --board:#07120c; --text:#e8fff2; --muted:#7fb89a; --accent:#3ecf8e; --accent-glow:#3ecf8e55; --gold:#ffd54a; --red:#ff5d6a; --blue:#4d9fff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #143524 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #061008 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:12px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#3ecf8e,#4dffd0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 9px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:0.95rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06120d; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06120d; animation:pulse 1.6s infinite; }
+  @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>维京棋</h1><div class="sub">H N E F A T A F L</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Round</div><div class="value" id="score">1</div></div>
+      <div class="score-card best"><div class="label">Win</div><div class="value" id="best">D0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="420"></canvas></div>
+  <div class="controls">
+    <button class="btn" onclick="game.restart()">Restart</button>
+    <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">攻击者围捕国王；守方把国王走到四角即胜。点选己方棋子再点目标格。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const N=9, THR=[4,4], COR=[[0,0],[0,8],[8,0],[8,8]];
+  function isThrone(r,c){ return r===4&&c===4; }
+  function isCorner(r,c){ return (r===0||r===8)&&(c===0||c===8); }
+  function inB(r,c){ return r>=0&&c>=0&&r<N&&c<N; }
+  class Hnef {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.W=420; this.H=420;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      canvas.addEventListener('pointerdown',e=>this.onDown(e));
+      this.wins={D:0,A:0};
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(r.width||420,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.cs=w/N; }
+    setup(){ const b=[]; for(let r=0;r<N;r++) b.push(new Array(N).fill(null));
+      b[4][4]={type:'king',color:'D'};
+      [[4,3],[4,5],[3,4],[5,4],[1,4],[7,4],[4,1],[4,7]].forEach(([r,c])=>b[r][c]={type:'soldier',color:'D'});
+      const att=[[0,3],[0,4],[0,5],[1,0],[1,8],[2,4],[3,0],[3,8],[5,0],[5,8],[6,4],[7,0],[7,8],[8,3],[8,4],[8,5]];
+      att.forEach(([r,c])=>b[r][c]={type:'soldier',color:'A'});
+      return b; }
+    restart(){ this.stopAuto(); this.round=1; scoreEl.textContent=1; this.newGame(); this.status('攻击者围捕国王；守方把国王走到四角即胜。'); }
+    newGame(){ this.board=this.setup(); this.turn='A'; this.sel=null; this.over=null; this.anim=null; this.ply=0; this.lastMove=null; }
+    movesFor(r,c){ const p=this.board[r][c]; if(!p) return []; const out=[]; const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; for(const [dr,dc] of dirs){ let nr=r+dr,nc=c+dc; while(inB(nr,nc)&&!this.board[nr][nc]){ if(isThrone(nr,nc)){ if(p.type==='king') out.push([nr,nc]); } else if(isCorner(nr,nc)){ if(p.type==='king') out.push([nr,nc]); } else out.push([nr,nc]); nr+=dr; nc+=dc; } } return out; }
+    scan(r,c,dr,dc){ let nr=r+dr,nc=c+dc; while(inB(nr,nc)){ if(this.board[nr][nc]) return {color:this.board[nr][nc].color}; if(isThrone(nr,nc)||isCorner(nr,nc)) return {hostile:true}; nr+=dr; nc+=dc; } return {hostile:true}; }
+    sideKill(s,b,mover){ if(!s) return false; return s.hostile||(s.color===mover); }
+    checkCaptures(mover){ const cap=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const pce=this.board[r][c]; if(!pce||pce.color===mover) continue;
+        if(pce.type==='king'){ let dead=true; for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=r+dr,nc=c+dc; const s=(inB(nr,nc))?this.board[nr][nc]:null; const hostile=!inB(nr,nc)||(s&&s.color===mover)||isThrone(nr,nc)||isCorner(nr,nc); if(!hostile) dead=false; } if(dead) cap.push([r,c]); }
+        else { let dead=false; const axes=[[[0,1],[0,-1]],[[1,0],[-1,0]]]; for(const [a,b] of axes){ const L=this.scan(r,c,a[0],a[1]); const R=this.scan(r,c,b[0],b[1]); if(this.sideKill(L,mover)&&this.sideKill(R,mover)) dead=true; } if(dead) cap.push([r,c]); }
+      } for(const [r,c] of cap) this.board[r][c]=null; return cap.length; }
+    applyMove(from,to){ this.board[to[0]][to[1]]=this.board[from[0]][from[1]]; this.board[from[0]][from[1]]=null; this.lastMove={from,to}; }
+    kingPos(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if(this.board[r][c]&&this.board[r][c].type==='king') return [r,c]; } return null; }
+    checkEnd(){ const k=this.kingPos(); if(!k) return 'A'; if(isCorner(k[0],k[1])) return 'D'; return null; }
+    doTurn(move){ if(this.over) return; const from=move.from,to=move.to; this.anim={from:this.cp(from),to:this.cp(to),t:0,apply:()=>{ this.applyMove(from,to); this.checkCaptures(this.turn); this.ply++; const end=this.checkEnd(); if(end){ this.over=end; this.wins[end]++; bestEl.textContent='D'+this.wins.D+'/A'+this.wins.A; this.status((end==='D'?'🛡 守方胜！国王抵达角':'⚔ 攻方胜！国王被擒')+' 第'+this.round+'局。'); if(this.autoPlay) this._autoNext(); } else { this.turn=this.turn==='A'?'D':'A'; } } }; }
+    cp(rc){ const cs=this.cs; return {x:rc[1]*cs+cs/2,y:rc[0]*cs+cs/2}; }
+    bestMove(side){ let best=null,bs=-1e9; const all=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const p=this.board[r][c]; if(!p||p.color!==side) continue; for(const m of this.movesFor(r,c)) all.push({from:[r,c],to:m}); }
+      if(!all.length) return null;
+      for(const mv of all){ const sc=this.evalMove(side,mv); if(sc>bs){ bs=sc; best=mv; } }
+      return best; }
+    evalMove(side,mv){ const tmp=this.board.map(row=>row.slice()); const p=tmp[mv.from[0]][mv.from[1]]; tmp[mv.to[0]][mv.to[1]]=p; tmp[mv.from[0]][mv.from[1]]=null; const saved=this.board; this.board=tmp; const cap=this.checkCaptures(side); this.board=saved; let sc=cap*130;
+      if(p.type==='king'&&isCorner(mv.to[0],mv.to[1])) sc+=1e6;
+      const k=this.kingPos(); if(k){ const d=Math.abs(mv.to[0]-k[0])+Math.abs(mv.to[1]-k[1]); if(side==='A') sc-=d*4; else if(p.type==='king'){ let md=1e9; for(const [cr,cc] of COR) md=Math.min(md,Math.abs(mv.to[0]-cr)+Math.abs(mv.to[1]-cc)); sc-=md*6; } }
+      return sc; }
+    autoStep(){ if(this.over||this.anim) return; if(this.ply>400){ this.over='D'; this.status('回合过长，判和。第'+this.round+'局。'); if(this.autoPlay) this._autoNext(); return; } const mv=this.bestMove(this.turn); if(!mv){ this.over=this.turn==='A'?'D':'A'; this.status('无路可走，'+(this.over==='D'?'守方':'攻方')+'胜。'); if(this.autoPlay) this._autoNext(); return; } this.doTurn(mv); this._autoProgress=this.ply; }
+    _autoNext(){ this.stopAuto(); this.round++; scoreEl.textContent=this.round; this.newGame(); this.startAuto(); }
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.over||this.anim) return; const r=canvas.getBoundingClientRect(); const c=Math.floor((e.clientX-r.left)/this.cs), rr=Math.floor((e.clientY-r.top)/this.cs); if(!inB(rr,c)) return; if(this.sel){ if(this.movesFor(this.sel[0],this.sel[1]).some(m=>m[0]===rr&&m[1]===c)){ this.doTurn({from:this.sel,to:[rr,c]}); this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].color==='D'){ this.sel=[rr,c]; } else this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].color==='D'){ this.sel=[rr,c]; } }
+    status(t){ statusEl.textContent=t; }
+    update(dt){ if(this.anim){ this.anim.t+=dt/0.25; if(this.anim.t>=1){ const a=this.anim; this.anim=null; a.apply(); } }
+      if(this.autoPlay&&!this.anim&&!this.over){ this._aT=(this._aT||0)-dt; if(this._aT<=0){ this.autoStep(); this._aT=0.5; } } }
+    draw(){ const cs=this.cs,W=this.W; ctx.clearRect(0,0,W,W);
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const x=c*cs,y=r*cs; ctx.fillStyle=((r+c)%2)?'#0c1a12':'#0a160e'; ctx.fillRect(x,y,cs,cs); if(isThrone(r,c)){ ctx.fillStyle='#3ecf8e33'; ctx.fillRect(x+cs*0.3,y+cs*0.3,cs*0.4,cs*0.4);} if(isCorner(r,c)){ ctx.strokeStyle='#ffd54a55'; ctx.lineWidth=2; ctx.strokeRect(x+2,y+2,cs-4,cs-4);} }
+      if(this.lastMove){ const a=this.cp(this.lastMove.from), b=this.cp(this.lastMove.to); ctx.fillStyle='#ffffff10'; ctx.fillRect(a.x-cs/2,a.y-cs/2,cs,cs); ctx.fillRect(b.x-cs/2,b.y-cs/2,cs,cs); }
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){ const p=this.board[r][c]; if(!p) continue; let x=c*cs+cs/2,y=r*cs+cs/2; if(this.anim&&this.anim.from&&this.anim.to&&this.lastMove&&this.lastMove.to[0]===r&&this.lastMove.to[1]===c){} let cx=x,cy=y; if(this.anim){ const ax=this.anim.from.x,ay=this.anim.from.y,bx=this.anim.to.x,by=this.anim.to.y; cx=ax+(bx-ax)*Math.min(1,this.anim.t); cy=ay+(by-ay)*Math.min(1,this.anim.t); } this.piece(cx,cy,cs*0.34,p); }
+    }
+    piece(x,y,rad,p){ ctx.save(); if(p.type==='king'){ ctx.shadowColor='#ffd54a'; ctx.shadowBlur=16; ctx.fillStyle='#ffd54a'; } else if(p.color==='A'){ ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=10; ctx.fillStyle='#ff5d6a'; } else { ctx.shadowColor='#4d9fff'; ctx.shadowBlur=10; ctx.fillStyle='#4d9fff'; } ctx.beginPath(); ctx.arc(x,y,rad,0,7); ctx.fill(); ctx.shadowBlur=0; if(p.type==='king'){ ctx.fillStyle='#0a1410'; ctx.font='bold '+(rad*1.1)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('♔',x,y); } ctx.restore(); }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.newGame(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._aT=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+  }
+  window.game=new Hnef();
+})();
+</script>
+</body>
+</html>
