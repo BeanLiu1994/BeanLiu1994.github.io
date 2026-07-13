@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>变位词查找器 · Anagram Finder</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:140px;line-height:1.5}
+  .res{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:13px;min-height:60px;line-height:1.7}
+  .tag{display:inline-block;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:2px 8px;margin:3px;color:var(--accent)}
+  .grp{margin:8px 0;padding:8px;border-left:3px solid var(--accent);background:var(--bg)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🔤 变位词查找器</h1><div class="sub">找出字母重组得到的单词 · 纯本地</div></div>
+  <div class="toolbar"></div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">模式一 · 单个单词查词库</div>
+      <label>输入单词（内置约 300 个常用英文词）</label>
+      <input id="one" placeholder="listen">
+      <button id="find1" style="margin-top:10px">查找变位词</button>
+      <div class="res" id="r1" style="margin-top:10px">// 结果在此显示</div>
+    </div>
+    <div class="card">
+      <div class="pane-head">模式二 · 自己的词库分组</div>
+      <label>每行一个单词，自动找出互为变位词的组</label>
+      <textarea id="list" placeholder="listen&#10;silent&#10;enlist&#10;cat&#10;act&#10;tac&#10;dog&#10;god"></textarea>
+      <button id="find2" style="margin-top:10px">分组</button>
+      <div id="r2" style="margin-top:10px"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">说明</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7">
+        变位词（Anagram）指用<strong style="color:var(--text)">完全相同的一组字母</strong>重新排列得到的新词，例如
+        <span class="tag">listen</span><span class="tag">silent</span><span class="tag">enlist</span>。<br><br>
+        · 模式一会从内置常用英文词库中匹配；<br>
+        · 模式二可对你的任意词表做变位词组划分，适合解字谜、单词游戏。<br><br>
+        所有计算均在浏览器本地完成，不上传任何数据。
+      </p>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const DICT=("listen silent enlist tinsel inlets cat act tac dog god cricket ticket pocket rocket bucket "+
+    "earth heart hater rathe rate tear tare care acre race cinema iceman angered enraged gardener "+
+    "angel angle glean table bleat stable ablest bales blades stated sated toast stoat "+
+    "night thing right sight tight below elbow bowl "+
+    "save vase avers raves saver arves parse pears reaps spare spear pares master streams towers "+
+    "rescue secure cure saucer sauce arcade post stop spot tops pots opts "+
+    "evil live veil vile dive vide vied diode "+
+    "apt pat tap opt pot top ate eat eta tea "+
+    "now won own owl low cow how who new wen newer renew river liver devil dove "+
+    "ten net yen ant tan nat rat tar art are ear era ape "+
+    "study dusty distrust bird drib meat tame mate team item time mite emit tone note net "+
+    "open nope peon pone poem pome phone hone hope pole lend leap pale peal plea").split(/\s+/).filter(Boolean);
+  const SET=new Set(DICT.map(w=>w.toLowerCase()));
+  const key=s=>s.toLowerCase().split('').sort().join('');
+  function find1(){
+    const w=$('one').value.trim().toLowerCase();
+    if(!w){ $('st').textContent='✗ 请输入单词'; return; }
+    const k=key(w);
+    const matches=[...SET].filter(x=>x!==w && key(x)===k);
+    if(matches.length) $('r1').innerHTML='找到 '+matches.length+' 个：'+matches.map(m=>'<span class="tag">'+m+'</span>').join('');
+    else $('r1').innerHTML='<span style="color:var(--muted)">词库中未找到「'+w+'」的变位词</span>';
+    $('st').textContent='✓ 查询完成';
+  }
+  function find2(){
+    const words=$('list').value.split('\n').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    if(words.length===0){ $('st').textContent='✗ 请输入词库'; return; }
+    const map={};
+    words.forEach(w=>{ const k=key(w); (map[k]=map[k]||[]).push(w); });
+    const groups=Object.values(map).filter(g=>g.length>1)
+      .sort((a,b)=>b.length-a.length);
+    if(groups.length===0){ $('r2').innerHTML='<span style="color:var(--muted)">没有发现互为变位词的组</span>'; $('st').textContent='✓ 完成，无变位词组'; return; }
+    $('r2').innerHTML=groups.map(g=>'<div class="grp"><b style="color:var(--accent)">'+g.length+' 个：</b> '+g.map(x=>'<span class="tag">'+x+'</span>').join('')+'</div>').join('');
+    $('st').textContent='✓ 找到 '+groups.length+' 组变位词';
+  }
+  $('find1').onclick=find1; $('find2').onclick=find2;
+  $('one').addEventListener('keydown',e=>{ if(e.key==='Enter') find1(); });
+})();
+</script>
+</body>
+</html>

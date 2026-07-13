@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随机分组器 · Random Groups</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:200px;line-height:1.5}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row>div{flex:1;min-width:140px}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--bg);color:var(--muted);border:0;padding:8px 14px;font-size:13px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  .groups{display:flex;flex-wrap:wrap;gap:12px}
+  .g{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;min-width:160px;flex:1}
+  .g h3{margin:0 0 8px;font-size:14px;color:var(--accent)}
+  .g li{font-size:13px;padding:3px 0;border-bottom:1px dashed var(--border)}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:200px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🎴 随机分组器</h1><div class="sub">把名单随机分成若干组 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="go">分组</button>
+    <button class="ghost" id="again">重新抽取</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">名单（每行一个）</div>
+      <textarea id="names" placeholder="小明&#10;小红&#10;小刚&#10;小丽&#10;阿强&#10;小美"></textarea>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>分组方式</label>
+          <div class="seg" id="mode">
+            <button data-m="count" class="on">按组数</button>
+            <button data-m="size">按每组人数</button>
+          </div>
+        </div>
+        <div><label id="lbl">组数</label><input id="num" type="number" min="1" value="3"></div>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">分组结果</div>
+      <div class="groups" id="res"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let mode='count';
+  $('mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m;
+    [...$('mode').children].forEach(x=>x.classList.toggle('on',x===b));
+    $('lbl').textContent = mode==='count'?'组数':'每组人数'; });
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function go(){
+    const list=$('names').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(list.length===0){ $('st').textContent='✗ 请先输入名单'; $('res').innerHTML=''; return; }
+    const k=parseInt($('num').value,10);
+    if(!k||k<1){ $('st').textContent='✗ 数量必须 ≥ 1'; return; }
+    let groups;
+    if(mode==='count'){
+      const g=Math.min(k,list.length);
+      groups=Array.from({length:g},()=>[]);
+      shuffle(list).forEach((n,i)=>groups[i%g].push(n));
+    } else {
+      groups=[]; const sh=shuffle(list);
+      for(let i=0;i<sh.length;i+=k) groups.push(sh.slice(i,i+k));
+    }
+    let html='';
+    groups.forEach((g,i)=>{
+      html+='<div class="g"><h3>第 '+(i+1)+' 组 · '+g.length+' 人</h3><ol style="margin:0;padding-left:20px">'+g.map(x=>'<li>'+x+'</li>').join('')+'</ol></div>';
+    });
+    $('res').innerHTML=html;
+    $('st').textContent='✓ 已将 '+list.length+' 人分为 '+groups.length+' 组';
+  }
+  $('go').onclick=go; $('again').onclick=go;
+  $('names').addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.ctrlKey) go(); });
+})();
+</script>
+</body>
+</html>

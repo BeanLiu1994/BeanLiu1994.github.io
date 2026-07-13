@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电子名片生成器 · vCard Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:120px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:140px}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:340px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🪪 电子名片生成器</h1><div class="sub">生成 vCard / MeCard 联系人 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="gen">生成</button>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="dl">下载</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">联系人信息</div>
+      <div class="row">
+        <div><label>姓 Last</label><input id="last" value="Liu"></div>
+        <div><label>名 First</label><input id="first" value="Peng"></div>
+      </div>
+      <label>组织 / 公司</label><input id="org" value="Bean Studio">
+      <label>职务 / 头衔</label><input id="title" value="Developer">
+      <div class="row">
+        <div><label>手机</label><input id="tel" value="+86 138 0000 0000"></div>
+        <div><label>电话</label><input id="phone" value=""></div>
+      </div>
+      <label>邮箱</label><input id="email" value="njueebeanliu@hotmail.com">
+      <label>网站</label><input id="url" value="https://github.com/BeanLiu1994">
+      <label>地址</label><input id="addr" value="Nanjing, China">
+      <label>备注</label><textarea id="note">GitHub Pages 爱好者</textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head"><span>输出（<select id="fmt" style="width:auto;padding:2px 6px;display:inline-block"><option value="vcard">vCard 3.0</option><option value="mecard">MeCard</option></select>）</span></div>
+      <pre id="out">// 填写信息后点击「生成」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function val(id){return $(id).value.trim()}
+  function build(){
+    const fmt=$('fmt').value;
+    const first=val('first'),last=val('last'),org=val('org'),title=val('title'),
+      tel=val('tel'),phone=val('phone'),email=val('email'),url=val('url'),addr=val('addr'),note=val('note');
+    let out;
+    if(fmt==='mecard'){
+      let s='MECARD:';
+      if(first||last) s+='N:'+(last+' '+first).trim()+';';
+      if(tel) s+='TEL:'+tel+';';
+      if(phone) s+='TEL:'+phone+';';
+      if(email) s+='EMAIL:'+email+';';
+      if(note) s+='NOTE:'+note+';';
+      if(url) s+='URL:'+url+';';
+      if(addr) s+='ADR:'+addr+';';
+      s+=';'; out=s;
+    } else {
+      let s='BEGIN:VCARD\nVERSION:3.0\n';
+      const full=(first+' '+last).trim();
+      s+='FN:'+full+'\n';
+      if(last||first) s+='N:'+last+';'+first+';;;\n';
+      if(org) s+='ORG:'+org+'\n';
+      if(title) s+='TITLE:'+title+'\n';
+      if(tel) s+='TEL;TYPE=CELL:'+tel+'\n';
+      if(phone) s+='TEL;TYPE=WORK:'+phone+'\n';
+      if(email) s+='EMAIL;TYPE=INTERNET:'+email+'\n';
+      if(url) s+='URL:'+url+'\n';
+      if(addr) s+='ADR;TYPE=HOME:;;'+addr+';;;;\n';
+      if(note) s+='NOTE:'+note+'\n';
+      s+='END:VCARD'; out=s;
+    }
+    $('out').textContent=out;
+    $('st').textContent='✓ 已生成 '+fmt+' 名片'+(val('first')||val('last')?'：'+(val('first')+' '+val('last')).trim():'');
+  }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function dl(){ const ext=$('fmt').value==='mecard'?'vcf':'vcf'; const b=new Blob([$('out').textContent],{type:'text/vcard'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='contact.vcf'; a.click(); }
+  $('gen').onclick=build; $('copy').onclick=copy; $('dl').onclick=dl; $('fmt').onchange=build;
+})();
+</script>
+</body>
+</html>

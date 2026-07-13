@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML5 模板生成器</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:260px;font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.5}
+  .opt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin:8px 0;cursor:pointer}
+  .opt input{width:auto}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:360px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:Consolas,Menlo,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🧱 HTML5 模板生成器</h1><div class="sub">一键生成干净自包含的 HTML5 骨架 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="gen">生成</button>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="dl">下载</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">选项</div>
+      <label>页面标题</label><input id="title" value="我的网页">
+      <label>语言 lang</label><input id="lang" value="zh-CN">
+      <label>描述 description</label><input id="desc" value="这是一个示例页面">
+      <label>作者 author</label><input id="author" value="">
+      <label class="opt"><input type="checkbox" id="viewport" checked>包含 viewport（移动端适配）</label>
+      <label class="opt"><input type="checkbox" id="favicon" checked>包含 favicon 链接</label>
+      <label class="opt"><input type="checkbox" id="theme" checked>包含 theme-color</label>
+      <label class="opt"><input type="checkbox" id="reset">引入简易 CSS Reset</label>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">index.html</div>
+      <pre id="out">// 设置选项后点击「生成」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function build(){
+    const title=$('title').value.trim()||'Document';
+    const lang=$('lang').value.trim()||'en';
+    const desc=$('desc').value.trim(), author=$('author').value.trim();
+    const vp=$('viewport').checked, fav=$('favicon').checked, th=$('theme').checked, rs=$('reset').checked;
+    let h='<!DOCTYPE html>\n<html lang="'+lang+'">\n<head>\n  <meta charset="UTF-8">\n';
+    if(vp) h+='  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n';
+    h+='  <title>'+title+'</title>\n';
+    if(desc) h+='  <meta name="description" content="'+desc+'">\n';
+    if(author) h+='  <meta name="author" content="'+author+'">\n';
+    if(th) h+='  <meta name="theme-color" content="#4f9cff">\n';
+    if(fav) h+='  <link rel="icon" href="favicon.ico">\n';
+    if(rs) h+='  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:system-ui,sans-serif;line-height:1.6;padding:24px}\n  </style>\n';
+    h+='</head>\n<body>\n  <h1>'+title+'</h1>\n  <p>Hello, world!</p>\n</body>\n</html>\n';
+    $('out').textContent=h;
+    $('st').textContent='✓ 已生成 HTML5 模板';
+  }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function dl(){ const b=new Blob([$('out').textContent],{type:'text/html'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='index.html'; a.click(); }
+  $('gen').onclick=build; $('copy').onclick=copy; $('dl').onclick=dl; build();
+})();
+</script>
+</body>
+</html>

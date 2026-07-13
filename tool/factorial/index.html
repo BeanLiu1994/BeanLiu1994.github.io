@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大数阶乘计算器 · Factorial</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit}
+  textarea{resize:vertical;min-height:200px;font-family:Consolas,Menlo,monospace;font-size:13px;line-height:1.5}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;flex:1;min-width:120px}
+  .stat b{display:block;color:var(--accent);font-size:16px}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:320px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:Consolas,Menlo,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🧮 大数阶乘计算器</h1><div class="sub">BigInt 精确计算 n! · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="calc">计算</button>
+    <button class="ghost" id="copy">复制结果</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入</div>
+      <label>n（非负整数，建议 ≤ 100000）</label>
+      <input id="n" value="20" inputmode="numeric">
+      <div class="stats" id="stats"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">n! 结果</div>
+      <pre id="out">// 输入 n 后点击「计算」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function fact(n){
+    let r=1n;
+    for(let i=2n;i<=n;i++) r*=i;
+    return r;
+  }
+  function trailingZeros(n){
+    let c=0; for(let p=5;p<=n;p*=5) c+=Math.floor(n/p); return c;
+  }
+  function calc(){
+    const raw=$('n').value.trim();
+    const n=parseInt(raw,10);
+    if(!/^\d+$/.test(raw)){ $('st').textContent='✗ 请输入非负整数'; return; }
+    if(n>100000){ $('st').textContent='⚠ n 过大可能卡顿，已照常计算'; }
+    const t0=performance.now();
+    const r=fact(BigInt(n));
+    const t1=performance.now();
+    const s=r.toString();
+    const len=s.length;
+    const first=s.slice(0,20), last=s.slice(-20);
+    const sci=first+ 'e'+(len-1);
+    $('out').textContent=s;
+    $('stats').innerHTML=
+      '<div class="stat"><b>'+len+'</b>位数</div>'+
+      '<div class="stat"><b>'+trailingZeros(n)+'</b>末尾零</div>'+
+      '<div class="stat"><b>'+(t1-t0).toFixed(1)+' ms</b>耗时</div>'+
+      '<div class="stat"><b>'+sci+'</b>科学计数</div>';
+    $('st').textContent='✓ '+n+'! = '+len+' 位';
+  }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制结果'); }
+  $('calc').onclick=calc; $('copy').onclick=copy;
+  $('n').addEventListener('keydown',e=>{ if(e.key==='Enter') calc(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.htaccess 生成器</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea,select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:240px;font-family:Consolas,Menlo,monospace;font-size:12px;line-height:1.5}
+  .opt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin:8px 0;cursor:pointer}
+  .opt input{width:auto}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:340px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:Consolas,Menlo,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>⚙️ .htaccess 生成器</h1><div class="sub">勾选常见规则，生成 Apache 配置 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="gen">生成</button>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="dl">下载</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">规则选项</div>
+      <label class="opt"><input type="checkbox" id="www" data-v="www">强制 www 跳转（example.com → www.example.com）</label>
+      <label class="opt"><input type="checkbox" id="nowww" data-v="nowww">强制非 www 跳转</label>
+      <label class="opt"><input type="checkbox" id="https" data-v="https">强制 HTTPS</label>
+      <label class="opt"><input type="checkbox" id="listing" data-v="listing">关闭目录列表</label>
+      <label class="opt"><input type="checkbox" id="gzip" data-v="gzip">开启 Gzip 压缩</label>
+      <label class="opt"><input type="checkbox" id="cache" data-v="cache">开启浏览器缓存</label>
+      <label class="opt"><input type="checkbox" id="hotlink" data-v="hotlink">防盗链（禁止外站图片）</label>
+      <label class="opt"><input type="checkbox" id="c404" data-v="c404">自定义 404 页面</label>
+      <label class="opt"><input type="checkbox" id="trail" data-v="trail">去除 URL 末尾斜杠</label>
+      <label>自定义 404 路径（如 /404.html）</label><input id="c404path" value="/404.html" disabled>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head"><span>.htaccess</span><span id="cnt" style="color:var(--accent)"></span></div>
+      <pre id="out">// 勾选规则后点击「生成」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const sel={};
+  $('c404').onchange=()=>{ $('c404path').disabled=!$('c404').checked; };
+  function build(){
+    const rules=[]; const L=[]; const add=(c)=>rules.push(c.trim());
+    if($('https').checked) add(`
+# 强制 HTTPS
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]`);
+    if($('www').checked) add(`
+# 强制 www
+RewriteEngine On
+RewriteCond %{HTTP_HOST} ^example\\.com [NC]
+RewriteRule ^(.*)$ https://www.example.com/$1 [L,R=301]`);
+    if($('nowww').checked) add(`
+# 强制非 www
+RewriteEngine On
+RewriteCond %{HTTP_HOST} ^www\\.(.+)$ [NC]
+RewriteRule ^(.*)$ https://%1/$1 [L,R=301]`);
+    if($('listing').checked) add(`
+# 关闭目录列表
+Options -Indexes`);
+    if($('gzip').checked) add(`
+# Gzip 压缩
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>`);
+    if($('cache').checked) add(`
+# 浏览器缓存
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpg "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType text/css "access plus 1 week"
+  ExpiresByType application/javascript "access plus 1 week"
+</IfModule>`);
+    if($('hotlink').checked) add(`
+# 防盗链
+RewriteEngine On
+RewriteCond %{HTTP_REFERER} !^$
+RewriteCond %{HTTP_REFERER} !^https://(www\\.)?example\\.com [NC]
+RewriteRule \\.(jpg|jpeg|png|gif|webp)$ - [F]`);
+    if($('trail').checked) add(`
+# 去除末尾斜杠
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.+)/$ /$1 [L,R=301]`);
+    if($('c404').checked) add(`
+# 自定义 404
+ErrorDocument 404 ${$('c404path').value.trim()||'/404.html'}`);
+    if(rules.length===0){ $('out').textContent='# 未选择任何规则'; $('cnt').textContent=''; $('st').textContent='✗ 请至少勾选一项'; return; }
+    const out='# .htaccess 由 WorkBuddy 生成\n'+rules.join('\n\n')+'\n';
+    $('out').textContent=out; $('cnt').textContent=rules.length+' 条规则';
+    $('st').textContent='✓ 已生成 '+rules.length+' 条规则（请将 example.com 改为你的域名）';
+  }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function dl(){ const b=new Blob([$('out').textContent],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='.htaccess'; a.click(); }
+  $('gen').onclick=build; $('copy').onclick=copy; $('dl').onclick=dl;
+})();
+</script>
+</body>
+</html>

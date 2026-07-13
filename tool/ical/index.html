@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日历事件生成器 · iCalendar (.ics)</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:80px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:140px}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:340px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>📅 日历事件生成器</h1><div class="sub">生成可导入日历的 .ics 文件 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="gen">生成</button>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="dl">下载</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">事件信息</div>
+      <label><input type="checkbox" id="allday" style="width:auto;margin-right:6px">全天事件</label>
+      <label>标题</label><input id="sum" value="团队周会">
+      <div class="row">
+        <div><label>开始时间</label><input id="start" type="datetime-local" value="2026-07-20T14:00"></div>
+        <div><label>结束时间</label><input id="end" type="datetime-local" value="2026-07-20T15:00"></div>
+      </div>
+      <label>地点</label><input id="loc" value="线上会议">
+      <label>描述</label><textarea id="desc">每周例会，讨论进度。</textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">event.ics</div>
+      <pre id="out">// 填写事件信息后点击「生成」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function pad(n){return String(n).padStart(2,'0')}
+  function toICS(d){ // local -> floating UTC for DTSTART/DTEND (Z)
+    const dt=new Date(d); if(isNaN(dt)) return '';
+    return dt.getUTCFullYear()+pad(dt.getUTCMonth()+1)+pad(dt.getUTCDate())+'T'+pad(dt.getUTCHours())+pad(dt.getUTCMinutes())+pad(dt.getUTCSeconds())+'Z';
+  }
+  function toDateOnly(d){ const dt=new Date(d); if(isNaN(dt)) return ''; return dt.getUTCFullYear()+pad(dt.getUTCMonth()+1)+pad(dt.getUTCDate()); }
+  function build(){
+    const sum=$('sum').value.trim()||'事件', allday=$('allday').checked;
+    let start=$('start').value, end=$('end').value;
+    if(!start){ $('st').textContent='✗ 请填写开始时间'; return; }
+    if(!end) end=start;
+    const loc=$('loc').value.trim(), desc=$('desc').value.trim();
+    const dtstart=allday?toDateOnly(start):toICS(start);
+    const dtend=allday?toDateOnly(new Date(new Date(end).getTime()+86400000)):toICS(end);
+    const stamp=toICS(new Date().toISOString());
+    const uid='evt-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'@workbuddy';
+    let ics='BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//WorkBuddy//iCal Generator//CN\nCALSCALE:GREGORIAN\nBEGIN:VEVENT\n';
+    ics+='UID:'+uid+'\n';
+    ics+='DTSTAMP:'+stamp+'\n';
+    ics+='DTSTART'+(allday?';VALUE=DATE':'')+':'+dtstart+'\n';
+    ics+='DTEND'+(allday?';VALUE=DATE':'')+':'+dtend+'\n';
+    ics+='SUMMARY:'+sum.replace(/\n/g,'\\n')+'\n';
+    if(loc) ics+='LOCATION:'+loc.replace(/\n/g,'\\n')+'\n';
+    if(desc) ics+='DESCRIPTION:'+desc.replace(/\n/g,'\\n')+'\n';
+    ics+='END:VEVENT\nEND:VCALENDAR\n';
+    $('out').textContent=ics;
+    $('st').textContent='✓ 已生成 .ics 事件「'+sum+'」';
+  }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function dl(){ const b=new Blob([$('out').textContent],{type:'text/calendar'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='event.ics'; a.click(); }
+  $('gen').onclick=build; $('copy').onclick=copy; $('dl').onclick=dl;
+  $('allday').onchange=()=>{ const dis=$('allday').checked; $('start').type=dis?'date':'datetime-local'; $('end').type=dis?'date':'datetime-local'; };
+})();
+</script>
+</body>
+</html>

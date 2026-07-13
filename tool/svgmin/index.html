@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG 压缩器 · SVG Minifier</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;font-family:Consolas,Menlo,monospace;resize:vertical;min-height:240px;line-height:1.5}
+  .row{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:340px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:Consolas,Menlo,monospace}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🗜️ SVG 压缩器</h1><div class="sub">去除注释/冗余空白，安全精简 SVG · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="min">压缩</button>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="dl">下载</button>
+    <button class="ghost" id="fmt">格式化</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入 SVG</div>
+      <textarea id="src" placeholder="<svg xmlns=&quot;http://www.w3.org/2000/svg&quot;>&#10;  <circle cx=&quot;50&quot; cy=&quot;50&quot; r=&quot;40&quot; />&#10;</svg>"></textarea>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head"><span>输出</span><span id="stat" style="color:var(--accent)"></span></div>
+      <pre id="out">// 粘贴 SVG 后点击「压缩」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function minify(s){
+    s=s.replace(/<!--[\s\S]*?-->/g,'');                 // 注释
+    s=s.replace(/\s+/g,' ');                            // 空白折叠
+    s=s.replace(/>\s+</g,'><');                         // 标签间空白
+    s=s.replace(/\s*\/\s*>/g,'/>');                     // 自闭合
+    s=s.replace(/\s*=\s*/g,'=');                        // 属性等号
+    s=s.replace(/\s*([<>])\s*/g,'$1');                  // 尖括号外空白
+    s=s.replace(/\s+"/g,'"').replace(/"\s+/g,'"');
+    return s.trim();
+  }
+  function pretty(s){
+    s=s.replace(/></g,'>\n<');
+    let ind=0,out='';
+    s.split('\n').forEach(line=>{
+      const t=line.trim();
+      if(!t) return;
+      if(/^<\//.test(t)) ind=Math.max(0,ind-1);
+      out+='  '.repeat(ind)+t+'\n';
+      if(/^<[^/!?][^>]*[^\/]>$/.test(t) && !/^<.*<\/.*>$/.test(t)) ind++;
+    });
+    return out.trim();
+  }
+  function min(){ const s=$('src').value; if(!s.trim()){ $('st').textContent='✗ 请输入 SVG'; return; }
+    const r=minify(s); show(r); }
+  function show(r){ const a=$('src').value.length, b=r.length;
+    let pct = a? (100*(a-b)/a).toFixed(1):'0';
+    $('out').textContent=r; $('stat').textContent=a+' → '+b+' 字节 (-'+pct+'%)';
+    $('st').textContent='✓ 压缩完成，减小 '+pct+'%';
+  }
+  function fmt(){ const s=$('src').value; if(!s.trim()){ $('st').textContent='✗ 请输入 SVG'; return; }
+    const r=pretty(s); $('out').textContent=r; $('stat').textContent='格式化'; $('st').textContent='✓ 已格式化'; }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function dl(){ const b=new Blob([$('out').textContent],{type:'image/svg+xml'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='min.svg'; a.click(); }
+  $('min').onclick=min; $('fmt').onclick=fmt; $('copy').onclick=copy; $('dl').onclick=dl;
+})();
+</script>
+</body>
+</html>

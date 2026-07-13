@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSS 订阅源生成器 · RSS Feed Generator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+  button.sm{background:var(--panel);color:var(--accent);border:1px solid var(--border);padding:5px 10px;font-size:12px}
+  button:active{transform:translateY(1px)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:120px;line-height:1.5}
+  .item{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--bg)}
+  .item .row{display:flex;gap:8px;flex-wrap:wrap}
+  .item .row>div{flex:1;min-width:130px}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:340px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>📡 RSS 订阅源生成器</h1><div class="sub">填写频道与条目，生成 RSS 2.0 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="gen">生成</button>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="dl">下载</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">频道信息 Channel</div>
+      <label>标题 title</label><input id="c_title" value="我的博客">
+      <label>链接 link</label><input id="c_link" value="https://example.com">
+      <label>描述 description</label><input id="c_desc" value="分享技术与生活">
+      <label>语言 language</label><input id="c_lang" value="zh-CN">
+    </div>
+    <div class="card">
+      <div class="pane-head"><span>条目 Items</span><button class="sm" id="add">+ 添加条目</button></div>
+      <div id="items"></div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head"><span>rss.xml</span><span id="cnt" style="color:var(--accent)"></span></div>
+      <pre id="out">// 填写信息后点击「生成」</pre>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function addItem(d){
+    d=d||{};
+    const el=document.createElement('div'); el.className='item';
+    el.innerHTML='<div class="row"><div><label>标题</label><input class="i_title" value="'+(d.title||'')+'"></div>'+
+      '<div><label>链接</label><input class="i_link" value="'+(d.link||'')+'"></div></div>'+
+      '<label>描述</label><textarea class="i_desc">'+(d.desc||'')+'</textarea>'+
+      '<div class="row" style="margin-top:8px"><div><label>发布时间(可选)</label><input class="i_date" type="datetime-local" value="'+(d.date||'')+'"></div>'+
+      '<div style="display:flex;align-items:flex-end"><button class="sm" style="background:var(--err);color:#fff;border:0">删除</button></div></div>';
+    el.querySelector('button').onclick=()=>el.remove();
+    $('items').appendChild(el);
+  }
+  function fmt(dt){ if(!dt) return ''; const d=new Date(dt); if(isNaN(d)) return ''; return d.toUTCString(); }
+  function build(){
+    const title=$('c_title').value.trim()||'(无标题)', link=$('c_link').value.trim()||'', desc=$('c_desc').value.trim()||'', lang=$('c_lang').value.trim()||'zh-CN';
+    let items=''; let n=0;
+    document.querySelectorAll('#items .item').forEach(it=>{
+      const t=it.querySelector('.i_title').value.trim(), l=it.querySelector('.i_link').value.trim(), d=it.querySelector('.i_desc').value.trim(), dt=it.querySelector('.i_date').value;
+      if(!t && !l) return; n++;
+      items+='    <item>\n      <title>'+esc(t)+'</title>\n      <link>'+esc(l)+'</link>\n      <guid>'+esc(l||t)+'</guid>\n';
+      if(d) items+='      <description>'+esc(d)+'</description>\n';
+      const f=fmt(dt); if(f) items+='      <pubDate>'+f+'</pubDate>\n';
+      items+='    </item>\n';
+    });
+    const xml='<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n'+
+      '    <title>'+esc(title)+'</title>\n    <link>'+esc(link)+'</link>\n    <description>'+esc(desc)+'</description>\n    <language>'+esc(lang)+'</language>\n'+
+      items+'  </channel>\n</rss>\n';
+    $('out').textContent=xml; $('cnt').textContent=n+' 条';
+    $('st').textContent='✓ 已生成，频道「'+title+'」含 '+n+' 条条目';
+  }
+  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function dl(){ const b=new Blob([$('out').textContent],{type:'application/rss+xml'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='rss.xml'; a.click(); }
+  $('add').onclick=()=>addItem(); $('gen').onclick=build; $('copy').onclick=copy; $('dl').onclick=dl;
+  addItem({title:'第一篇文章',link:'https://example.com/post-1',desc:'文章简介…',date:''});
+})();
+</script>
+</body>
+</html>
