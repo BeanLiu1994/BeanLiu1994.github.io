@@ -72,9 +72,11 @@
 <script>
 (function(){
   'use strict';
-  const W=420, H=600, M=24, BR=9, HR=14, FR=0.985;
+  const W=420, H=600, M=24, BR=9, HR=14, FR=0.985, SINK_SPEED=11;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+  // shortest distance from hole center to the ball's movement segment this frame (anti-tunneling)
+  const segDist=(px,py,x,y,hx,hy)=>{ const dx=x-px, dy=y-py; const L2=dx*dx+dy*dy; let t=L2>0?((hx-px)*dx+(hy-py)*dy)/L2:0; t=clamp(t,0,1); const cx=px+dx*t, cy=py+dy*t; return Math.hypot(cx-hx,cy-hy); };
   const LEVELS=[
     { ball:{x:60,y:H-60}, hole:{x:W-60,y:60}, par:2, walls:[ {x:W/2-14,y:120,w:28,h:H-240} ] },
     { ball:{x:60,y:H-60}, hole:{x:W-60,y:H-60}, par:3, walls:[ {x:120,y:0,w:24,h:H-160}, {x:280,y:160,w:24,h:H} ] },
@@ -113,14 +115,26 @@
     }
     bounds(b){ if(b.x<M+b.r){b.x=M+b.r;b.vx=Math.abs(b.vx)*0.9;} if(b.x>W-M-b.r){b.x=W-M-b.r;b.vx=-Math.abs(b.vx)*0.9;} if(b.y<M+b.r){b.y=M+b.r;b.vy=Math.abs(b.vy)*0.9;} if(b.y>H-M-b.r){b.y=H-M-b.r;b.vy=-Math.abs(b.vy)*0.9;} }
     stopped(b){ return b.vx*b.vx+b.vy*b.vy<0.02; }
+    checkSink(b,px,py){
+      const speed=Math.hypot(b.vx,b.vy);
+      const dHole=Math.min(Math.hypot(b.x-this.hole.x,b.y-this.hole.y), segDist(px,py,b.x,b.y,this.hole.x,this.hole.y));
+      return dHole<HR && speed<SINK_SPEED;
+    }
     step(dt){
       if(this.over) return;
       const b=this.ball;
       if(b.vx||b.vy){
-        b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=FR; b.vy*=FR;
-        this.collideWalls(b); this.bounds(b);
-        if(!this.over && Math.hypot(b.x-this.hole.x,b.y-this.hole.y)<HR && Math.hypot(b.vx,b.vy)<6){ this.sink(); return; }
-        if(this.stopped(b)){ b.vx=0; b.vy=0; }
+        // sub-step so physics matches simulate() regardless of frame dt (no lip-outs from fast frames)
+        let rem=dt;
+        while(rem>1e-4 && !this.over){
+          const sdt=Math.min(1,rem);
+          const px=b.x, py=b.y;
+          b.x+=b.vx*sdt; b.y+=b.vy*sdt; b.vx*=FR; b.vy*=FR;
+          this.collideWalls(b); this.bounds(b);
+          if(this.checkSink(b,px,py)){ this.sink(); return; }
+          if(this.stopped(b)){ b.vx=0; b.vy=0; break; }
+          rem-=sdt;
+        }
       } else if(this.cool>0){ this.cool--; if(this.cool===0 && !this.over && this.autoPlay) this.aiPutt(); }
       else if(!this.over && this.autoPlay){ this.cool=6; }
     }
@@ -132,34 +146,29 @@
     }
     simulate(ang,power){
       const dt=1; const b={x:this.ball.x,y:this.ball.y,vx:Math.cos(ang)*power,vy:Math.sin(ang)*power,r:BR};
-      let steps=0, hit=false;
-      for(let i=0;i<800;i++){ steps++;
+      for(let i=0;i<1000;i++){
+        const px=b.x, py=b.y;
         b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=FR; b.vy*=FR;
         this.collideWalls(b); this.bounds(b);
-        if(Math.hypot(b.x-this.hole.x,b.y-this.hole.y)<HR && Math.hypot(b.vx,b.vy)<6){ hit=true; break; }
-        if(b.vx*b.vx+b.vy*b.vy<0.02) break; }
-      return {x:b.x,y:b.y,hit,steps};
+        const speed=Math.hypot(b.vx,b.vy);
+        const dHole=Math.min(Math.hypot(b.x-this.hole.x,b.y-this.hole.y), segDist(px,py,b.x,b.y,this.hole.x,this.hole.y));
+        if(dHole<HR && speed<SINK_SPEED){ return {x:b.x,y:b.y,hit:true,steps:i}; }
+        if(speed<0.02) break;
+      }
+      return {x:b.x,y:b.y,hit:false,steps:1000};
     }
     aiPutt(){
       const h=this.hole; let best=null, bestScore=1e9;
-      // finer angle sweep + more power levels + wider power range
-      const NANG=128, POWERS=[5,7,9,11,13,15,17,19];
+      // wide power range so levels needing a bank shot (around a wall) are still solvable;
+      // scoring prefers a real sink, and among sinks prefers LOWER power (gentler) + fewer steps.
+      const NANG=144, POWERS=[5,7,9,11,13,15,17,19,22];
       for(let a=0;a<NANG;a++){ const ang=a/NANG*Math.PI*2;
         for(const pw of POWERS){
           const s=this.simulate(ang,pw);
-          if(s.hit){ const sc=s.steps*0.01; if(sc<bestScore){ bestScore=sc; best={ang,pw}; } }
-          else { const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<bestScore){ bestScore=d; best={ang,pw}; } }
-        }
-      }
-      // if max power still far away, try even stronger
-      if(bestScore>150){
-        for(const pw of [21,24,27]){
-          for(let a=0;a<NANG;a+=3){ const ang=a/NANG*Math.PI*2;
-            const s=this.simulate(ang,pw);
-            if(s.hit){ bestScore=s.steps*0.01; best={ang,pw}; break; }
-            const d=Math.hypot(s.x-h.x,s.y-h.y); if(d<bestScore){ bestScore=d; best={ang,pw}; }
-          }
-          if(best&&bestScore<50) break;
+          let sc;
+          if(s.hit){ sc = s.steps*0.05 + pw*0.4; }                 // real sink: low power + few steps preferred
+          else { sc = 100000 + Math.hypot(s.x-h.x,s.y-h.y) + pw*0.2; } // a miss is ALWAYS worse than any sink; among misses prefer closer + gentler
+          if(sc<bestScore){ bestScore=sc; best={ang,pw}; }
         }
       }
       if(best) this.putt(Math.cos(best.ang)*best.pw, Math.sin(best.ang)*best.pw);
