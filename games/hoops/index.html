@@ -72,7 +72,7 @@
 <script>
 (function(){
   'use strict';
-  const W=420, H=520, G=0.32, BR=12, RIM=22;
+  const W=420, H=520, G=0.32, BR=12, RIM=30, SCORE_R=60;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
 
@@ -90,7 +90,7 @@
     restart(){
       this.stopAuto(); this.baskets=0; this.streak=0; this.shots=0; this.cool=0; this.over=false;
       this.bx=70; this.by=H-42; this.ball={x:this.bx,y:this.by,vx:0,vy:0,alive:false};
-      this.hoopX=W*0.72; this.hoopY=H*0.38; this.hoopVx=1.1;
+      this.hoopX=W*0.72; this.hoopY=H*0.48; this.hoopVx=0.4;
       document.getElementById('overlay-win').classList.remove('active');
       this.updateUI();
     }
@@ -102,8 +102,8 @@
       const b=this.ball;
       if(b.alive){
         b.prevY=b.y; b.vy+=G*dt; b.x+=b.vx*dt; b.y+=b.vy*dt;
-        // score: crossing hoop plane downward within rim
-        if(b.prevY<this.hoopY && b.y>=this.hoopY && b.vy>0 && Math.abs(b.x-this.hoopX)<RIM){
+        // score: ball entering the capture zone around the hoop (forgiving arcade make)
+        if(Math.hypot(b.x-this.hoopX, b.y-this.hoopY) < SCORE_R){
           this.baskets++; this.streak++; if(this.streak>this.best){ this.best=this.streak; this.saveBest(); } this.updateUI();
           b.alive=false; this.cool=30;
           if(this.streak>0 && this.streak%10===0){ document.getElementById('win-title').textContent=this.streak+' in a row!'; document.getElementById('win-msg').textContent='Keep the streak alive'; document.getElementById('overlay-win').classList.add('active'); setTimeout(()=>document.getElementById('overlay-win').classList.remove('active'),900); }
@@ -136,8 +136,10 @@
       ctx.fillStyle='#2a3a4a'; ctx.beginPath(); ctx.moveTo(lx-28,ly); ctx.lineTo(lx+28,ly); ctx.lineTo(lx+20,floorY); ctx.lineTo(lx-20,floorY); ctx.closePath(); ctx.fill();
       ctx.strokeStyle='#ff9f43'; ctx.lineWidth=2; ctx.shadowColor='#ff9f43'; ctx.shadowBlur=8;
       ctx.beginPath(); ctx.moveTo(lx-24,ly); ctx.lineTo(lx+24,ly); ctx.stroke(); ctx.shadowBlur=0;
-      // backboard
-      ctx.strokeStyle='#3a4a6a'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(W-30,70); ctx.lineTo(W-30,180); ctx.stroke();
+      // backboard (sits just above the rim)
+      ctx.strokeStyle='#3a4a6a'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(W-30,this.hoopY-86); ctx.lineTo(W-30,this.hoopY-6); ctx.stroke();
+      // capture zone (shows the generous make area)
+      ctx.strokeStyle='#ff9f4333'; ctx.lineWidth=1.5; ctx.setLineDash([4,6]); ctx.beginPath(); ctx.arc(this.hoopX,this.hoopY,SCORE_R,0,7); ctx.stroke(); ctx.setLineDash([]);
       // rim
       ctx.shadowColor='#ff9f43'; ctx.shadowBlur=14; ctx.strokeStyle='#ff9f43'; ctx.lineWidth=5;
       ctx.beginPath(); ctx.moveTo(this.hoopX-RIM,this.hoopY); ctx.lineTo(this.hoopX+RIM,this.hoopY); ctx.stroke(); ctx.shadowBlur=0;
@@ -145,8 +147,10 @@
       // net
       ctx.strokeStyle='#ffffff55'; ctx.lineWidth=1;
       for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(this.hoopX+i*RIM/2,this.hoopY); ctx.lineTo(this.hoopX+i*RIM/4,this.hoopY+22); ctx.stroke(); }
-      // aim line
-      if(this.aiming && this.aimNow){ const dx=this.aimNow.x-this.ball.x, dy=this.aimNow.y-this.ball.y; const dl=Math.hypot(dx,dy)||1; const pw=Math.min(160,dl); ctx.strokeStyle='#ffffff88'; ctx.lineWidth=2; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(this.ball.x,this.ball.y); ctx.lineTo(this.ball.x-dx/dl*pw,this.ball.y-dy/dl*pw); ctx.stroke(); ctx.setLineDash([]); }
+      // aim line (points the way the ball will launch: same direction as the drag)
+      if(this.aiming && this.aimNow && this.aimStart){ const dx=this.aimNow.x-this.aimStart.x, dy=this.aimNow.y-this.aimStart.y; const dl=Math.hypot(dx,dy)||1; const pw=Math.min(190, dl*0.07); ctx.strokeStyle='#ffffffcc'; ctx.lineWidth=2; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(this.ball.x,this.ball.y); ctx.lineTo(this.ball.x+dx/dl*pw, this.ball.y+dy/dl*pw); ctx.stroke(); ctx.setLineDash([]); }
+      // first-shot hint
+      if(this.shots===0 && !this.aiming && !this.ball.alive){ ctx.fillStyle='#ffffff66'; ctx.font='13px system-ui'; ctx.textAlign='center'; ctx.fillText('拖拽篮球，朝篮筐方向甩出投篮', W/2, H-58); ctx.textAlign='left'; }
       // ball
       ctx.shadowColor='#ff9f43'; ctx.shadowBlur=14; ctx.fillStyle='#ff9f43'; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,BR,0,7); ctx.fill(); ctx.shadowBlur=0;
       ctx.strokeStyle='#1a0e02'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,BR,0,7); ctx.moveTo(this.ball.x-BR,this.ball.y); ctx.lineTo(this.ball.x+BR,this.ball.y); ctx.stroke();
@@ -156,9 +160,12 @@
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bind(){
       const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
-      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.ball.alive) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); this.aiming=true; this.aimNow=pos(e); });
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.ball.alive) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); this.aiming=true; this.aimStart=pos(e); this.aimNow=pos(e); });
       canvas.addEventListener('pointermove',(e)=>{ if(!this.aiming) return; this.aimNow=pos(e); });
-      canvas.addEventListener('pointerup',()=>{ if(!this.aiming) return; this.aiming=false; const dx=this.aimNow.x-this.ball.x, dy=this.aimNow.y-this.ball.y; const dl=Math.hypot(dx,dy); if(dl<8) return; const power=Math.min(15, dl*0.05); this.shoot(-dx/dl*power, -dy/dl*power); });
+      // Flick-to-shoot: the ball flies in the SAME direction you drag (not opposite).
+      // This avoids the old slingshot trap where the ball sits in the bottom-left corner
+      // with no room to pull back, so it could never launch upward.
+      canvas.addEventListener('pointerup',()=>{ if(!this.aiming) return; this.aiming=false; const dx=this.aimNow.x-this.aimStart.x, dy=this.aimNow.y-this.aimStart.y; const dl=Math.hypot(dx,dy); if(dl<8) return; const power=Math.min(20, dl*0.07); this.shoot(dx/dl*power, dy/dl*power); });
     }
   }
   window.game=new Hoops();
