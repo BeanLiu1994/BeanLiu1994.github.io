@@ -79,21 +79,23 @@
   </div>
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI playing...</span></div>
   <div class="rules-wrap">
-    <details id="rules-details"><summary class="rules-toggle">How to Play</summary>
+    <details id="rules-details" open><summary class="rules-toggle">怎么玩 / How to Play</summary>
       <div class="rules-body">
-        <h3>Controls</h3>
-        <p><b>Tap / Click</b> left side of the table = left flipper | right side = right flipper.</p>
-        <p><b>Keyboard:</b> <b>A / Left Arrow</b> = left flipper, <b>D / Right Arrow</b> = right flipper. Release key to drop.</p>
-        <h3>Scoring</h3>
-        <p>Hit <b>bumpers</b> (3 pink circles) → <b>+100</b> pts each.</p>
-        <p>Hit <b>slingshots</b> (pink triangles at funnel) → <b>+60</b> pts each.</p>
-        <h3>Rules</h3>
-        <p>Keep the ball in play with the flippers. If the ball falls through the center gap → lose a life.</p>
-        <p>You have <b>3 lives</b>. Aim for the highest score!</p>
+        <h3>核心玩法</h3>
+        <p>球会从顶部下落。用底部两块<b>挡板</b>把球<b>接住并弹回上方</b>，别让它从中间的缺口漏下去。这就是弹球的全部乐趣。</p>
+        <h3>操作（关键：要「按住」不是「点一下」）</h3>
+        <p><b>触屏：</b>球往<b>左</b>边落 → <b>按住屏幕左半边</b>抬起左挡板；球往<b>右</b>边落 → 按住右半边。球快到挡板时按住去接。</p>
+        <p><b>键盘：</b><b>A / ←</b> 左挡板，<b>D / →</b> 右挡板。松开键挡板落下。</p>
+        <p>诀窍：看球落向哪一侧，就在它快碰到那侧挡板的一瞬间抬起挡板把它弹上去。</p>
+        <h3>得分</h3>
+        <p>撞<b>圆形缓冲柱</b>（3 个粉色圆）每次 <b>+100</b>；撞漏斗口的<b>三角弹力块</b>每次 <b>+60</b>。</p>
+        <h3>规则</h3>
+        <p>共 <b>3 条命</b>，球从中间缺口漏掉扣 1 条命，扣光即结束。追求最高分！</p>
+        <p><b>Auto 按钮</b>：开启后由 AI 自动拨挡板接球演示，关闭则回到你手动操作。</p>
       </div>
     </details>
   </div>
-  <div class="stats-bar"><span id="lives-stat">Lives: ♥♥♥</span><span id="bumper-stat">Bumpers: 3</span></div>
+  <div class="stats-bar"><span id="lives-stat">Lives: ♥♥♥</span><span id="hint-stat">按住左/右半屏 或 A·D 键接球</span></div>
 </div>
 <script>
 (function(){
@@ -103,7 +105,7 @@
   const G=0.32, R=8, MAXV=11;
   const FL=0.45, LLEN=64; // flipper rest half-angle & length
 
-  function makeBall(){ return { x:W/2+ (Math.random()*2-1)*40, y:70, vx:(Math.random()*2-1)*2, vy:2.5, alive:true }; }
+  function makeBall(){ return { x:W/2+ (Math.random()*2-1)*40, y:70, vx:(Math.random()*2-1)*1.6, vy:1.6, alive:true }; }
 
   // Static table walls (oriented segments). Ball bounces off, never leaks.
   function buildWalls(){
@@ -174,8 +176,12 @@
       if(this.over) return;
       // flippers
       for(let i=0;i<2;i++){ const f=this.flip[i];
-        if(this.autoPlay){ // AI: press when ball low & approaching this side
-          f.active = this.ball.y>H-200 && this.ball.vy>0 && ((i===0&&this.ball.x<=W/2)||(i===1&&this.ball.x>W/2));
+        if(this.autoPlay){ // AI: 只在球真正贴近本侧挡板、且正在下落时才「拨」一下——看得出在打球，而非一直举着当墙
+          const b=this.ball;
+          const onSide = i===0 ? (b.x <= W/2+14) : (b.x >= W/2-14);
+          const descending = b.vy > -0.5;
+          const dist = Math.hypot(b.x-f.px, b.y-f.py); // 球到挡板转轴的距离
+          f.active = onSide && descending && b.y > f.py-150 && dist < 118;
         }
         const tgt=f.active?f.up:f.rest; const sp=6*dt;
         if(f.ang<tgt) f.ang=Math.min(tgt,f.ang+sp); else if(f.ang>tgt) f.ang=Math.max(tgt,f.ang-sp);
@@ -267,6 +273,16 @@
       const b=this.ball; if(b.alive){ const g=ctx.createRadialGradient(b.x-2,b.y-2,1,b.x,b.y,R);
         g.addColorStop(0,'#ffffff'); g.addColorStop(1,'#ff9de0'); ctx.fillStyle=g; ctx.shadowColor='#ff5db1'; ctx.shadowBlur=14;
         ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill(); ctx.shadowBlur=0; }
+      // 新手提示：手动、尚未得分时，在挡板上方标出「按住左/右接球」
+      if(!this.autoPlay && !this.over && this.score===0){
+        ctx.save(); ctx.textAlign='center';
+        ctx.globalAlpha=0.9; ctx.fillStyle='#ffd700'; ctx.font='bold 13px Segoe UI, sans-serif';
+        ctx.fillText('◀ 按住左半屏 / A', 96, 476);
+        ctx.fillText('按住右半屏 / D ▶', W-96, 476);
+        ctx.globalAlpha=0.5; ctx.fillStyle='#e0e0f0'; ctx.font='12px Segoe UI, sans-serif';
+        ctx.fillText('用挡板把下落的球弹回上方', W/2, 330);
+        ctx.restore();
+      }
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; }
