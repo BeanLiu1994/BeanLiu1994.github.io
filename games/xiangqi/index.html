@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#1a0a0a" />
+<title>Xiangqi · 中国象棋</title>
+<style>
+  :root { --bg:#1a0a0a; --surface:#241010; --board:#2a1810; --text:#ffe6e6; --muted:#c89090; --accent:#ffb24d; --accent2:#ff5d6a; --accent-glow:#ffb24d55; --gold:#ffd54a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #301414 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #1a0808 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#ffb24d,#ff5d6a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:50px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; letter-spacing:.5px; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0a0a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0a0a; animation:pulse 1.6s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--glow,transparent);} 50%{box-shadow:0 0 18px var(--glow,transparent),0 0 34px var(--glow,transparent);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>中国象棋</h1><div class="sub">X I A N G Q I</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Red</div><div class="value" id="red">0</div></div>
+      <div class="score-card"><div class="label">Games</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="432" height="484"></canvas></div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">点选己方棋子再点目标格落子 · 自动模式双方由 AI 对弈</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const redEl=document.getElementById('red'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const btnAuto=document.getElementById('btn-auto');
+  const W=canvas.width, H=canvas.height, MX=18, MY=18, COLS=9, ROWS=10;
+  const cw=(W-2*MX)/(COLS-1), ch=(H-2*MY)/(ROWS-1);
+  const PX=c=>MX+c*cw, PY=r=>MY+r*ch;
+  function inB(r,c){ return r>=0&&r<ROWS&&c>=0&&c<COLS; }
+  const VAL={K:10000,R:600,C:285,H:270,E:120,A:120,P:30};
+  const CH={1:{K:'帅',A:'仕',E:'相',H:'马',R:'车',C:'炮',P:'兵'}, '-1':{K:'将',A:'士',E:'象',H:'马',R:'车',C:'炮',P:'卒'}};
+  function inPalace(r,c,s){ if(c<3||c>5) return false; return s===1?(r>=7&&r<=9):(r>=0&&r<=2); }
+  function elephantSide(r,s){ return s===1?(r>=5):(r<=4); }
+  function crossed(r,s){ return s===1?(r<=4):(r>=5); }
+  class Xiangqi {
+    constructor(){
+      this.autoPlay=false; this._last=0; this.time=0; this._autoProgress=0; this._autoCd=0; this.sel=null; this.legalCache=[];
+      this.bestKey='xiangqiGames'; this.games=parseInt(localStorage.getItem(this.bestKey)||'0'); bestEl.textContent=this.games;
+      this.restart(); requestAnimationFrame(this.tick.bind(this));
+    }
+    restart(){ this.board=this._init(); this.turn=1; this.state='play'; this.sel=null; this.lastMove=null; this.winner=''; this._autoCd=0.4; this.overT=0; this.setStatus('红方先行 · 点选棋子落子'); redEl.textContent=this.games; }
+    _init(){ const b=Array.from({length:ROWS},()=>new Array(COLS).fill(null));
+      const back=['R','H','E','A','K','A','E','H','R'];
+      for(let c=0;c<9;c++){ b[0][c]={t:back[c],s:-1}; b[9][c]={t:back[c],s:1}; }
+      b[2][1]={t:'C',s:-1}; b[2][7]={t:'C',s:-1}; b[7][1]={t:'C',s:1}; b[7][7]={t:'C',s:1};
+      for(const c of [0,2,4,6,8]){ b[3][c]={t:'P',s:-1}; b[6][c]={t:'P',s:1}; }
+      return b; }
+    setStatus(t){ statusEl.textContent=t; }
+    pseudo(r,c){ const p=this.board[r][c]; if(!p) return []; const s=p.s, res=[];
+      const add=(nr,nc)=>{ if(!inB(nr,nc)) return; const q=this.board[nr][nc]; if(!q||q.s!==s) res.push([nr,nc]); };
+      if(p.t==='K'){ for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=r+dr,nc=c+dc; if(inPalace(nr,nc,s)) add(nr,nc); } }
+      else if(p.t==='A'){ for(const [dr,dc] of [[1,1],[1,-1],[-1,1],[-1,-1]]){ const nr=r+dr,nc=c+dc; if(inPalace(nr,nc,s)) add(nr,nc); } }
+      else if(p.t==='E'){ for(const [dr,dc] of [[2,2],[2,-2],[-2,2],[-2,-2]]){ const nr=r+dr,nc=c+dc; if(!inB(nr,nc)||!elephantSide(nr,s)) continue; if(this.board[r+dr/2][c+dc/2]) continue; add(nr,nc); } }
+      else if(p.t==='H'){ for(const [dr,dc] of [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[-1,2],[1,-2],[-1,-2]]){ const nr=r+dr,nc=c+dc; if(!inB(nr,nc)) continue; const lr=Math.abs(dr)===2?r+dr/2:r, lc=Math.abs(dc)===2?c+dc/2:c; if(this.board[lr][lc]) continue; add(nr,nc); } }
+      else if(p.t==='R'){ for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ let nr=r+dr,nc=c+dc; while(inB(nr,nc)){ const q=this.board[nr][nc]; if(!q) res.push([nr,nc]); else { if(q.s!==s) res.push([nr,nc]); break; } nr+=dr; nc+=dc; } } }
+      else if(p.t==='C'){ for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ let nr=r+dr,nc=c+dc, scr=false; while(inB(nr,nc)){ const q=this.board[nr][nc]; if(!scr){ if(!q) res.push([nr,nc]); else scr=true; } else { if(q){ if(q.s!==s) res.push([nr,nc]); break; } } nr+=dr; nc+=dc; } } }
+      else if(p.t==='P'){ const f=s===1?-1:1; add(r+f,c); if(crossed(r,s)){ add(r,c-1); add(r,c+1); } }
+      return res; }
+    generals(){ let g1=null,g2=null; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ const p=this.board[r][c]; if(p&&p.t==='K'){ if(p.s===1) g1=[r,c]; else g2=[r,c]; } } return [g1,g2]; }
+    facing(){ const [g1,g2]=this.generals(); if(!g1||!g2||g1[1]!==g2[1]) return false; const c=g1[1]; const lo=Math.min(g1[0],g2[0]), hi=Math.max(g1[0],g2[0]); for(let r=lo+1;r<hi;r++) if(this.board[r][c]) return false; return true; }
+    attacked(r,c,by){ for(let i=0;i<ROWS;i++) for(let j=0;j<COLS;j++){ const p=this.board[i][j]; if(p&&p.s===by){ const mv=this.pseudo(i,j); for(const [a,b] of mv) if(a===r&&b===c) return true; } } return false; }
+    inCheck(s){ const [g1,g2]=this.generals(); const g=s===1?g1:g2; if(!g) return true; return this.attacked(g[0],g[1],-s); }
+    make(r,c,nr,nc){ const cap=this.board[nr][nc]; this.board[nr][nc]=this.board[r][c]; this.board[r][c]=null; return cap; }
+    undo(r,c,nr,nc,cap){ this.board[r][c]=this.board[nr][nc]; this.board[nr][nc]=cap; }
+    legalMoves(s){ const out=[]; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ const p=this.board[r][c]; if(!p||p.s!==s) continue; for(const [nr,nc] of this.pseudo(r,c)){ const cap=this.make(r,c,nr,nc); if(this.inCheck(s)||this.facing()){ this.undo(r,c,nr,nc,cap); continue; } this.undo(r,c,nr,nc,cap); out.push([r,c,nr,nc]); } } return out; }
+    evaluate(){ let sc=0; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ const p=this.board[r][c]; if(!p) continue; let v=VAL[p.t]; if(p.t==='P') v+=(p.s===1?(9-r):r)*3; if(p.t==='H'||p.t==='C') v+=(4-Math.abs(c-4))*2; sc+=v*p.s; } return sc; }
+    aiStep(){ const moves=this.legalMoves(this.turn); if(!moves.length){ this.endGame(3-this.turn); return; }
+      let best=null, bv=-1e9; for(const m of moves){ const cap=this.make(m[0],m[1],m[2],m[3]); const sc=this.evaluate(); this.undo(m[0],m[1],m[2],m[3],cap); const val=this.turn===1?sc:-sc; if(val>bv){ bv=val; best=m; } }
+      this.apply(best); }
+    apply(m){ const cap=this.make(m[0],m[1],m[2],m[3]); this.lastMove=[m[0],m[1],m[2],m[3]]; this.sel=null; this.legalCache=[]; this._autoProgress++;
+      if(this.inCheck(this.turn)){ this.setStatus((this.turn===1?'红':'黑')+' 被将！'); }
+      this.turn=3-this.turn;
+      const lm=this.legalMoves(this.turn); if(!lm.length){ this.endGame(3-this.turn); } }
+    endGame(winner){ this.state='over'; this.winner=winner===1?'红方胜':'黑方胜'; this.overT=1.4; this.games++; bestEl.textContent=this.games; localStorage.setItem(this.bestKey,String(this.games)); this.setStatus('终局：'+this.winner); }
+    toggleAuto(){ this.autoPlay=!this.autoPlay; if(this.autoPlay){ btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; } else { btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); } }
+    startAuto(){ this.autoPlay=true; btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    maybeAuto(dt){ if(!this.autoPlay) return; this._autoCd-=dt; if(this._autoCd>0) return; if(this.state==='over'){ this._autoCd=0.5; return; } this.aiStep(); this._autoCd=0.55; }
+    update(dt){ if(this.state==='over'){ this.overT-=dt; if(this.overT<=0) this.restart(); } this.maybeAuto(dt); }
+    tick(ts){ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts!==undefined?ts:this._last; this.time+=dt; this.update(dt); this.draw(); requestAnimationFrame(this.tick.bind(this)); }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='#2a1810'; ctx.fillRect(0,0,W,H);
+      ctx.strokeStyle='#caa46a'; ctx.lineWidth=1;
+      for(let c=0;c<COLS;c++){ ctx.beginPath(); ctx.moveTo(PX(c),PY(0)); ctx.lineTo(PX(c),PY(ROWS-1)); ctx.stroke(); }
+      for(let r=0;r<ROWS;r++){ const skip=(r===4); ctx.beginPath(); ctx.moveTo(PX(0),PY(r)); ctx.lineTo(PX(COLS-1),PY(r)); ctx.stroke();
+        if(r===0||r===ROWS-1){ ctx.beginPath(); ctx.moveTo(PX(0),PY(r)); ctx.lineTo(PX(COLS-1),PY(r)); ctx.stroke(); } }
+      // palace diagonals
+      ctx.beginPath(); ctx.moveTo(PX(3),PY(0)); ctx.lineTo(PX(5),PY(2)); ctx.moveTo(PX(5),PY(0)); ctx.lineTo(PX(3),PY(2)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PX(3),PY(7)); ctx.lineTo(PX(5),PY(9)); ctx.moveTo(PX(5),PY(7)); ctx.lineTo(PX(3),PY(9)); ctx.stroke();
+      // river text
+      ctx.fillStyle='#a87a4a'; ctx.font='12px Segoe UI'; ctx.textAlign='center'; ctx.fillText('楚 河',PX(2),PY(4)+4); ctx.fillText('漢 界',PX(6),PY(4)+4);
+      if(this.lastMove){ ctx.strokeStyle='#ffb24d88'; ctx.lineWidth=3; const [fr,fc,tr,tc]=this.lastMove; ctx.strokeRect(PX(fc)-cw*0.42,PY(fr)-ch*0.42,cw*0.84,ch*0.84); ctx.strokeRect(PX(tc)-cw*0.42,PY(tr)-ch*0.42,cw*0.84,ch*0.84); }
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ const p=this.board[r][c]; if(!p) continue; const x=PX(c),y=PY(r), rad=Math.min(cw,ch)*0.42;
+        ctx.save(); const col=p.s===1?'#ff5d6a':'#cfd8e8'; ctx.shadowColor=col; ctx.shadowBlur=10; ctx.fillStyle=p.s===1?'#3a1010':'#10141a'; ctx.beginPath(); ctx.arc(x,y,rad,0,6.28); ctx.fill();
+        ctx.lineWidth=2; ctx.strokeStyle=col; ctx.stroke(); ctx.shadowBlur=0; ctx.fillStyle=col; ctx.font='bold '+Math.round(rad*1.1)+'px "Microsoft YaHei",SimHei,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(CH[p.s][p.t],x,y+1); ctx.restore(); }
+      if(this.sel){ const [sr,sc]=this.sel; for(const [nr,nc] of this.legalCache){ ctx.fillStyle='#ffb24d66'; ctx.beginPath(); ctx.arc(PX(nc),PY(nr),Math.min(cw,ch)*0.2,0,6.28); ctx.fill(); } ctx.strokeStyle='#ffb24d'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(PX(sc),PY(sr),Math.min(cw,ch)*0.46,0,6.28); ctx.stroke(); }
+    }
+  }
+  canvas.addEventListener('pointerdown',(e)=>{ if(game.autoPlay||game.state!=='play') return; const rect=canvas.getBoundingClientRect(); const px=(e.clientX-rect.left)*(canvas.width/rect.width), py=(e.clientY-rect.top)*(canvas.height/rect.height); const c=Math.round((px-MX)/cw), r=Math.round((py-MY)/ch); if(!inB(r,c)) return;
+    const p=game.board[r][c];
+    if(game.sel){ const idx=game.legalCache.findIndex(m=>m[0]===r&&m[1]===c); if(idx>=0){ game.apply([game.sel[0],game.sel[1],r,c]); return; } }
+    if(p&&p.s===game.turn){ game.sel=[r,c]; const all=game.legalMoves(game.turn); game.legalCache=all.filter(m=>m[0]===r&&m[1]===c).map(m=>[m[2],m[3]]); game.setStatus((game.turn===1?'红':'黑')+' 走子'); }
+    else { game.sel=null; game.legalCache=[]; }
+  });
+  window.game=new Xiangqi();
+})();
+</script>
+</body>
+</html>

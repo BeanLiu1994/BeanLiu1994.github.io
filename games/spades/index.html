@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a1426" />
+<title>Spades · 霓虹黑桃</title>
+<style>
+  :root { --bg:#0a1426; --surface:#101d33; --board:#0a1322; --text:#e6eeff; --muted:#7f93b8; --accent:#5d9bff; --accent2:#ff8a5d; --accent-glow:#5d9bff55; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #142a4a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #07101d 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#5d9bff,#ff8a5d); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:90px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; letter-spacing:.5px; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06203e; animation:pulse 1.6s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--glow,transparent);} 50%{box-shadow:0 0 18px var(--glow,transparent),0 0 34px var(--glow,transparent);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .hint { margin-top:4px; font-size:0.62rem; color:#5f72a0; text-align:center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Spades</h1><div class="sub">N E O N &nbsp; T R I C K S</div></div>
+    <div class="score-panel">
+      <div class="score-card best"><div class="label">我方</div><div class="value" id="team0">0</div></div>
+      <div class="score-card"><div class="label">对方</div><div class="value" id="team1">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="440"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+    <button class="btn primary" id="btn-new" onclick="game.startRound()">新一局</button>
+  </div>
+  <div class="status" id="status">黑桃为将牌 · 叫墩后出牌，赢取约定墩数得分</div>
+  <div class="hint">触屏/鼠标：轮到你时点击手牌出牌 · 开启 Auto 四名玩家均由 AI 对战</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const team0El=document.getElementById('team0'), team1El=document.getElementById('team1'), statusEl=document.getElementById('status');
+  const btnAuto=document.getElementById('btn-auto');
+  const W=canvas.width, H=canvas.height;
+  const SUIT_SYM=['♠','♥','♦','♣'];
+  const RANK_STR=['','A','2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  function rint(n){ return Math.floor(Math.random()*n); }
+  function lowest(arr){ let b=arr[0]; for(const c of arr) if(c.r<b.r) b=c; return b; }
+  function highest(arr){ let b=arr[0]; for(const c of arr) if(c.r>b.r) b=c; return b; }
+
+  class Spades {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoCd=0; this.time=0; this._autoProgress=0;
+      this.bestKey='spadesBest'; this.best=parseInt(localStorage.getItem(this.bestKey)||'0');
+      this.scores=[0,0]; this.bags=[0,0]; this.round=0;
+      this.phase='idle'; this.pauseT=0; this.roundOverT=0;
+      this.startRound();
+      requestAnimationFrame(this.tick.bind(this));
+    }
+    restart(){ this.scores=[0,0]; this.bags=[0,0]; this.round=0; this._autoProgress=0; this.startRound(); }
+    setStatus(t){ statusEl.textContent=t; }
+    newDeck(){ const d=[]; for(let r=2;r<=14;r++)for(let s=0;s<4;s++)d.push({r,s}); for(let i=d.length-1;i>0;i--){ const j=rint(i+1); const t=d[i]; d[i]=d[j]; d[j]=t; } return d; }
+    startRound(){
+      const d=this.newDeck();
+      this.hands=[[],[],[],[]];
+      for(let i=0;i<52;i++) this.hands[i%4].push(d[i]);
+      for(let s=0;s<4;s++) this.hands[s].sort((a,b)=> a.s-b.s || b.r-a.r);
+      this.dealer=this.round%4;
+      this.bids=[null,null,null,null]; this.bidPtr=0;
+      this.tricksWon=[0,0,0,0]; this.currentTrick=[]; this.leadSuit=null;
+      this.spadesBroken=false; this.turn=(this.dealer+1)%4; this.leadSeat=this.turn;
+      this.phase='bidding'; this.pauseT=0; this._autoCd=0.3;
+      this.setStatus('叫墩中 · 各玩家根据手牌预测能赢的墩数');
+      this.syncScores();
+    }
+    syncScores(){ team0El.textContent=this.scores[0]; team1El.textContent=this.scores[1]; if(this.scores[0]>this.best){ this.best=this.scores[0]; localStorage.setItem(this.bestKey,String(this.best)); } }
+    bidFor(seat){
+      const hand=this.hands[seat]; const spades=hand.filter(c=>c.s===0);
+      let bid=0;
+      for(const c of hand){ if(c.r>=13) bid+=1; else if(c.r===12) bid+=0.5; else if(c.r===11) bid+=0.25; }
+      bid+=Math.max(0,spades.length-3)*0.5;
+      const suits=new Set(hand.map(c=>c.s)); bid+=(4-suits.size)*0.5;
+      let b=Math.round(bid); if(b<0)b=0; if(b>13)b=13; return b;
+    }
+    legalPlays(seat){
+      const hand=this.hands[seat];
+      if(this.currentTrick.length===0){
+        const nonSpades=hand.filter(c=>c.s!==0);
+        if(!this.spadesBroken && nonSpades.length>0) return nonSpades;
+        return hand.slice();
+      }
+      const follow=hand.filter(c=>c.s===this.leadSuit);
+      if(follow.length) return follow;
+      return hand.slice();
+    }
+    currentWinning(){
+      if(this.currentTrick.length===0) return null;
+      const spades=this.currentTrick.filter(t=>t.card.s===0);
+      if(spades.length) return highest(spades);
+      return highest(this.currentTrick);
+    }
+    chooseCard(seat){
+      const legal=this.legalPlays(seat);
+      if(legal.length===1) return legal[0];
+      if(this.currentTrick.length===0){
+        const nonSpades=legal.filter(c=>c.s!==0);
+        if(nonSpades.length) return lowest(nonSpades);
+        return lowest(legal);
+      }
+      const win=this.currentWinning();
+      const winSeat=win.seat; const winOpp=(winSeat%2)!==(seat%2);
+      const follow=legal.filter(c=>c.s===this.leadSuit);
+      if(follow.length){
+        const followWin=win.card.s===this.leadSuit;
+        const hi=followWin?follow.filter(c=>c.r>win.card.r):[];
+        if(winOpp && hi.length) return lowest(hi);
+        return lowest(follow);
+      }
+      const spades=legal.filter(c=>c.s===0);
+      if(spades.length && winOpp && this.tricksLeft()<6) return lowest(spades);
+      return lowest(legal);
+    }
+    tricksLeft(){ return 13-(this.tricksWon[0]+this.tricksWon[1]+this.tricksWon[2]+this.tricksWon[3]); }
+    playCard(seat, card){
+      const idx=this.hands[seat].indexOf(card); if(idx<0) return;
+      this.hands[seat].splice(idx,1);
+      if(this.currentTrick.length===0){ this.leadSuit=card.s; this.leadSeat=seat; }
+      if(card.s===0) this.spadesBroken=true;
+      this.currentTrick.push({seat,card});
+      this._autoProgress++;
+      if(this.currentTrick.length===4){ this.resolveTrick(); }
+      else { this.turn=(this.turn+1)%4; }
+    }
+    resolveTrick(){
+      const win=this.currentWinning(); const w=win.seat;
+      this.tricksWon[w]++;
+      this.turn=w; this.leadSeat=w; this.currentTrick=[]; this.leadSuit=null;
+      this.pauseT=0.45; this._autoProgress++;
+      if((this.tricksWon[0]+this.tricksWon[1]+this.tricksWon[2]+this.tricksWon[3])>=13){ this.scoreRound(); }
+    }
+    scoreRound(){
+      const teamBid=[this.bids[0]+this.bids[2], this.bids[1]+this.bids[3]];
+      const teamWon=[this.tricksWon[0]+this.tricksWon[2], this.tricksWon[1]+this.tricksWon[3]];
+      let msg='';
+      for(let t=0;t<2;t++){
+        if(teamWon[t]>=teamBid[t]){
+          this.scores[t]+=10*teamBid[t]+(teamWon[t]-teamBid[t]);
+          this.bags[t]+=teamWon[t]-teamBid[t];
+          msg+=(t===0?'我方':'对方')+' 叫'+teamBid[t]+'得'+teamWon[t]+' ✓ ';
+        } else {
+          this.scores[t]-=10*teamBid[t];
+          msg+=(t===0?'我方':'对方')+' 叫'+teamBid[t]+'得'+teamWon[t]+' ✗ ';
+        }
+        if(this.bags[t]>=10){ this.scores[t]-=100; this.bags[t]-=10; msg+='(满10袋罚分) '; }
+      }
+      this.syncScores();
+      this.phase='scoring'; this.roundOverT=2.6; this.lastMsg=msg.trim();
+      this.setStatus('本局结束 · '+msg.trim());
+    }
+    humanPlay(card){
+      if(this.phase!=='playing'||this.turn!==0||this.autoPlay) return;
+      const legal=this.legalPlays(0);
+      if(legal.indexOf(card)>=0) this.playCard(0,card);
+    }
+    toggleAuto(){
+      this.autoPlay=!this.autoPlay;
+      if(this.autoPlay){ btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.3; }
+      else { btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    }
+    startAuto(){ this.autoPlay=true; btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.3; }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    maybeAuto(dt){
+      if(this.phase==='bidding'){
+        if(this.bidPtr<4){ this._autoCd-=dt; if(this._autoCd>0) return; this._autoCd=0.45;
+          const seat=this.bidPtr; this.bids[seat]=this.bidFor(seat); this.bidPtr++; this._autoProgress++;
+          if(this.bidPtr>=4){ this.phase='playing'; this.turn=this.leadSeat; this.setStatus('出牌中 · 跟出同花色，无则垫牌或出黑桃将吃'); }
+        }
+        return;
+      }
+      if(this.phase==='playing'){
+        if(this.currentTrick.length>=4){ return; }
+        if(this.turn===0 && !this.autoPlay){ return; }
+        if(this.pauseT>0){ this.pauseT-=dt; return; }
+        this._autoCd-=dt; if(this._autoCd>0) return; this._autoCd=0.4;
+        if(this.turn===0 && !this.autoPlay) return;
+        const c=this.chooseCard(this.turn); this.playCard(this.turn,c);
+        return;
+      }
+      if(this.phase==='scoring'){ this.roundOverT-=dt; if(this.roundOverT<=0){ this.round++; this.startRound(); } return; }
+    }
+    update(dt){ this.maybeAuto(dt); }
+    tick(ts){
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+      this._last=ts!==undefined?ts:this._last; this.time+=dt; this.update(dt); this.draw();
+      requestAnimationFrame(this.tick.bind(this));
+    }
+    _round(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    _card(x,y,w,h,c,faceUp){
+      ctx.save(); this._round(x,y,w,h,5);
+      ctx.shadowColor='#5d9bff44'; ctx.shadowBlur=6; ctx.fillStyle=faceUp?'#f3eeff':'#17263f'; ctx.fill();
+      ctx.shadowBlur=0; ctx.lineWidth=1; ctx.strokeStyle='#ffffff22'; ctx.stroke();
+      if(faceUp){ const red=(c.s===1||c.s===2); ctx.fillStyle=red?'#ff5d6a':'#16263a';
+        ctx.textAlign='left'; ctx.textBaseline='top'; ctx.font='bold '+(h*0.34)+'px Segoe UI'; ctx.fillText(RANK_STR[c.r]||c.r,x+4,y+2);
+        ctx.font=(h*0.4)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(SUIT_SYM[c.s],x+w/2,y+h*0.62); }
+      ctx.restore();
+    }
+    _back(x,y,w,h){ ctx.save(); this._round(x,y,w,h,5); ctx.fillStyle='#17263f'; ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='#5d9bff44'; ctx.stroke(); ctx.fillStyle='#5d9bff66'; ctx.font=(h*0.42)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('♠',x+w/2,y+h/2); ctx.restore(); }
+    _seatLabel(seat,x,y){
+      const names=['你','右家','对家','左家']; const isYou=(seat===0);
+      const active=(this.phase==='playing'&&this.turn===seat)?'#5d9bff':'#7f93b8';
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='bold 12px Segoe UI'; ctx.fillStyle=active;
+      ctx.fillText(names[seat], x, y);
+      ctx.fillStyle='#ffd54a'; ctx.font='11px Segoe UI';
+      const bid=this.bids[seat]; const txt=(bid===null?'·':('叫'+bid))+' 得'+this.tricksWon[seat];
+      ctx.fillText(txt, x, y+15);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      const g=ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,W*0.75);
+      g.addColorStop(0,'#102441'); g.addColorStop(1,'#0a1322'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+      // seats
+      this._back(200,12,22,30); this._seatLabel(2,211,52);
+      this._back(388,200,22,30); this._seatLabel(1,399,240);
+      this._back(10,200,22,30); this._seatLabel(3,21,240);
+      // current trick
+      const cx=W/2, cy=210;
+      const pos={0:[cx,cy+58],1:[cx+58,cy],2:[cx,cy-58],3:[cx-58,cy]};
+      if(this.phase==='bidding'){ ctx.fillStyle='#7f93b8'; ctx.font='bold 14px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('叫墩阶段',cx,cy); }
+      for(const t of this.currentTrick){ const p=pos[t.seat]; this._card(p[0]-16,p[1]-22,32,44,t.card,true); }
+      // your hand
+      const cw=28, ch=40, gap=2, total=cw*13+gap*12, x0=(W-total)/2, y=H-ch-6;
+      this.yourCardRects=[];
+      for(let i=0;i<this.hands[0].length;i++){
+        const c=this.hands[0][i]; const x=x0+i*(cw+gap);
+        const playable=(this.phase==='playing'&&this.turn===0&&!this.autoPlay && this.legalPlays(0).indexOf(c)>=0);
+        if(playable){ ctx.save(); this._round(x-2,y-2,cw+4,ch+4,7); ctx.strokeStyle='#5d9bff'; ctx.lineWidth=2; ctx.shadowColor='#5d9bff'; ctx.shadowBlur=10; ctx.stroke(); ctx.restore(); }
+        this._card(x,y,cw,ch,c,true);
+        this.yourCardRects.push({x,y,w:cw,h:ch,card:c});
+      }
+      // round / phase
+      ctx.fillStyle='#7f93b8'; ctx.font='11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText('第 '+(this.round+1)+' 局 · 黑桃为将'+(this.spadesBroken?' · 已破':''), cx, H-ch-8);
+    }
+  }
+
+  canvas.addEventListener('pointerdown',(e)=>{
+    if(game.phase!=='playing'||game.turn!==0||game.autoPlay) return;
+    const rect=canvas.getBoundingClientRect();
+    const sx=(e.clientX-rect.left)*(W/rect.width), sy=(e.clientY-rect.top)*(H/rect.height);
+    if(!game.yourCardRects) return;
+    for(const r of game.yourCardRects){ if(sx>=r.x&&sx<=r.x+r.w&&sy>=r.y&&sy<=r.y+r.h){ game.humanPlay(r.card); break; } }
+  });
+
+  window.game=new Spades();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#1a1030" />
+<title>Liars · 霓虹吹牛</title>
+<style>
+  :root { --bg:#1a1030; --surface:#241640; --board:#160a26; --text:#f0e6ff; --muted:#a98fd0; --accent:#b15dff; --accent2:#5de1ff; --accent-glow:#b15dff55; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #2a1848 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #140828 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#b15dff,#5de1ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:90px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; letter-spacing:.5px; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#160826; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#160826; animation:pulse 1.6s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--glow,transparent);} 50%{box-shadow:0 0 18px var(--glow,transparent),0 0 34px var(--glow,transparent);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .hint { margin-top:4px; font-size:0.62rem; color:#7a5fa0; text-align:center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Liars</h1><div class="sub">N E O N &nbsp; D I C E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">你</div><div class="value" id="you">5</div></div>
+      <div class="score-card best"><div class="label">胜场</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">CPU</div><div class="value" id="cpu">5</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="320"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-bid" onclick="game.humanBid()">加注 Bid</button>
+    <button class="btn primary" id="btn-call" onclick="game.humanChallenge()">质疑 Call</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">双方各 5 颗骰子 · 叫出某点数出现的总数量，质疑失败者扣一颗骰子</div>
+  <div class="hint">触屏/鼠标：轮到你时点「加注」叫更高的注，「质疑」揭晓 · 开启 Auto 双方由 AI 对战</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const youEl=document.getElementById('you'), cpuEl=document.getElementById('cpu'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const btnAuto=document.getElementById('btn-auto'), btnBid=document.getElementById('btn-bid'), btnCall=document.getElementById('btn-call');
+  const W=canvas.width, H=canvas.height;
+  function rint(n){ return Math.floor(Math.random()*n); }
+  function binomP(n,k,p){ let c=1; for(let i=0;i<k;i++) c=c*(n-i)/(i+1); return c*Math.pow(p,k)*Math.pow(1-p,n-k); }
+  function Pgeq(n,k,p){ if(k<=0) return 1; if(k>n) return 0; let s=0; for(let i=k;i<=n;i++) s+=binomP(n,i,p); return s; }
+
+  class Liars {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoCd=0; this.time=0; this._autoProgress=0;
+      this.bestKey='liarsBest'; this.best=parseInt(localStorage.getItem(this.bestKey)||'0'); bestEl.textContent=this.best;
+      this.wins=0; this.phase='idle'; this.revealT=0; this.matchOverT=0;
+      this.startMatch();
+      requestAnimationFrame(this.tick.bind(this));
+    }
+    restart(){ this.best=parseInt(localStorage.getItem(this.bestKey)||'0'); bestEl.textContent=this.best; this.wins=0; this.startMatch(); }
+    setStatus(t){ statusEl.textContent=t; }
+    startMatch(){ this.dice0=this.roll(5); this.dice1=this.roll(5); this.turn=0; this.bid=null; this.log=[]; this.phase='bidding'; this._autoCd=0.4; this.sync(); }
+    roll(n){ const a=[]; for(let i=0;i<n;i++) a.push(1+rint(6)); return a; }
+    sync(){ youEl.textContent=this.dice0.length; cpuEl.textContent=this.dice1.length; if(this.wins>this.best){ this.best=this.wins; bestEl.textContent=this.best; localStorage.setItem(this.bestKey,String(this.best)); } }
+    totalDice(){ return this.dice0.length+this.dice1.length; }
+    ownDice(seat){ return seat===0?this.dice0:this.dice1; }
+    bidProb(seat,bid){ const own=this.ownDice(seat); let ownC=0; for(const d of own) if(d===bid.f) ownC++; const unknown=this.totalDice()-own.length; const need=Math.max(0,bid.q-ownC); return Pgeq(unknown,need,1/6); }
+    openBid(seat){
+      const own=this.ownDice(seat); const cnt=[0,0,0,0,0,0,0];
+      for(const d of own) cnt[d]++;
+      let f=1,best=0; for(let i=1;i<=6;i++) if(cnt[i]>best){ best=cnt[i]; f=i; }
+      const q=Math.max(1, best+1);
+      return {q,f};
+    }
+    legalRaise(bid){
+      const res=[];
+      for(let q=1;q<=this.totalDice();q++) for(let f=1;f<=6;f++){
+        if(q>bid.q || (q===bid.q && f>bid.f)) res.push({q,f});
+      }
+      return res;
+    }
+    aiMove(seat){
+      if(!this.bid){ const b=this.openBid(seat); return {type:'bid',bid:b}; }
+      const pTrue=this.bidProb(seat,this.bid);
+      if(pTrue<0.30) return {type:'challenge'};
+      const raises=this.legalRaise(this.bid);
+      let best=null,bestP=-1;
+      for(const r of raises){ const p=this.bidProb(seat,r); if(p>bestP){ bestP=p; best=r; } }
+      if(bestP>=0.35) return {type:'bid',bid:best};
+      return {type:'challenge'};
+    }
+    applyBid(seat,b){
+      this.bid=b; this.log.push((seat===0?'你':'CPU')+' 叫 '+b.q+'×'+b.f); this._autoProgress++;
+      this.turn=(seat+1)%2; this._autoCd=0.6; this.setStatus((seat===0?'你':'CPU')+' 叫 '+b.q+' 个 '+b.f+' 点');
+    }
+    challenge(seat){
+      const opp=seat^1;
+      const total=this.dice0.concat(this.dice1).filter(d=>d===this.bid.f).length;
+      const truthful=total>=this.bid.q;
+      // challenger(seat) wins if bid was false
+      const bidderWon=truthful;
+      const loser=bidderWon?seat:opp; // challenger loses if bid true
+      this.reveal=this.bid; this.revealTotal=total; this.revealTruth=truthful;
+      this.log.push((seat===0?'你':'CPU')+' 质疑！实际 '+total+' 个 '+this.bid.f+' 点 → '+((loser===seat)?'质疑者':'叫注者')+' 输');
+      this.phase='reveal'; this.revealT=1.8; this._autoProgress++;
+      this.setStatus('揭晓：共 '+total+' 个 '+this.bid.f+' 点，'+(truthful?'叫注属实':'叫注吹牛')+' · '+(loser===0?'你':'CPU')+' 扣一颗骰子');
+      if(loser===0) this.dice0.pop(); else this.dice1.pop();
+      if(loser===0) this.wins=this.wins; else { this.wins++; }
+      this.sync();
+      this._loser=loser;
+    }
+    afterReveal(){
+      if(this.dice0.length===0 || this.dice1.length===0){
+        const winner=this.dice0.length>0?0:1;
+        this.phase='matchover'; this.matchOverT=2.2;
+        this.setStatus((winner===0?'你':'CPU')+' 赢得本局！'+(winner===0?(' 胜场 '+this.wins):''));
+        if(winner===0){ if(this.wins>this.best){ this.best=this.wins; bestEl.textContent=this.best; localStorage.setItem(this.bestKey,String(this.best)); } }
+        return;
+      }
+      this.dice0=this.roll(this.dice0.length); this.dice1=this.roll(this.dice1.length);
+      this.turn=this._loser; this.bid=null; this.phase='bidding'; this._autoCd=0.6; this.setStatus('新回合 · '+(this.turn===0?'你':'CPU')+' 先叫');
+    }
+    humanBid(){ if(this.phase!=='bidding'||this.turn!==0||this.autoPlay) return; const b=this.aiMove(0).bid||this.openBid(0); this.applyBid(0,b); }
+    humanChallenge(){ if(this.phase!=='bidding'||this.turn!==0||this.autoPlay) return; if(!this.bid) return; this.challenge(0); }
+    toggleAuto(){
+      this.autoPlay=!this.autoPlay;
+      if(this.autoPlay){ btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; }
+      else { btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    }
+    startAuto(){ this.autoPlay=true; btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    maybeAuto(dt){
+      if(this.phase==='reveal'){ this.revealT-=dt; if(this.revealT<=0) this.afterReveal(); return; }
+      if(this.phase==='matchover'){ this.matchOverT-=dt; if(this.matchOverT<=0) this.startMatch(); return; }
+      if(this.phase!=='bidding') return;
+      if(this.turn===0 && !this.autoPlay){ btnBid.disabled=false; btnCall.disabled=!this.bid; return; }
+      this._autoCd-=dt; if(this._autoCd>0) return; this._autoCd=0.6;
+      if(this.turn===0 && !this.autoPlay) return;
+      const mv=this.aiMove(this.turn);
+      if(mv.type==='bid') this.applyBid(this.turn,mv.bid); else this.challenge(this.turn);
+    }
+    update(dt){ this.maybeAuto(dt); }
+    tick(ts){
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+      this._last=ts!==undefined?ts:this._last; this.time+=dt; this.update(dt); this.draw();
+      requestAnimationFrame(this.tick.bind(this));
+    }
+    _round(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    _die(x,y,s,v,faceUp){
+      ctx.save();
+      this._round(x,y,s,s,9); ctx.shadowColor=faceUp?'#5de1ff':'#b15dff55'; ctx.shadowBlur=10;
+      ctx.fillStyle=faceUp?'#f3eeff':'#241640'; ctx.fill(); ctx.shadowBlur=0;
+      ctx.lineWidth=1; ctx.strokeStyle='#ffffff22'; ctx.stroke();
+      if(faceUp){
+        const pip=(cx,cy)=>{ ctx.beginPath(); ctx.arc(cx,cy,s*0.09,0,7); ctx.fillStyle='#160826'; ctx.fill(); };
+        const u=s/4; const P={ tl:[x+u,y+u],tr:[x+3*u,y+u],ml:[x+u,y+2*u],mr:[x+3*u,y+2*u],c:[x+2*u,y+2*u],bl:[x+u,y+3*u],br:[x+3*u,y+3*u] };
+        const map={1:['c'],2:['tl','br'],3:['tl','c','br'],4:['tl','tr','bl','br'],5:['tl','tr','c','bl','br'],6:['tl','tr','ml','mr','bl','br']};
+        for(const k of map[v]) pip(...P[k]);
+      } else { ctx.fillStyle='#b15dff66'; ctx.font=(s*0.5)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('?',x+s/2,y+s/2); }
+      ctx.restore();
+    }
+    _diceRow(arr,x,y,s,gap,faceUp){
+      const total=arr.length*s+(arr.length-1)*gap, x0=x-(total/2);
+      for(let i=0;i<arr.length;i++) this._die(x0+i*(s+gap),y,s,arr[i],faceUp);
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      const g=ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,W*0.7);
+      g.addColorStop(0,'#241640'); g.addColorStop(1,'#160a26'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='bold 13px Segoe UI';
+      const yourTurn=(this.phase==='bidding'&&this.turn===0);
+      ctx.fillStyle=yourTurn?'#5de1ff':'#a98fd0'; ctx.fillText('CPU（'+this.dice1.length+'）',W/2,26);
+      this._diceRow(this.phase==='reveal'?this.dice1:this.dice1, W/2, 50, 30, 6, true);
+      // current bid
+      ctx.fillStyle='#ffd54a'; ctx.font='bold 20px Segoe UI';
+      if(this.bid) ctx.fillText('当前叫注  '+this.bid.q+' × '+this.bid.f, W/2, 110);
+      else ctx.fillText('等待开叫…', W/2, 110);
+      // reveal extra
+      if(this.phase==='reveal'){ ctx.fillStyle=this.revealTruth?'#4dff91':'#ff5d6a'; ctx.font='bold 14px Segoe UI';
+        ctx.fillText('实际 '+this.revealTotal+' 个 '+this.reveal.f+' 点', W/2, 134); }
+      // your dice
+      ctx.fillStyle=yourTurn?'#5de1ff':'#a98fd0'; ctx.font='bold 13px Segoe UI';
+      ctx.fillText('你（'+this.dice0.length+'）'+(yourTurn?' ◀':' '), W/2, 250);
+      this._diceRow(this.dice0, W/2, 274, 30, 6, true);
+      // log tail
+      ctx.fillStyle='#7a5fa0'; ctx.font='10px Segoe UI';
+      for(let i=0;i<Math.min(2,this.log.length);i++){ ctx.fillText(this.log[this.log.length-1-i], W/2, H-14+i*0); }
+    }
+  }
+
+  canvas.addEventListener('pointerdown',()=>{ if(!game.autoPlay && game.phase==='bidding' && game.turn===0) game.humanChallenge(); });
+
+  window.game=new Liars();
+})();
+</script>
+</body>
+</html>

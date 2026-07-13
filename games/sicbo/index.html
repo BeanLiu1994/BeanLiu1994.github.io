@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#102a1a" />
+<title>Sic Bo · 霓虹骰宝</title>
+<style>
+  :root { --bg:#102a1a; --surface:#16331f; --board:#0a1f14; --text:#e6fff0; --muted:#7fc89a; --accent:#3effa1; --accent2:#ffd54a; --accent-glow:#3effa155; --gold:#ffd54a; --red:#ff5d6a; --green:#4dff91; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #1a4028 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #081a10 0%, transparent 55%);
+    color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:10px; }
+  .title-block h1 { font-size:1.5rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,#3effa1,#ffd54a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:4px 10px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000040, 0 0 60px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; letter-spacing:.5px; }
+  .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06200f; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06200f; animation:pulse 1.6s infinite; --glow:var(--accent-glow); }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--glow,transparent);} 50%{box-shadow:0 0 18px var(--glow,transparent),0 0 34px var(--glow,transparent);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .hint { margin-top:4px; font-size:0.62rem; color:#5fa07c; text-align:center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Sic Bo</h1><div class="sub">N E O N &nbsp; D I C E</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">筹码</div><div class="value" id="bal">1000</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">1000</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="320"></canvas></div>
+  <div class="controls">
+    <button class="btn" id="btn-small" onclick="game.pick('small')">小 4-10</button>
+    <button class="btn" id="btn-big" onclick="game.pick('big')">大 11-17</button>
+    <button class="btn" id="btn-tri" onclick="game.pick('triple')">全骰宝</button>
+    <button class="btn primary" id="btn-roll" onclick="game.humanRoll()">投掷</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
+  <div class="status" id="status">三颗骰子 · 押「大」(11-17) 或「小」(4-10)，开出豹子通杀 · 押「全骰宝」赔率 24:1</div>
+  <div class="hint">触屏/鼠标：选注后点「投掷」· 开启 Auto 自动下注连开</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const balEl=document.getElementById('bal'), bestEl=document.getElementById('best'), statusEl=document.getElementById('status');
+  const btnAuto=document.getElementById('btn-auto'), btnRoll=document.getElementById('btn-roll'), btnBig=document.getElementById('btn-big'), btnSmall=document.getElementById('btn-small'), btnTri=document.getElementById('btn-tri');
+  const W=canvas.width, H=canvas.height;
+  function rint(n){ return Math.floor(Math.random()*n); }
+  class SicBo {
+    constructor(){
+      this.autoPlay=false; this._last=0; this._autoCd=0; this.time=0; this._autoProgress=0;
+      this.bestKey='sicboBest'; this.best=parseInt(localStorage.getItem(this.bestKey)||'1000'); bestEl.textContent=this.best;
+      this.balance=1000; this.phase='betting'; this.tumble=0; this.bet=null; this.selBet=null;
+      this.dice=[1,2,3]; this.lock=[1,2,3]; this.resultT=0; this.result=null;
+      this.startBetting();
+      requestAnimationFrame(this.tick.bind(this));
+    }
+    restart(){ this.balance=1000; this.best=parseInt(localStorage.getItem(this.bestKey)||'1000'); bestEl.textContent=this.best; this.startBetting(); }
+    setStatus(t){ statusEl.textContent=t; }
+    startBetting(){ this.phase='betting'; this.result=null; this._autoCd=0.5; this.sync();
+      if(!this.autoPlay) this.setStatus('选择下注：小(4-10) / 大(11-17) / 全骰宝，再点投掷');
+    }
+    pick(b){ if(this.phase!=='betting'||this.autoPlay) return; this.selBet=b; this.setStatus('已选 '+this._betName(b)+' · 点「投掷」'); }
+    _betName(b){ return b==='small'?'小 Small':b==='big'?'大 Big':'全骰宝 Any Triple'; }
+    _stake(b){ return b==='triple'?40:60; }
+    autoBet(){ return (Math.random()<0.12)?'triple':(Math.random()<0.5?'big':'small'); }
+    roll(){
+      if(this.phase!=='betting') return;
+      this.bet = this.autoPlay ? this.autoBet() : this.selBet;
+      if(!this.bet){ this.bet=this.autoBet(); }
+      const stake=this._stake(this.bet);
+      if(this.balance<stake){ this.balance=1000; }
+      this.stake=stake; this.balance-=stake;
+      this.lock=[1+rint(6),1+rint(6),1+rint(6)];
+      this.tumble=0.7; this.phase='rolling';
+      btnRoll.disabled=true;
+      this.setStatus('投掷中… 押 '+this._betName(this.bet)+' ('+stake+')');
+    }
+    humanRoll(){ if(this.phase!=='betting'||this.autoPlay) return; if(!this.selBet) this.selBet=this.autoBet(); this.roll(); }
+    settle(){
+      const sum=this.lock[0]+this.lock[1]+this.lock[2];
+      const isTriple=(this.lock[0]===this.lock[1]&&this.lock[1]===this.lock[2]);
+      let win=false, payout=0, label='';
+      if(this.bet==='small'){ if(sum>=4&&sum<=10&&!isTriple){ win=true; payout=this.stake; } label='小 '+sum+(isTriple?' (豹子)':''); }
+      else if(this.bet==='big'){ if(sum>=11&&sum<=17&&!isTriple){ win=true; payout=this.stake; } label='大 '+sum+(isTriple?' (豹子)':''); }
+      else if(this.bet==='triple'){ if(isTriple){ win=true; payout=this.stake*24; } label='全骰宝 '+(isTriple?'命中':'未中'); }
+      if(win){ this.balance+=this.stake+payout; this.result={win:true,text:(label+' · 赢 +'+payout)}; }
+      else { this.result={win:false,text:(label+' · 输 -'+this.stake)}; }
+      this._autoProgress++;
+      this.phase='result'; this.resultT=1.5; btnRoll.disabled=false;
+      this.setStatus(this.result.text); this.sync();
+    }
+    sync(){ balEl.textContent=this.balance; if(this.balance>this.best){ this.best=this.balance; bestEl.textContent=this.best; localStorage.setItem(this.bestKey,String(this.best)); } }
+    toggleAuto(){
+      this.autoPlay=!this.autoPlay;
+      if(this.autoPlay){ btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; if(this.phase==='betting'&&!this.bet) this.phase='betting'; }
+      else { btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    }
+    startAuto(){ this.autoPlay=true; btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
+    maybeAuto(dt){
+      if(this.phase==='result'){ this.resultT-=dt; if(this.resultT<=0) this.startBetting(); return; }
+      if(this.phase!=='betting') return;
+      if(!this.autoPlay) return;
+      this._autoCd-=dt; if(this._autoCd>0) return; this._autoCd=0.5;
+      this.roll();
+    }
+    update(dt){
+      if(this.phase==='rolling'){ this.tumble-=dt; if(this.tumble>0){ this.dice=[1+rint(6),1+rint(6),1+rint(6)]; } else { this.dice=this.lock.slice(); this.settle(); } return; }
+      this.maybeAuto(dt);
+    }
+    tick(ts){
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+      this._last=ts!==undefined?ts:this._last; this.time+=dt; this.update(dt); this.draw();
+      requestAnimationFrame(this.tick.bind(this));
+    }
+    _round(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    _die(x,y,s,v){
+      ctx.save(); this._round(x,y,s,s,9); ctx.shadowColor='#3effa1'; ctx.shadowBlur=12; ctx.fillStyle='#f3fee8'; ctx.fill();
+      ctx.shadowBlur=0; ctx.lineWidth=1; ctx.strokeStyle='#2a5a3a'; ctx.stroke();
+      const pip=(cx,cy)=>{ ctx.beginPath(); ctx.arc(cx,cy,s*0.09,0,7); ctx.fillStyle='#0a1f14'; ctx.fill(); };
+      const u=s/4; const P={ tl:[x+u,y+u],tr:[x+3*u,y+u],ml:[x+u,y+2*u],mr:[x+3*u,y+2*u],c:[x+2*u,y+2*u],bl:[x+u,y+3*u],br:[x+3*u,y+3*u] };
+      const map={1:['c'],2:['tl','br'],3:['tl','c','br'],4:['tl','tr','bl','br'],5:['tl','tr','c','bl','br'],6:['tl','tr','ml','mr','bl','br']};
+      for(const k of map[v]) pip(...P[k]);
+      ctx.restore();
+    }
+    draw(){
+      ctx.clearRect(0,0,W,H);
+      const g=ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,W*0.7);
+      g.addColorStop(0,'#16331f'); g.addColorStop(1,'#0a1f14'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+      // three dice
+      const s=64, gap=18, total=s*3+gap*2, x0=(W-total)/2, y=70;
+      this._die(x0,y,s,this.dice[0]); this._die(x0+s+gap,y,s,this.dice[1]); this._die(x0+2*(s+gap),y,s,this.dice[2]);
+      // sum
+      const sum=this.dice[0]+this.dice[1]+this.dice[2];
+      ctx.textAlign='center'; ctx.font='bold 22px Segoe UI'; ctx.fillStyle='#e6fff0';
+      ctx.fillText((this.phase==='rolling')?'…':(sum+' 点'), W/2, 60);
+      // bet + result
+      if(this.bet){ ctx.fillStyle='#ffd54a'; ctx.font='bold 16px Segoe UI'; ctx.fillText('押注：'+this._betName(this.bet), W/2, 170); }
+      if(this.phase==='result' && this.result){
+        ctx.save(); ctx.globalAlpha=Math.min(1,this.resultT); ctx.font='bold 26px Segoe UI';
+        ctx.fillStyle=this.result.win?'#3effa1':'#ff5d6a'; ctx.shadowColor=this.result.win?'#3effa1':'#ff5d6a'; ctx.shadowBlur=18;
+        ctx.fillText(this.result.win?'WIN +'+payout_of(this.result):'LOSE', W/2, 215); ctx.restore();
+      }
+      function payout_of(r){ const m=r.text.match(/\+(\d+)/); return m?m[1]:'0'; }
+      // balance
+      ctx.fillStyle='#7fc89a'; ctx.font='bold 14px Segoe UI'; ctx.fillText('筹码 ◆'+this.balance, W/2, 260);
+      ctx.fillStyle='#5fa07c'; ctx.font='11px Segoe UI'; ctx.fillText('小 4-10 · 大 11-17 · 豹子通杀 · 全骰宝 24:1', W/2, H-16);
+    }
+  }
+
+  canvas.addEventListener('pointerdown',()=>{ if(!game.autoPlay && game.phase==='betting') game.humanRoll(); });
+
+  window.game=new SicBo();
+})();
+</script>
+</body>
+</html>
