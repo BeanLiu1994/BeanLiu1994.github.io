@@ -3,175 +3,367 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<meta name="theme-color" content="#0a0a16" />
-<title>霓虹保龄球 · Neon Bowling</title>
+<meta name="theme-color" content="#05060f" />
+<title>霓虹保龄球 · Neon Bowling 3D</title>
 <style>
-  :root { --bg:#0a0a16; --surface:#12122a; --board:#0c1024; --text:#e8e8f8; --muted:#8a8ab0;
-    --accent:#b06bff; --accent-glow:#b06bff66; --danger:#ff5d6a; --gold:#ffd700; }
+  :root { --bg:#05060f; --surface:#0d1024; --text:#e6ecff; --muted:#8e9bc4;
+    --accent:#ff5db1; --accent2:#5dd6ff; --gold:#ffd24d; --danger:#ff6b6b; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { height:100%; overflow:hidden; }
   body { background:var(--bg);
-    background-image: radial-gradient(ellipse at 50% 0%, #281040 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #102a40 0%, transparent 55%);
+    background-image: radial-gradient(ellipse at 50% 0%, #1a0f3a 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #07203a 0%, transparent 55%);
     color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
     display:flex; align-items:center; justify-content:center;
     user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
-  .container { width:100%; max-width:460px; padding:14px; }
+  .container { width:100%; max-width:540px; padding:14px; }
   .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
   .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px;
-    background:linear-gradient(135deg,var(--accent),#d9b6ff,#b06bff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+    background:linear-gradient(135deg,var(--accent),#ffb1e0,var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
   .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
   .score-panel { display:flex; gap:8px; }
   .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 14px; text-align:center; min-width:54px; }
   .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); margin-bottom:2px; }
   .score-card .value { font-size:1.3rem; font-weight:800; font-variant-numeric:tabular-nums; }
-  .score-card.sc .value { color:var(--accent); }
-  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .score-card.pot .value { color:var(--accent); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:8px; box-shadow:0 0 40px #00000030, 0 0 70px #ff5db133; }
   .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
-  canvas { display:block; width:100%; height:auto; border-radius:10px; background:var(--board); cursor:grab; }
+  canvas { display:block; width:100%; height:auto; border-radius:10px; background:#070a18; cursor:crosshair; }
   .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
   .overlay.active { opacity:1; pointer-events:auto; }
-  .overlay-bg { position:absolute; inset:0; background:#0a0a16ee; backdrop-filter:blur(4px); border-radius:14px; }
-  .overlay-content { position:relative; text-align:center; z-index:1; }
-  .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
-  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
-  .overlay.win h2 { color:var(--gold); }
+  .overlay-bg { position:absolute; inset:0; background:#05060fee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:0 20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.95rem; }
+  .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
   .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
   .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
   .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
-  .btn.primary { background:var(--accent); border-color:var(--accent); color:#160a22; }
-  .btn.primary:hover { box-shadow:0 0 20px var(--accent-glow); }
-  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#160a22; animation:pg 2s infinite; --glow:var(--accent-glow); }
-  @keyframes pg { 0%,100%{box-shadow:0 0 8px var(--glow,transparent);} 50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);} }
-  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:18px; }
-  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:bk .8s infinite; }
-  @keyframes bk { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
-  .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
-  .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#150313; }
+  .btn.primary:hover { box-shadow:0 0 20px #ff5db155; }
+  .auto-on { background:var(--accent2); border-color:var(--accent2); color:#03121a !important; animation:pg 2s infinite; }
+  @keyframes pg { 0%,100%{box-shadow:0 0 8px #5dd6ff55;} 50%{box-shadow:0 0 22px #5dd6ffaa;} }
+  .hint { text-align:center; color:var(--muted); font-size:0.72rem; margin-top:8px; min-height:16px; }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <div class="title-block"><h1>霓虹保龄球</h1><div class="sub">N E O N &nbsp; B O W L I N G</div></div>
+    <div class="title-block"><h1>霓虹保龄球</h1><div class="sub">N E O N &nbsp; B O W L I N G &nbsp; 3 D</div></div>
     <div class="score-panel">
-      <div class="score-card sc"><div class="label">Score</div><div class="value" id="score-sc">0</div></div>
-      <div class="score-card"><div class="label">Frame</div><div class="value" id="score-frame">1</div></div>
+      <div class="score-card pot"><div class="label">Frame</div><div class="value" id="score-frame">1</div></div>
+      <div class="score-card"><div class="label">Pins</div><div class="value" id="score-pins">0</div></div>
     </div>
   </div>
   <div class="board-wrap" id="board-wrap">
-    <canvas id="cv" width="420" height="620"></canvas>
-    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Game Over</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+    <canvas id="cv" width="540" height="720"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Great!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.proceed()">Next Ball</button></div></div>
+    <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="lose-title">Gutter!</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.proceed()">Next Ball</button></div></div>
   </div>
+  <div class="hint" id="hint">拖动瞄准，松手投球</div>
   <div class="controls">
-    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn primary" onclick="game.newGame()">New Game</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI rolling...</span></div>
-  <div class="stats-bar"><span id="best-stat">Best: 0</span><span id="pin-stat">Pins: 10</span></div>
 </div>
 <script>
 (function(){
   'use strict';
-  const W=420, H=620, M=30, BR=16, PR=9, FR_BALL=0.992, FR_PIN=0.9;
+  const W=540, H=720;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
-  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
-  const startY=H-55, pinY0=235, sx=36, sy=30;
 
-  class Bowling {
+  // ---- 3D lane geometry (lane runs along Z, camera behind the foul line) ----
+  const LANE_W=100, LANE_L=420;     // half-width 100 -> full 200; length 420
+  const Z_NEAR=22, Z_FAR=488;       // visible Z range
+  const CAM={ y:118, z:-150 };      // camera height & behind foul line
+  const FOV=410;                     // focal length (px)
+  const HORIZON=H*0.18;              // screen y of the vanishing point (top area)
+  function project(x,y,z){
+    let dz=z-CAM.z; if(dz<=1) dz=1;
+    return { sx: W/2 + x*FOV/dz, sy: HORIZON + (CAM.y-y)*FOV/dz, scale:FOV/dz };
+  }
+
+  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+  const cols=['#ff5db1','#5dd6ff','#ffd24d','#7cff7c','#ff8c1a','#b18cff','#ff6b6b','#3a7bff','#2ad6c8','#ff2d2d'];
+  const BR=7, PR=6.6;                // ball / pin radius in lane units
+
+  class Bowl {
     constructor(){
-      this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
-      this.score=0; this.frame=1; this.roll=1; this.cool=0; this.best=this.loadBest();
-      this.aiming=false; this.aimNow=null; this.rolling=false;
-      this.loop=this.loop.bind(this);
-      this.bind(); this.restart();
-      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
+      this.autoPlay=false; this.raf=null; this.last=0;
+      this.setup(); this.bind();
+      this.last=performance.now(); this.raf=requestAnimationFrame(this.loop.bind(this));
     }
-    loadBest(){ try{ return parseInt(localStorage.getItem('bowl_best')||'0')||0; }catch(e){ return 0; } }
-    saveBest(){ try{ localStorage.setItem('bowl_best', String(this.best)); }catch(e){} }
-    rack(){
-      this.pins=[]; this.ball={x:W/2,y:startY,vx:0,vy:0,r:BR};
-      for(let r=0;r<4;r++){ const cnt=r+1; for(let i=0;i<cnt;i++){
-        this.pins.push({ox:W/2+(i-r/2)*sx, oy:pinY0-r*sy, x:W/2+(i-r/2)*sx, y:pinY0-r*sy, vx:0, vy:0, r:PR, down:false}); }
+    setup(){
+      this.frame=1; this.ballNum=1; this.totalDown=0; this.prevDown=0; this.roundDown=0;
+      this.ball=null; this.aim=-1; this.power=0; this.aiming=false; this.aimStart=0;
+      this.shotDone=false; this.settle=0; this.msg=null; this.over=true;
+      this.fillPins();
+      this.resetBall(-1);
+    }
+    fillPins(){
+      this.pins=[];
+      const rows=4;
+      for(let r=0;r<rows;r++){
+        for(let i=0;i<=r;i++){
+          const px=(i-r/2)*18;
+          const pz=Z_FAR-30 - r*16;
+          this.pins.push({x:px, y:PR, z:pz, r:PR, up:true, vx:0, vy:0, vz:0});
+        }
       }
     }
-    standing(){ let n=0; for(const p of this.pins) if(!p.down) n++; return n; }
-    restart(){
-      this.stopAuto(); this.over=false; this.score=0; this.frame=1; this.roll=1; this.cool=0; this.rolling=false;
-      document.getElementById('overlay-win').classList.remove('active');
-      this.rack(); this.updateUI();
-    }
-    updateUI(){ document.getElementById('score-sc').textContent=this.score; document.getElementById('score-frame').textContent=this.frame; document.getElementById('best-stat').textContent='Best: '+this.best; document.getElementById('pin-stat').textContent='Pins: '+this.standing(); }
-    roll_(){ this.rolling=true; }
-    aiRoll(){ const off=(Math.random()*2-1)*30; this.ball.vx=off*0.06; this.ball.vy=-15.5; this.roll_(); }
-    step(dt){
-      if(this.over) return;
-      if(this.rolling){
-        const b=this.ball; b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=FR_BALL; b.vy*=FR_BALL;
-        if(b.x<M+b.r){ b.x=M+b.r; b.vx=Math.abs(b.vx)*0.85; }
-        if(b.x>W-M-b.r){ b.x=W-M-b.r; b.vx=-Math.abs(b.vx)*0.85; }
-        // ball-pin
-        for(const p of this.pins){ if(p.down) continue;
-          const dx=b.x-p.x, dy=b.y-p.y, d=Math.hypot(dx,dy), min=b.r+p.r;
-          if(d>0.0001 && d<min){ const nx=dx/d, ny=dy/d; const ov=(min-d)/2; b.x+=nx*ov; b.y+=ny*ov; p.x-=nx*ov; p.y-=ny*ov;
-            p.vx=b.vx*0.95; p.vy=b.vy*0.95; p.down=true; b.vx*=0.72; b.vy*=0.86; }
-        }
-        // pins move + pin-pin
-        for(const p of this.pins){ if(p.down){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=FR_PIN; p.vy*=FR_PIN; if(p.vx*p.vx+p.vy*p.vy<0.04){p.vx=0;p.vy=0;} } }
-        for(let i=0;i<this.pins.length;i++){ const a=this.pins[i]; if(a.down&&(a.vx||a.vy)) for(let j=i+1;j<this.pins.length;j++){ const c=this.pins[j]; if(c.down) this.resolve(a,c); } }
-        // end roll
-        const sp=b.vx*b.vx+b.vy*b.vy;
-        if(b.y<pinY0-4*sy-40 || (sp<0.02 && this.allPinsSettled())) { this.endRoll(); }
-      } else if(this.cool>0){ this.cool--; if(this.cool===0 && !this.over && this.autoPlay){ this.aiRoll(); } }
-      else if(!this.over && this.autoPlay){ this.cool=20; }
-    }
-    allPinsSettled(){ for(const p of this.pins){ if(p.down && (p.vx*p.vx+p.vy*p.vy)>0.04) return false; } return true; }
-    resolve(a,b){
-      const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy), min=a.r+b.r;
-      if(d>0.0001 && d<min){ const nx=dx/d, ny=dy/d, ov=(min-d)/2; a.x-=nx*ov; a.y-=ny*ov; b.x+=nx*ov; b.y+=ny*ov;
-        const rvx=b.vx-a.vx, rvy=b.vy-a.vy, vn=rvx*nx+rvy*ny; if(vn<0){ a.vx+=vn*nx; a.vy+=vn*ny; b.vx-=vn*nx; b.vy-=vn*ny; } }
-    }
-    endRoll(){
-      this.rolling=false; const down=10-this.standing(); this.score+=down;
-      if(this.score>this.best){ this.best=this.score; this.saveBest(); }
-      if(down===10){ // strike / clear -> new rack
-        this.frame++; if(this.frame>10){ this.over=true; this.finish(); return; }
-        this.roll=1; this.rack(); this.cool=30;
-      } else if(this.roll===1){ this.roll=2; this.ball={x:W/2,y:startY,vx:0,vy:0,r:BR}; this.cool=30; }
-      else { this.frame++; if(this.frame>10){ this.over=true; this.finish(); return; } this.roll=1; this.rack(); this.cool=30; }
+    resetBall(aimHint){
+      this.ball={ x:aimHint<0?0:aimHint, y:BR, z:Z_NEAR, r:BR, vx:0, vy:0, vz:0, moving:false };
+      this.aim=aimHint<0?0:aimHint; this.power=0; this.shotDone=false; this.settle=0; this.shotFrames=0; this.over=false; this.thrown=false;
+      const hp=document.getElementById('overlay-win'), hl=document.getElementById('overlay-lose');
+      hp.classList.remove('active'); hl.classList.remove('active');
       this.updateUI();
     }
-    finish(){ if(this.autoPlay) this.stopAuto(); document.getElementById('win-title').textContent='Game Over'; document.getElementById('win-msg').textContent='Final score: '+this.score; document.getElementById('overlay-win').classList.add('active'); }
-    loop(now){
-      const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
-      this.step(dt); this.draw();
-      this.raf=requestAnimationFrame(this.loop);
+    updateUI(){
+      document.getElementById('score-frame').textContent=this.frame;
+      const standing=this.pins.filter(p=>p.up).length;
+      document.getElementById('score-pins').textContent=(10-standing);
+      document.getElementById('hint').textContent = this.over ? (this.autoPlay?'Auto aiming…':'拖动瞄准，松手投球')
+        : 'Ball in play…';
     }
+    // ---- physics ----
+    step(dt){
+      if(this.over) return;
+      // sub-sample the integration so the fast ball can't tunnel through pins
+      const speed=Math.hypot(this.ball.vx,this.ball.vz);
+      const sub=Math.max(1, Math.min(12, Math.ceil(speed*dt/4)));
+      const sdt=dt/sub;
+      for(let s=0;s<sub;s++) this.physics(sdt);
+    }
+    physics(dt){
+      if(this.over) return;
+      const all=[this.ball, ...this.pins];
+      for(const o of all){
+        const isBall = o===this.ball;
+        const speed=Math.hypot(o.vx,o.vz);
+        if(isBall){ if(!o.moving && !o.fallen) continue; }
+        else { if(!o.up && speed<0.04 && o.y<=PR+0.01) continue; }
+        o.x+=o.vx*dt; o.y+=o.vy*dt; o.z+=o.vz*dt;
+        if(isBall){ o.vx*=0.994; o.vz*=0.994; if(o.y<BR){ o.y=BR; o.vy=Math.abs(o.vy)*0.3; } }
+        else { o.vx*=0.95; o.vz*=0.95; o.y=PR;
+          if(Math.abs(o.x)>LANE_W+10 || o.z<Z_NEAR-8 || o.z>Z_FAR+10){ if(o.up){ o.up=false; o.vx=o.vz=0; } } }
+      }
+      // ball vs pins collision
+      for(const p of this.pins){
+        if(!p.up && Math.hypot(p.vx,p.vz)<0.05) continue;
+        resolve(this.ball, p, 0.94);
+      }
+      // pin vs pin collision
+      for(let i=0;i<this.pins.length;i++){
+        const a=this.pins[i]; if(!a.up && Math.hypot(a.vx,a.vz)<0.05) continue;
+        for(let j=i+1;j<this.pins.length;j++){
+          const b=this.pins[j]; if(!b.up && Math.hypot(b.vx,b.vz)<0.05) continue;
+          resolve(a,b,0.9);
+        }
+      }
+      // keep ball in lane (gutters)
+      if(Math.abs(this.ball.x)>LANE_W){ /* gutter: ball stops, weak */ }
+      if(this.ball.x>LANE_W-BR){ this.ball.x=LANE_W-BR; this.ball.vx=-Math.abs(this.ball.vx)*0.3; }
+      if(this.ball.x<-LANE_W+BR){ this.ball.x=-LANE_W+BR; this.ball.vx=Math.abs(this.ball.vx)*0.3; }
+      if(this.ball.z<Z_NEAR) this.ball.z=Z_NEAR;
+      // settle detection
+      const ballSpeed=Math.hypot(this.ball.vx,this.ball.vz);
+      const ballStill = ballSpeed<0.05 || this.ball.z>Z_FAR+20;
+      if(this.ball.moving && ballStill) this.ball.moving=false;
+      let pinsMoving=false;
+      for(const p of this.pins){ if(!p.up) continue; if(Math.hypot(p.vx,p.vz)>0.04){ pinsMoving=true; break; } }
+      if(!pinsMoving && !this.ball.moving){ this.settle++; } else { this.settle=0; }
+      if(this.thrown) this.shotFrames=(this.shotFrames||0)+1;
+      if(this.thrown && (this.settle>26 || this.shotFrames>600)){ this.endShot(); }
+    }
+    endShot(){
+      const before=this.prevDown;
+      const standing=this.pins.filter(p=>p.up).length;
+      const down=10-standing;
+      const thisBall=down-before;
+      this.roundDown+=thisBall;
+      this.totalDown=down;
+      this.prevDown=down;
+      let title='', msg='', win=false;
+      if(down===10){ title='STRIKE!'; msg='全部击倒 🎉'; win=true; }
+      else if(this.ballNum===2 && this.roundDown===10){ title='SPARE!'; msg='补中都击倒 👏'; win=true; }
+      else if(this.ballNum===2){ title='Open'; msg=this.roundDown+' / 10 击倒'; }
+      this.over=true; this.updateUI();
+      const hp=document.getElementById('overlay-win'), hl=document.getElementById('overlay-lose');
+      if(this.autoPlay){
+        setTimeout(()=>{ if(this.autoPlay) this.proceed(); }, 1100);
+      } else if(win || this.ballNum===2 || down===0){
+        // end of frame (or a gutter): let the player tap "Next Ball"
+        if(down===0){ hl.querySelector('h2').textContent='Gutter!'; hl.querySelector('p').textContent='一球未中'; hl.classList.add('active'); }
+        else { document.getElementById('win-title').textContent=title||'Pins'; document.getElementById('win-msg').textContent=msg; hp.classList.add('active'); }
+      } else {
+        // first ball, not a strike: roll the second ball immediately
+        this.proceed();
+        this.flash(thisBall>0 ? (thisBall+' 击倒，继续…') : '未击倒，继续…');
+      }
+    }
+    proceed(){
+      // advance ball / frame
+      if(this.ballNum===1){
+        if(this.prevDown===10){ this.frameUp(); }       // strike -> fresh rack
+        else { this.ballNum=2; this.resetBall(this.recommendedAim()); if(this.autoPlay) this.aiShoot(); }
+      } else {
+        this.frameUp();
+      }
+    }
+    frameUp(){
+      this.frame++; this.ballNum=1; this.roundDown=0; this.prevDown=0; this.totalDown=0;
+      this.fillPins();
+      this.resetBall(this.recommendedAim());
+      if(this.autoPlay) this.aiShoot();
+    }
+    recommendedAim(){
+      // aim at a standing pin, prefer center cluster
+      const up=this.pins.filter(p=>p.up); if(!up.length) return 0;
+      let sx=0; for(const p of up) sx+=p.x; return clamp(sx/up.length, -LANE_W+BR, LANE_W-BR);
+    }
+    flash(t){ const h=document.getElementById('hint'); if(h && t) h.textContent=t; }
+    shoot(){
+      if(this.over || this.ball.moving || this.thrown) return;
+      const pwr=clamp(this.power,2.6,9.5);
+      const vz=pwr*3.4;
+      const targetZ=Z_FAR-30;                         // aim at the head-pin line
+      const dx=this.aim-this.ball.x;
+      const dz=targetZ-this.ball.z;
+      this.ball.vx = dz>1 ? vz*(dx/dz) : 0;            // travel straight toward the chosen lane x
+      this.ball.vz=vz;
+      this.ball.moving=true; this.thrown=true; this.settle=0; this.shotFrames=0;
+      this.updateUI();
+    }
+    // ---- AI ----
+    aiShoot(){
+      if(this.over) return;
+      const up=this.pins.filter(p=>p.up);
+      if(!up.length){ this.proceed(); return; }
+      // aim straight at the centre of the remaining pins, with enough pace to carry
+      this.aim=this.recommendedAim();
+      this.power=7.6;
+      const self=this;
+      setTimeout(()=>{ if(!self.over && !self.ball.moving) self.shoot(); }, 420);
+    }
+    toggleAuto(){
+      this.autoPlay=!this.autoPlay;
+      const b=document.getElementById('btn-auto');
+      b.textContent='Auto: '+(this.autoPlay?'ON':'OFF');
+      b.classList.toggle('auto-on', this.autoPlay);
+      if(this.autoPlay){ if(this.over) this.proceed(); else if(!this.thrown) this.aiShoot(); }
+    }
+    newGame(){ this.frame=1; this.ballNum=1; this.roundDown=0; this.prevDown=0; this.totalDown=0; this.fillPins(); this.resetBall(this.recommendedAim()); if(this.autoPlay) this.aiShoot(); }
+    // ---- input ----
+    bind(){
+      const pos=(e)=>{ const r=canvas.getBoundingClientRect(); const cx=(e.clientX-r.left)/r.width; return cx; };
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.ball.moving) return; this.aiming=true; this.aimStart=pos(e); this.aim=clamp((this.aimStart-0.5)*2*LANE_W, -LANE_W+BR, LANE_W-BR); this.power=0; });
+      canvas.addEventListener('pointermove',(e)=>{ if(!this.aiming) return; const cx=pos(e); this.aim=clamp((cx-0.5)*2*LANE_W, -LANE_W+BR, LANE_W-BR); this.power=clamp(1.2+Math.abs(cx-this.aimStart)*6, 2.6, 9.5); });
+      canvas.addEventListener('pointerup',(e)=>{ if(!this.aiming) return; this.aiming=false; this.shoot(); });
+    }
+    loop(now){
+      const dt=Math.max(0.3, Math.min(2.2,(now-this.last)/16.67)); this.last=now;
+      try{ this.step(dt); this.draw(); }catch(e){ console.error(e); }
+      this.raf=requestAnimationFrame(this.loop.bind(this));
+    }
+    // ---- render ----
     draw(){
       ctx.clearRect(0,0,W,H);
-      ctx.fillStyle='#0e1330'; ctx.fillRect(M,40,W-2*M,H-70);
-      ctx.strokeStyle='#241a4a'; ctx.lineWidth=6; ctx.strokeRect(M,40,W-2*M,H-70);
-      // gutters
-      ctx.fillStyle='#161a38'; ctx.fillRect(M-8,40,8,H-70); ctx.fillRect(W-M,40,8,H-70);
-      // pins
-      for(const p of this.pins){ ctx.shadowColor='#b06bff'; ctx.shadowBlur=8; ctx.fillStyle=p.down?'#4a3a66':'#f0e8ff';
-        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); ctx.shadowBlur=0;
-        ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*0.4,0,7); ctx.fill(); }
-      // ball
-      if(!this.over || this.rolling){ ctx.shadowColor='#7ad0ff'; ctx.shadowBlur=14; ctx.fillStyle='#7ad0ff'; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,this.ball.r,0,7); ctx.fill(); ctx.shadowBlur=0; }
-      // aim
-      if(this.aiming && this.aimNow){ const dx=this.aimNow.x-this.ball.x, dy=this.aimNow.y-this.ball.y; ctx.strokeStyle='#ffffff88'; ctx.lineWidth=2; ctx.setLineDash([6,8]); ctx.beginPath(); ctx.moveTo(this.ball.x,this.ball.y); ctx.lineTo(this.ball.x-dx*0.6,this.ball.y-dy*0.6); ctx.stroke(); ctx.setLineDash([]); }
+      // background gradient handled by CSS; draw lane
+      this.drawLane();
+      // depth sort: pins + ball by z desc (far first)
+      const items=[];
+      for(const p of this.pins){ if(p.up) items.push({t:'pin',o:p,z:p.z}); else if(Math.hypot(p.vx,p.vz)>0.05||p.y>PR+0.5) items.push({t:'pin',o:p,z:p.z}); }
+      items.push({t:'ball',o:this.ball,z:this.ball.z});
+      items.sort((a,b)=>b.z-a.z);
+      for(const it of items){ if(it.t==='pin') this.drawPin(it.o); else this.drawBall(it.o); }
+      if(this.aiming && !this.ball.moving && !this.over) this.drawAim();
     }
-    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI rolling...'; if(!this.rolling && this.cool===0) this.cool=10; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
-    bind(){
-      const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
-      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.rolling) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); this.aiming=true; this.aimNow=pos(e); });
-      canvas.addEventListener('pointermove',(e)=>{ if(!this.aiming) return; this.aimNow=pos(e); });
-      canvas.addEventListener('pointerup',()=>{ if(!this.aiming) return; this.aiming=false; const dx=this.aimNow.x-this.ball.x, dy=this.aimNow.y-this.ball.y; const dl=Math.hypot(dx,dy); if(dl<6) return; const power=Math.min(16, dl*0.05); this.ball.vx=dx/dl*power; this.ball.vy=-Math.abs(dy/dl*power); this.roll_(); });
+    drawLane(){
+      // near edge of lane (foul line) and far edge
+      const a=project(-LANE_W,0,Z_NEAR), b=project(LANE_W,0,Z_NEAR);
+      const c=project(LANE_W,0,Z_FAR), d=project(-LANE_W,0,Z_FAR);
+      // lane surface
+      const g=ctx.createLinearGradient(0,a.sy,0,d.sy);
+      g.addColorStop(0,'#0a1230'); g.addColorStop(1,'#131a4a');
+      ctx.fillStyle=g; ctx.beginPath();
+      ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.lineTo(c.sx,c.sy); ctx.lineTo(d.sx,d.sy); ctx.closePath(); ctx.fill();
+      // gutters
+      const ga=project(-LANE_W-12,0,Z_NEAR), gb=project(-LANE_W,0,Z_NEAR), gc=project(-LANE_W,0,Z_FAR), gd=project(-LANE_W-12,0,Z_FAR);
+      ctx.fillStyle='#04060f';
+      ctx.beginPath(); ctx.moveTo(ga.sx,ga.sy); ctx.lineTo(gb.sx,gb.sy); ctx.lineTo(gc.sx,gc.sy); ctx.lineTo(gd.sx,gd.sy); ctx.closePath(); ctx.fill();
+      const ha=project(LANE_W,0,Z_NEAR), hb=project(LANE_W+12,0,Z_NEAR), hc=project(LANE_W+12,0,Z_FAR), hd=project(LANE_W,0,Z_FAR);
+      ctx.beginPath(); ctx.moveTo(ha.sx,ha.sy); ctx.lineTo(hb.sx,hb.sy); ctx.lineTo(hc.sx,hc.sy); ctx.lineTo(hd.sx,hd.sy); ctx.closePath(); ctx.fill();
+      // foul line
+      ctx.strokeStyle='#ff5db1'; ctx.lineWidth=2; ctx.shadowColor='#ff5db1'; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke(); ctx.shadowBlur=0;
+      // lane center guide (neon)
+      ctx.strokeStyle='#5dd6ff22'; ctx.lineWidth=1.5;
+      const cm=project(0,0,Z_NEAR), cf=project(0,0,Z_FAR);
+      ctx.beginPath(); ctx.moveTo(cm.sx,cm.sy); ctx.lineTo(cf.sx,cf.sy); ctx.stroke();
+      // pin deck markers
+      for(let i=1;i<=5;i++){ const z=Z_NEAR+ (Z_FAR-Z_NEAR)*i/6; const e1=project(-LANE_W,0,z),e2=project(LANE_W,0,z);
+        ctx.strokeStyle='#ffffff08'; ctx.beginPath(); ctx.moveTo(e1.sx,e1.sy); ctx.lineTo(e2.sx,e2.sy); ctx.stroke(); }
+    }
+    drawPin(p){
+      const pr=project(p.x,p.y,p.z);
+      const r=PR*pr.scale*0.9;
+      // shadow
+      const ps=project(p.x,0,p.z); ctx.fillStyle='#00000055';
+      ctx.beginPath(); ctx.ellipse(ps.sx,ps.sy,r*0.8,r*0.32,0,0,7); ctx.fill();
+      // body
+      const col=p.up? '#ffffff' : '#556';
+      ctx.shadowColor= p.up?'#fff':'transparent'; ctx.shadowBlur= p.up?8:0;
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.ellipse(pr.sx,pr.sy,r*0.55,r,0,0,7); ctx.fill(); ctx.shadowBlur=0;
+      // red neck stripe
+      if(p.up){ ctx.fillStyle='#ff5db1'; ctx.beginPath(); ctx.ellipse(pr.sx,pr.sy-r*0.2,r*0.55,r*0.18,0,0,7); ctx.fill(); }
+    }
+    drawBall(b){
+      const pr=project(b.x,b.y,b.z); const r=BR*pr.scale;
+      const ps=project(b.x,0,b.z); ctx.fillStyle='#00000066';
+      ctx.beginPath(); ctx.ellipse(ps.sx,ps.sy,r*0.9,r*0.34,0,0,7); ctx.fill();
+      const grd=ctx.createRadialGradient(pr.sx-r*0.35,pr.sy-r*0.35,r*0.2, pr.sx,pr.sy,r);
+      grd.addColorStop(0,'#9be7ff'); grd.addColorStop(0.6,'#3aa0ff'); grd.addColorStop(1,'#0b3b8f');
+      ctx.shadowColor='#5dd6ff'; ctx.shadowBlur=14; ctx.fillStyle=grd;
+      ctx.beginPath(); ctx.arc(pr.sx,pr.sy,r,0,7); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle='#ffffffcc'; ctx.beginPath(); ctx.arc(pr.sx-r*0.3,pr.sy-r*0.3,r*0.28,0,7); ctx.fill();
+    }
+    drawAim(){
+      const b=this.ball;
+      const start=project(b.x,b.y,b.z);
+      // direction (matches shoot(): travel straight toward the chosen lane x)
+      const vz=clamp(this.power,2.6,9.5)*3.4;
+      const targetZ=Z_FAR-30;
+      const dx=this.aim-b.x, dz=targetZ-b.z;
+      const dirx= dz>1 ? vz*(dx/dz) : 0, dirz=vz;
+      const dl=Math.hypot(dirx,dirz)||1;
+      const ex=b.x+dirx/dl*40, ez=b.z+dirz/dl*40;
+      const end=project(ex,b.y,ez);
+      ctx.strokeStyle='#ffffff88'; ctx.lineWidth=2; ctx.setLineDash([6,8]);
+      ctx.beginPath(); ctx.moveTo(start.sx,start.sy); ctx.lineTo(end.sx,end.sy); ctx.stroke(); ctx.setLineDash([]);
+      // power pip
+      const pw=clamp(this.power,0,10)/10;
+      ctx.fillStyle='#ffd24d'; ctx.fillRect(W/2-40, H-18, 80*pw, 6);
+      ctx.strokeStyle='#ffffff33'; ctx.strokeRect(W/2-40,H-18,80,6);
     }
   }
-  window.game=new Bowling();
+
+  function resolve(a,b,rest){
+    if(a===b) return;
+    const dx=b.x-a.x, dz=b.z-a.z; const d=Math.hypot(dx,dz); const min=a.r+b.r;
+    if(d>0.0001 && d<min){
+      const nx=dx/d, nz=dz/d; const ov=(min-d)/2;
+      a.x-=nx*ov; a.z-=nz*ov; b.x+=nx*ov; b.z+=nz*ov;
+      const rvx=b.vx-a.vx, rvz=b.vz-a.vz; const vn=rvx*nx+rvz*nz;
+      if(vn<0){
+        const imp=vn*rest; a.vx+=imp*nx; a.vz+=imp*nz; b.vx-=imp*nx; b.vz-=imp*nz;
+      }
+      // a pin knocked with enough speed is downed
+      if(a.up && Math.hypot(a.vx,a.vz)>1.2) a.up=false;
+      if(b.up && Math.hypot(b.vx,b.vz)>1.2) b.up=false;
+    }
+  }
+
+  window.game=new Bowl();
 })();
 </script>
 </body>
