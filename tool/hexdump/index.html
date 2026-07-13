@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>十六进制转储 · Hex Dump</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  label.file{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  label.file:hover{border-color:var(--accent);color:#fff}
+  input[type=file]{display:none}
+  main{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;padding:16px;font-size:13px;line-height:1.7;font-family:"SF Mono",Consolas,Monaco,monospace}
+  #out{flex:0 0 auto;height:42%;overflow:auto;color:var(--accent);white-space:pre}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;padding:12px 16px}
+  .opts{display:flex;gap:10px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);align-items:center}
+  .opts label{font-size:12px;color:var(--muted)}
+  select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🧮 十六进制转储</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Hex Dump</div>
+  </div>
+  <div class="toolbar">
+    <label class="file">选择文件<input type="file" id="file"></label>
+    <button id="btnGen" class="primary">生成</button>
+    <button id="btnCopy">复制</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>输入文本（或选择文件）</span><span id="inMeta">0 字节</span></div>
+    <textarea id="in" placeholder="粘贴文本，或点击右上角「选择文件」载入本地文件（文件不会上传）" spellcheck="false">Hello, Hex Dump! 你好</textarea>
+    <div class="opts">
+      <label>每行字节数
+        <select id="cols">
+          <option value="8">8</option>
+          <option value="16" selected>16</option>
+          <option value="32">32</option>
+        </select>
+      </label>
+      <label>偏移位数
+        <select id="off">
+          <option value="4">4</option>
+          <option value="8" selected>8</option>
+        </select>
+      </label>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Output</span><span id="outMeta"></span></div>
+    <pre id="out"></pre>
+  </section>
+</main>
+<div class="hint">将文本或本地文件的字节以经典格式（偏移 | 十六进制 | ASCII）展示，便于排查编码、二进制结构。文件仅在本机内存中读取，绝不上传。</div>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  let fileBytes=null, fileName='';
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function ascii(c){ return (c>=32&&c<127)?String.fromCharCode(c):'.'; }
+  function dump(bytes, cols, offw){
+    const lines=[];
+    for(let i=0;i<bytes.length;i+=cols){
+      const slice=bytes.slice(i,i+cols);
+      const hex=[]; const asc=[];
+      for(const b of slice){ hex.push(b.toString(16).padStart(2,'0')); asc.push(ascii(b)); }
+      while(hex.length<cols){ hex.push('  '); }
+      const off=i.toString(16).padStart(offw,'0').toUpperCase();
+      lines.push(off+'  '+hex.join(' ')+'  '+asc.join(''));
+    }
+    return lines.join('\n');
+  }
+  function run(){
+    const cols=parseInt($('cols').value), offw=parseInt($('off').value);
+    let bytes, label;
+    if(fileBytes){ bytes=fileBytes; label='文件 '+fileName; }
+    else { bytes=new TextEncoder().encode($('in').value); label='文本'; }
+    const text=dump(bytes,cols,offw);
+    $('out').textContent=text;
+    $('outMeta').textContent=bytes.length+' 字节';
+    setStatus('✓ 已生成（'+label+'）','ok');
+  }
+  $('file').addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{ fileBytes=new Uint8Array(r.result); fileName=f.name;
+      $('inMeta').textContent=f.size+' 字节（文件）'; setStatus('已载入文件：'+f.name+'，点击「生成」'); };
+    r.readAsArrayBuffer(f);
+  });
+  $('in').addEventListener('input',()=>{ if(!fileBytes)$('inMeta').textContent=new TextEncoder().encode($('in').value).length+' 字节'; });
+  $('btnGen').onclick=run;
+  $('cols').addEventListener('change',run);
+  $('off').addEventListener('change',run);
+  $('btnCopy').onclick=async()=>{ try{await navigator.clipboard.writeText($('out').textContent);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败','err');} };
+  $('btnClear').onclick=()=>{fileBytes=null;fileName='';$('in').value='';$('out').textContent='';$('file').value='';$('inMeta').textContent='0 字节';setStatus('已清空');};
+  run();
+})();
+</script>
+</body>
+</html>

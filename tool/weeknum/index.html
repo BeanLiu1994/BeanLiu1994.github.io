@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISO 周数计算器 · Week Number</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;max-width:760px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted)}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:9px 11px;font-size:14px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .result{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+  .stat .v{font-size:22px;font-weight:700;color:var(--accent)}
+  .stat .k{font-size:11px;color:var(--muted);margin-top:4px}
+  .big{font-size:30px;font-weight:800;color:var(--accent);text-align:center;padding:8px 0}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📅 ISO 周数计算器</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · ISO 8601 Week Number</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnToday" class="primary">今天</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>日期 → 周数</h2>
+    <div class="row">
+      <div class="field">
+        <label>选择日期</label>
+        <input type="date" id="dateIn">
+      </div>
+    </div>
+    <div class="big" id="weekBig">—</div>
+    <div class="result">
+      <div class="stat"><div class="v" id="rYear">—</div><div class="k">ISO 年份</div></div>
+      <div class="stat"><div class="v" id="rWeek">—</div><div class="k">周数</div></div>
+      <div class="stat"><div class="v" id="rDow">—</div><div class="k">星期</div></div>
+      <div class="stat"><div class="v" id="rMon">—</div><div class="k">本周一</div></div>
+      <div class="stat"><div class="v" id="rSun">—</div><div class="k">本周日</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>周数 → 日期</h2>
+    <div class="row">
+      <div class="field">
+        <label>ISO 年份</label>
+        <input type="number" id="yrIn" min="1" max="9999" style="width:110px">
+      </div>
+      <div class="field">
+        <label>周数 (1-53)</label>
+        <input type="number" id="wkIn" min="1" max="53" style="width:110px">
+      </div>
+      <button id="btnRev" class="primary">计算</button>
+    </div>
+    <div class="result">
+      <div class="stat"><div class="v" id="rMon2">—</div><div class="k">周一</div></div>
+      <div class="stat"><div class="v" id="rSun2">—</div><div class="k">周日</div></div>
+    </div>
+    <p class="hint">ISO 周以星期一为一周的第一天；包含该年第一个星期四的周为第 1 周（即 1 月 4 日所在周）。</p>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  const DOW=['周日','周一','周二','周三','周四','周五','周六'];
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function fmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function isoWeek(date){
+    const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+    const dayNum=(d.getUTCDay()+6)%7;
+    d.setUTCDate(d.getUTCDate()-dayNum+3);
+    const thu=new Date(Date.UTC(d.getUTCFullYear(),0,4));
+    const tdn=(thu.getUTCDay()+6)%7;
+    thu.setUTCDate(thu.getUTCDate()-tdn+3);
+    const week=1+Math.round((d-thu)/(7*24*3600*1000));
+    return {year:d.getUTCFullYear(),week};
+  }
+  function weekMonday(year,week){
+    const thu=new Date(Date.UTC(year,0,4));
+    const tdn=(thu.getUTCDay()+6)%7;
+    thu.setUTCDate(thu.getUTCDate()-tdn+3);
+    const mon=new Date(thu);
+    mon.setUTCDate(thu.getUTCDate()+(week-1)*7-3);
+    return mon;
+  }
+  function fromDate(){
+    const v=$('dateIn').value;
+    if(!v){setStatus('请选择日期','err');return;}
+    const d=new Date(v+'T00:00:00');
+    const {year,week}=isoWeek(d);
+    const mon=weekMonday(year,week);
+    const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    $('weekBig').textContent='第 '+week+' 周';
+    $('rYear').textContent=year;
+    $('rWeek').textContent=week;
+    $('rDow').textContent=DOW[d.getDay()];
+    $('rMon').textContent=fmt(mon);
+    $('rSun').textContent=fmt(sun);
+    setStatus('✓ 已计算','ok');
+  }
+  function fromWeek(){
+    const y=parseInt($('yrIn').value),w=parseInt($('wkIn').value);
+    if(!y||!w||w<1||w>53){setStatus('请输入有效的年份与周数 (1-53)','err');return;}
+    const mon=weekMonday(y,w);
+    const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    $('rMon2').textContent=fmt(mon);
+    $('rSun2').textContent=fmt(sun);
+    setStatus('✓ 已计算第 '+w+' 周对应的日期范围','ok');
+  }
+  $('btnToday').onclick=()=>{$('dateIn').value=fmt(new Date());fromDate();};
+  $('dateIn').addEventListener('change',fromDate);
+  $('btnRev').onclick=fromWeek;
+  // init
+  $('dateIn').value=fmt(new Date());
+  fromDate();
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

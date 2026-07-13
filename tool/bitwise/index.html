@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>位运算计算器 · Bitwise Calculator</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;max-width:720px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted)}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;font-family:"SF Mono",Consolas,Monaco,monospace}
+  input:focus,select:focus{border-color:var(--accent)}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  .result{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+  .stat .v{font-size:15px;font-weight:700;word-break:break-all;font-family:"SF Mono",Consolas,Monaco,monospace;color:var(--accent)}
+  .stat .k{font-size:11px;color:var(--muted);margin-top:6px}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;margin-top:14px}
+  .expr{font-family:"SF Mono",Consolas,Monaco,monospace;font-size:14px;color:var(--muted);margin-bottom:6px;word-break:break-all}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🔢 位运算计算器</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Bitwise Calculator (BigInt)</div>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入</h2>
+    <div class="row">
+      <div class="field"><label>A</label><input id="aIn" style="width:200px" placeholder="如 255 或 0xff"></div>
+      <div class="field"><label>运算</label>
+        <select id="op">
+          <option value="and">AND (&amp;)</option>
+          <option value="or">OR (|)</option>
+          <option value="xor">XOR (^)</option>
+          <option value="nand">NAND</option>
+          <option value="nor">NOR</option>
+          <option value="xnor">XNOR</option>
+          <option value="not">NOT (~，仅 A)</option>
+          <option value="shl">SHL (&lt;&lt;，A 左移 B 位)</option>
+          <option value="shr">SHR (&gt;&gt;，A 右移 B 位)</option>
+        </select>
+      </div>
+      <div class="field"><label>B</label><input id="bIn" style="width:120px" placeholder="位数 / 操作数"></div>
+      <div class="field"><label>位宽</label>
+        <select id="width">
+          <option value="8">8</option>
+          <option value="16">16</option>
+          <option value="32" selected>32</option>
+          <option value="64">64</option>
+        </select>
+      </div>
+      <button id="btnCalc" class="primary">计算</button>
+    </div>
+    <p class="expr" id="expr">—</p>
+    <div class="result">
+      <div class="stat"><div class="v" id="rDec">—</div><div class="k">十进制</div></div>
+      <div class="stat"><div class="v" id="rHex">—</div><div class="k">十六进制</div></div>
+      <div class="stat"><div class="v" id="rOct">—</div><div class="k">八进制</div></div>
+      <div class="stat" style="grid-column:1/-1"><div class="v" id="rBin">—</div><div class="k">二进制（每 4 位分组）</div></div>
+    </div>
+    <p class="hint">支持任意精度（BigInt）。输入可带前缀：0x 十六进制、0b 二进制、0o 八进制，否则按十进制解析。位宽用于限制结果与 NOT 的位数（默认 32 位，结果会按位宽截断）。</p>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function parseBig(s){
+    s=(s||'').trim().toLowerCase();
+    if(s==='') return null;
+    if(s.startsWith('0x')) return BigInt(s);
+    if(s.startsWith('0b')) return BigInt(s);
+    if(s.startsWith('0o')) return BigInt(s);
+    return BigInt(s);
+  }
+  function binGroup(b){
+    // b is binary string; group by 4 from right
+    let neg=false, s=b;
+    if(s.startsWith('-')){neg=true;s=s.slice(1);}
+    s=s.replace(/^0+(?=\d)/,'');
+    const pad=(4-Math.ceil(s.length/4)*4+s.length%4)%4;
+    s='0'.repeat(pad)+s;
+    const out=s.replace(/(.{4})/g,'$1 ').trim();
+    return (neg?'-':'')+out;
+  }
+  function calc(){
+    const A=parseBig($('aIn').value);
+    if(A===null){setStatus('请输入操作数 A','err');return;}
+    const w=parseInt($('width').value);
+    const mask=(1n<<BigInt(w))-1n;
+    const op=$('op').value;
+    let B=null, R=null, expr='';
+    if(op!=='not'){
+      B=parseBig($('bIn').value);
+      if(B===null){setStatus('请输入操作数 B','err');return;}
+    }
+    const a=A & mask; // keep within width for display
+    switch(op){
+      case 'and': R=(a & B) & mask; expr=A+' & '+B; break;
+      case 'or': R=(a | B) & mask; expr=A+' | '+B; break;
+      case 'xor': R=(a ^ B) & mask; expr=A+' ^ '+B; break;
+      case 'nand': R=(~(a & B)) & mask; expr='~('+A+' & '+B+')'; break;
+      case 'nor': R=(~(a | B)) & mask; expr='~('+A+' | '+B+')'; break;
+      case 'xnor': R=(~(a ^ B)) & mask; expr='~('+A+' ^ '+B+')'; break;
+      case 'not': R=(~a) & mask; expr='~'+A; break;
+      case 'shl': R=(a << B) & mask; expr=A+' << '+B; break;
+      case 'shr': R=(a >> B) & mask; expr=A+' >> '+B; break;
+    }
+    $('expr').textContent=expr+' = '+R+'  (位宽 '+w+')';
+    $('rDec').textContent=R.toString(10);
+    $('rHex').textContent='0x'+R.toString(16).toUpperCase();
+    $('rOct').textContent='0o'+R.toString(8);
+    $('rBin').textContent=binGroup(R.toString(2));
+    setStatus('✓ 已计算','ok');
+  }
+  $('btnCalc').onclick=calc;
+  $('op').addEventListener('change',calc);
+  $('width').addEventListener('change',calc);
+  $('aIn').addEventListener('input',calc);
+  $('bIn').addEventListener('input',calc);
+  $('aIn').value='255'; $('bIn').value='15'; $('op').value='and';
+  calc();
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

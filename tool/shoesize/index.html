@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鞋码换算 · Shoe Size Converter</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;max-width:640px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted)}
+  input,select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .result{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+  .stat .v{font-size:20px;font-weight:700;color:var(--accent)}
+  .stat .k{font-size:11px;color:var(--muted);margin-top:4px}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>👟 鞋码换算</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Shoe Size Converter</div>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入一个尺码</h2>
+    <div class="row">
+      <div class="field"><label>尺码系统</label>
+        <select id="sys">
+          <option value="usm">美码 (男) US Men</option>
+          <option value="usw">美码 (女) US Women</option>
+          <option value="uk">英码 UK</option>
+          <option value="eu">欧码 EU</option>
+          <option value="cm">脚长 (厘米) CM</option>
+          <option value="jp">日本码 JP</option>
+        </select>
+      </div>
+      <div class="field"><label>数值</label><input id="val" type="number" step="0.5" style="width:120px"></div>
+      <button id="btnCalc" class="primary">换算</button>
+    </div>
+    <div class="result">
+      <div class="stat"><div class="v" id="rUsm">—</div><div class="k">美码 (男)</div></div>
+      <div class="stat"><div class="v" id="rUsw">—</div><div class="k">美码 (女)</div></div>
+      <div class="stat"><div class="v" id="rUk">—</div><div class="k">英码</div></div>
+      <div class="stat"><div class="v" id="rEu">—</div><div class="k">欧码</div></div>
+      <div class="stat"><div class="v" id="rCm">—</div><div class="k">脚长 cm</div></div>
+      <div class="stat"><div class="v" id="rJp">—</div><div class="k">日本码</div></div>
+    </div>
+    <p class="hint">以脚长（厘米）为桥梁换算。公式为近似经验值（男美码 ≈ cm−18，女美码 ≈ cm−16.5，英码 ≈ cm−19，欧码 ≈ 1.5×cm+2，日本码 = cm），不同品牌与鞋型会有 ±0.5 码偏差，购买前请参考具体尺码表。</p>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function toCM(sys,v){
+    if(sys==='usm')return v+18;
+    if(sys==='usw')return v+16.5;
+    if(sys==='uk')return v+19;
+    if(sys==='eu')return (v-2)/1.5;
+    if(sys==='cm')return v;
+    if(sys==='jp')return v;
+  }
+  function fromCM(cm){
+    return {
+      usm: cm-18, usw: cm-16.5, uk: cm-19,
+      eu: 1.5*cm+2, cm: cm, jp: cm
+    };
+  }
+  const r2=x=>Math.round(x*2)/2;
+  const r1=x=>Math.round(x*10)/10;
+  function calc(){
+    const v=parseFloat($('val').value), sys=$('sys').value;
+    if(isNaN(v)){setStatus('请输入数值','err');return;}
+    const cm=toCM(sys,v);
+    const o=fromCM(cm);
+    $('rUsm').textContent=r2(o.usm);
+    $('rUsw').textContent=r2(o.usw);
+    $('rUk').textContent=r2(o.uk);
+    $('rEu').textContent=Math.round(o.eu);
+    $('rCm').textContent=r1(o.cm);
+    $('rJp').textContent=r1(o.jp);
+    setStatus('✓ 已换算（近似值）','ok');
+  }
+  $('btnCalc').onclick=calc;
+  $('val').addEventListener('input',calc);
+  $('sys').addEventListener('change',calc);
+  $('val').value='42'; $('sys').value='eu';
+  calc();
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

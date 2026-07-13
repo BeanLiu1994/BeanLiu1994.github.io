@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title> NATO 字母拼读 · NATO Phonetic</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;padding:16px;font-size:15px;line-height:1.7;font-family:"SF Mono",Consolas,Monaco,monospace}
+  #out{color:var(--accent)}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;padding:12px 16px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📞 NATO 字母拼读</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · NATO Phonetic Alphabet</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnEnc" class="primary">编码 →</button>
+    <button id="btnDec">← 解码</button>
+    <button id="btnCopy">复制</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>输入 Input</span></div>
+    <textarea id="in" placeholder="输入文本，如：ABC123" spellcheck="false">ABC123</textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>结果 Output</span></div>
+    <textarea id="out" readonly placeholder="结果…"></textarea>
+  </section>
+</main>
+<div class="hint">编码：字母与数字转为 NATO 读音词（A→Alpha, 1→One, 9→Niner），各词以空格分隔。解码：将读音词还原为字符。该拼读表为国际民航组织（ICAO）标准，公有领域。</div>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  const NATO={a:'Alpha',b:'Bravo',c:'Charlie',d:'Delta',e:'Echo',f:'Foxtrot',g:'Golf',h:'Hotel',
+    i:'India',j:'Juliett',k:'Kilo',l:'Lima',m:'Mike',n:'November',o:'Oscar',p:'Papa',q:'Quebec',
+    r:'Romeo',s:'Sierra',t:'Tango',u:'Uniform',v:'Victor',w:'Whiskey',x:'X-ray',y:'Yankee',z:'Zulu',
+    '0':'Zero','1':'One','2':'Two','3':'Three','4':'Four','5':'Five','6':'Six','7':'Seven','8':'Eight','9':'Niner'};
+  const REV={};
+  for(const k in NATO){ REV[NATO[k].toLowerCase().replace(/-/g,'')]=k; }
+  function encode(t){
+    const words=[];
+    for(const ch of t){
+      if(/[a-z0-9]/i.test(ch)){ words.push(NATO[ch.toLowerCase()].toUpperCase()); }
+      else if(ch===' '){ words.push(''); }
+      else { words.push(ch); }
+    }
+    return words.join(' ');
+  }
+  function decode(t){
+    const tokens=t.trim().split(/\s+/).filter(x=>x!=='');
+    let s='';
+    for(const tok of tokens){
+      const key=tok.toLowerCase().replace(/-/g,'');
+      if(REV[key]) s+=REV[key];
+      else if(tok.length===1) s+=tok;
+      else s+=tok;
+    }
+    return s;
+  }
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function doEnc(){ const r=encode($('in').value); $('out').value=r; setStatus('✓ 已编码','ok'); }
+  function doDec(){ const r=decode($('in').value); $('out').value=r; setStatus('✓ 已解码','ok'); }
+  $('btnEnc').onclick=doEnc;
+  $('btnDec').onclick=doDec;
+  $('btnCopy').onclick=async()=>{ try{await navigator.clipboard.writeText($('out').value);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败','err');} };
+  $('btnClear').onclick=()=>{$('in').value='';$('out').value='';setStatus('就绪');$('in').focus();};
+  doEnc();
+})();
+</script>
+</body>
+</html>

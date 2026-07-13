@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日出日落计算 · Sun Times</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;max-width:720px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12px;color:var(--muted)}
+  input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .result{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+  .stat .v{font-size:20px;font-weight:700;color:var(--accent)}
+  .stat .k{font-size:11px;color:var(--muted);margin-top:4px}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌅 日出日落计算</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Sunrise / Sunset</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnLoc">定位</button>
+    <button id="btnToday" class="primary">今天</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>参数</h2>
+    <div class="row">
+      <div class="field"><label>日期</label><input type="date" id="dateIn"></div>
+      <div class="field"><label>纬度 Lat (°)</label><input type="number" id="latIn" step="0.0001" style="width:120px"></div>
+      <div class="field"><label>经度 Lng (°)</label><input type="number" id="lngIn" step="0.0001" style="width:120px"></div>
+      <div class="field"><label>时区偏移 (小时)</label><input type="number" id="tzIn" step="0.5" style="width:96px"></div>
+      <button id="btnCalc" class="primary">计算</button>
+    </div>
+    <div class="result">
+      <div class="stat"><div class="v" id="rRise">—</div><div class="k">日出 Sunrise</div></div>
+      <div class="stat"><div class="v" id="rSet">—</div><div class="k">日落 Sunset</div></div>
+      <div class="stat"><div class="v" id="rNoon">—</div><div class="k">正午 Solar Noon</div></div>
+      <div class="stat"><div class="v" id="rLen">—</div><div class="k">日照时长</div></div>
+      <div class="stat"><div class="v" id="rCivil">—</div><div class="k">民用晨昏</div></div>
+      <div class="stat"><div class="v" id="rDec">—</div><div class="k">太阳赤纬</div></div>
+    </div>
+    <p class="hint">基于标准日出方程（含大气折射 -0.833° 修正）计算。纬度北纬为正、南纬为负；经度东经为正、西经为负。时区偏移为该地相对 UTC 的小时数（如北京 +8、纽约夏令时 -4）。结果仅供参考，山地与海拔会有偏差。</p>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  const rad=Math.PI/180, deg=180/Math.PI;
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function fmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function pad(n){return String(n).padStart(2,'0');}
+  function hm(utcHours, baseDate, tz){
+    let ms = Date.UTC(baseDate.getFullYear(),baseDate.getMonth(),baseDate.getDate()) + utcHours*3600000 + tz*3600000;
+    const d=new Date(ms);
+    const hh=d.getUTCHours(), mm=d.getUTCMinutes();
+    const off=d.getUTCDate()-baseDate.getDate();
+    let tag='';
+    if(off>0)tag=' +'+off+'d'; else if(off<0)tag=' '+off+'d';
+    return pad(hh)+':'+pad(mm)+tag;
+  }
+  function calc(){
+    const dv=$('dateIn').value;
+    const lat=parseFloat($('latIn').value), lng=parseFloat($('lngIn').value), tz=parseFloat($('tzIn').value);
+    if(!dv||isNaN(lat)||isNaN(lng)||isNaN(tz)){setStatus('请填写完整的日期、经纬度与时区','err');return;}
+    const [Y,M,D]=dv.split('-').map(Number);
+    const base=new Date(Y,M-1,D);
+    const JD=367*Y-Math.floor(7*(Y+Math.floor((M+9)/12))/4)+Math.floor(275*M/9)+D+1721013.5;
+    const n=JD-2451545.0;
+    let L=(280.460+0.9856474*n)%360;
+    let g=(357.528+0.9856003*n)%360;
+    let lambda=L+1.915*Math.sin(g*rad)+0.020*Math.sin(2*g*rad);
+    const eps=23.439-0.0000004*n;
+    let alpha=Math.atan2(Math.cos(eps*rad)*Math.sin(lambda*rad),Math.cos(lambda*rad))*deg;
+    const dec=Math.asin(Math.sin(eps*rad)*Math.sin(lambda*rad))*deg;
+    let Ld=((L%360)+360)%360, ad=((alpha%360)+360)%360;
+    let diff=Ld-ad; if(diff>180)diff-=360; if(diff<-180)diff+=360;
+    const EqT=4*diff;
+    function forAlt(h0){
+      const cosH=(Math.sin(h0*rad)-Math.sin(lat*rad)*Math.sin(dec*rad))/(Math.cos(lat*rad)*Math.cos(dec*rad));
+      if(cosH<-1||cosH>1) return null;
+      const H0=Math.acos(cosH)*deg;
+      return H0;
+    }
+    const Hsun=forAlt(-0.833), Hcivil=forAlt(-6);
+    if(Hsun===null){ setStatus('该地点此日处于极昼或极夜，无日出日落','err');
+      $('rRise').textContent='—';$('rSet').textContent='—';$('rNoon').textContent='—';
+      $('rLen').textContent='—';$('rCivil').textContent='—';$('rDec').textContent=dec.toFixed(2)+'°'; return; }
+    const noonUTC=12 - lng/15 - EqT/60;
+    const riseUTC=noonUTC - Hsun/15, setUTC=noonUTC + Hsun/15;
+    $('rRise').textContent=hm(riseUTC,base,tz);
+    $('rSet').textContent=hm(setUTC,base,tz);
+    $('rNoon').textContent=hm(noonUTC,base,tz);
+    $('rLen').textContent=(2*Hsun/15).toFixed(1)+' h';
+    $('rDec').textContent=dec.toFixed(2)+'°';
+    if(Hcivil!==null){ const cr=noonUTC-Hcivil/15, cs=noonUTC+Hcivil/15;
+      $('rCivil').textContent=hm(cr,base,tz)+' / '+hm(cs,base,tz); }
+    else $('rCivil').textContent='—';
+    setStatus('✓ 已计算','ok');
+  }
+  $('btnToday').onclick=()=>{$('dateIn').value=fmt(new Date());calc();};
+  $('btnCalc').onclick=calc;
+  $('btnLoc').onclick=()=>{
+    if(!navigator.geolocation){setStatus('浏览器不支持定位','err');return;}
+    setStatus('正在获取定位…');
+    navigator.geolocation.getCurrentPosition(p=>{
+      $('latIn').value=p.coords.latitude.toFixed(4);
+      $('lngIn').value=p.coords.longitude.toFixed(4);
+      const off=-new Date().getTimezoneOffset()/60;
+      $('tzIn').value=off;
+      calc();
+    },e=>setStatus('定位失败：'+e.message,'err'),{enableHighAccuracy:false,timeout:8000});
+  };
+  // init with local defaults
+  $('dateIn').value=fmt(new Date());
+  $('latIn').value=''; $('lngIn').value='';
+  $('tzIn').value=(-new Date().getTimezoneOffset()/60);
+  setStatus('填写经纬度后点击计算，或点击「定位」自动获取');
+})();
+</script>
+</body>
+</html>

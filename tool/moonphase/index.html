@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>月相计算器 · Moon Phase</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;max-width:680px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center}
+  .moon{font-size:84px;line-height:1;margin:6px 0 2px}
+  .phase-name{font-size:22px;font-weight:700;color:var(--accent)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;justify-content:center}
+  .field{display:flex;flex-direction:column;gap:6px;text-align:left}
+  .field label{font-size:12px;color:var(--muted)}
+  input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .result{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+  .stat .v{font-size:18px;font-weight:700}
+  .stat .k{font-size:11px;color:var(--muted);margin-top:4px}
+  .bar{height:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-top:14px}
+  .bar>i{display:block;height:100%;background:var(--accent)}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;text-align:left;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌙 月相计算器</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Moon Phase</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnToday" class="primary">今天</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <div class="row">
+      <div class="field">
+        <label>日期</label>
+        <input type="date" id="dateIn">
+      </div>
+    </div>
+    <div class="moon" id="moonIcon">🌑</div>
+    <div class="phase-name" id="phaseName">—</div>
+    <div class="bar"><i id="illumBar" style="width:0%"></i></div>
+    <div class="result">
+      <div class="stat"><div class="v" id="rAge">—</div><div class="k">月龄 (天)</div></div>
+      <div class="stat"><div class="v" id="rIllum">—</div><div class="k">照亮比例</div></div>
+      <div class="stat"><div class="v" id="rDays">—</div><div class="k">距下一相 (天)</div></div>
+    </div>
+    <p class="hint">算法基于已知新月参考时刻（2000-01-06 18:14 UTC）与朔望月周期 29.5306 天推算，为近似结果，误差通常在数小时以内，适合日常参考。</p>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  const SYNODIC=29.530588853;
+  const REF=Date.UTC(2000,0,6,18,14,0);
+  const ICONS=['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'];
+  const NAMES=['新月 New Moon','蛾眉月(盈) Waxing Crescent','上弦月 First Quarter',
+    '盈凸月 Waxing Gibbous','满月 Full Moon','亏凸月 Waning Gibbous',
+    '下弦月 Last Quarter','残月(亏) Waning Crescent'];
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function fmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function phaseInfo(date){
+    const days=(date.getTime()-REF)/86400000;
+    let p=(days%SYNODIC)/SYNODIC;
+    if(p<0)p+=1;
+    const age=p*SYNODIC;
+    const illum=(1-Math.cos(2*Math.PI*p))/2;
+    const idx=Math.floor(p*8)%8;
+    // distance to next major phase (each quarter = 0.25)
+    const next=(Math.ceil(p*4)/4 - p);
+    const daysToNext=next<=0?(1-p+0.25/1)*SYNODIC:next*SYNODIC;
+    return {p,age,illum,idx,daysToNext};
+  }
+  function update(){
+    const v=$('dateIn').value;
+    if(!v){setStatus('请选择日期','err');return;}
+    const d=new Date(v+'T00:00:00');
+    const info=phaseInfo(d);
+    $('moonIcon').textContent=ICONS[info.idx];
+    $('phaseName').textContent=NAMES[info.idx];
+    $('rAge').textContent=info.age.toFixed(1);
+    $('rIllum').textContent=(info.illum*100).toFixed(1)+'%';
+    $('rDays').textContent=info.daysToNext.toFixed(1);
+    $('illumBar').style.width=(info.illum*100).toFixed(1)+'%';
+    setStatus('✓ 已计算','ok');
+  }
+  $('btnToday').onclick=()=>{$('dateIn').value=fmt(new Date());update();};
+  $('dateIn').addEventListener('change',update);
+  $('dateIn').value=fmt(new Date());
+  update();
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>

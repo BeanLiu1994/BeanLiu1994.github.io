@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>盲文转换 · Braille Translator</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  main{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane-head{padding:8px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  textarea{flex:1;background:transparent;color:var(--text);border:0;resize:none;outline:none;padding:16px;font-size:18px;line-height:1.8;font-family:"SF Mono",Consolas,Monaco,monospace}
+  #out{color:var(--accent);font-size:22px;line-height:2}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;padding:12px 16px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>⠿ 盲文转换（一级）</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Braille Translator</div>
+  </div>
+  <div class="toolbar">
+    <button id="btnCopy">复制</button>
+    <button id="btnClear">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>输入文本（字母/数字/常用标点）</span><span id="inMeta">0 字符</span></div>
+    <textarea id="in" placeholder="输入英文或数字，如：Hello 123" spellcheck="false">Hello World 2026</textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>盲文（Unicode Braille Patterns）</span><span id="outMeta"></span></div>
+    <textarea id="out" readonly placeholder="转换结果…"></textarea>
+  </section>
+</main>
+<div class="hint">采用一级盲文（Grade 1）基本映射：大写字母前加 ⠠ 大写符，数字前加 ⠼ 数字符（0-9 对应 a-j）。支持字母、数字及 . , ; : ? ! ' " - ( ) / 与空格。中文等字符暂不转换（显示为 ⠿）。</div>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  // dot arrays for a-z
+  const L={
+    a:[1],b:[1,2],c:[1,4],d:[1,4,5],e:[1,5],f:[1,2,4],g:[1,2,4,5],h:[1,2,5],i:[2,4],j:[2,4,5],
+    k:[1,3],l:[1,2,3],m:[1,3,4],n:[1,3,4,5],o:[1,3,5],p:[1,2,3,4],q:[1,2,3,4,5],r:[1,2,3,5],
+    s:[2,3,4],t:[2,3,4,5],u:[1,3,6],v:[1,2,3,6],w:[2,4,5,6],x:[1,3,4,6],y:[1,3,4,5,6],z:[1,3,5,6]
+  };
+  const PUNCT={ ' ':[], ',':[2], ';':[2,3], ':':[2,5], '.':[2,5,6], '?':[2,3,6], '!':[2,3,5],
+    "'":[3], '"':[2,3,6], '-':[3,6], '(':[2,3,5,6], ')':[2,3,5,6], '/':[3,4] };
+  const CAP=0x2820, NUM=0x283C;
+  function dotsToChar(dots){ let c=0x2800; dots.forEach(d=>c+=(1<<(d-1))); return String.fromCharCode(c); }
+  function letterCode(ch){ return dotsToChar(L[ch]); }
+  function translate(text){
+    let out='';
+    for(const raw of text){
+      const ch=raw.toLowerCase();
+      if(ch>='a'&&ch<='z'){
+        if(raw!==ch) out+=String.fromCharCode(CAP);
+        out+=letterCode(ch);
+      } else if(ch>='0'&&ch<='9'){
+        out+=String.fromCharCode(NUM);
+        const idx=ch==='0'?9:(parseInt(ch)-1);
+        out+=letterCode('abcdefghi'.charAt(idx));
+      } else if(PUNCT.hasOwnProperty(raw)){
+        const d=PUNCT[raw];
+        out+= d.length?dotsToChar(d):' ';
+      } else {
+        out+='⠿';
+      }
+    }
+    return out;
+  }
+  function run(){
+    const t=$('in').value;
+    $('inMeta').textContent=t.length+' 字符';
+    const r=translate(t);
+    $('out').value=r;
+    $('outMeta').textContent=r.length+' 符';
+    setStatus(t?'✓ 已转换':'等待输入…', t?'ok':'');
+  }
+  $('in').addEventListener('input',run);
+  $('btnCopy').onclick=async()=>{ try{await navigator.clipboard.writeText($('out').value);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败','err');} };
+  $('btnClear').onclick=()=>{$('in').value='';run();$('in').focus();};
+  run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分数计算器 · Fraction Calculator</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;max-width:640px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .frac-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .frac{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .frac input{width:74px;text-align:center;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:16px;outline:none}
+  .frac input:focus{border-color:var(--accent)}
+  .frac .line{width:74px;height:2px;background:var(--text)}
+  select{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:16px;outline:none}
+  select:focus{border-color:var(--accent)}
+  .result{margin-top:18px;text-align:center}
+  .big{font-size:30px;font-weight:800;color:var(--accent);margin:6px 0}
+  .sub2{color:var(--muted);font-size:14px}
+  .fracdisp{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;font-size:26px;font-weight:700}
+  .fracdisp .t{padding:0 10px}
+  .fracdisp .b{border-top:2px solid var(--accent);padding:0 10px}
+  button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  .status{padding:8px 16px;font-size:13px;border-top:1px solid var(--border);min-height:36px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  .hint{color:var(--muted);font-size:12px;line-height:1.6;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>➗ 分数计算器</h1>
+    <div class="sub">纯本地运行 · 数据不上传 · Fraction Calculator</div>
+  </div>
+  <div class="toolbar" style="margin-left:auto;display:flex;gap:8px">
+    <button id="btnSample" class="primary">示例</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>输入两个分数与运算</h2>
+    <div class="frac-row" style="justify-content:center">
+      <div class="frac"><input id="n1" value="1"><div class="line"></div><input id="d1" value="3"></div>
+      <select id="op"><option value="+">+</option><option value="-">−</option><option value="*">×</option><option value="/">÷</option></select>
+      <div class="frac"><input id="n2" value="1"><div class="line"></div><input id="d2" value="6"></div>
+      <span style="font-size:26px;font-weight:700">=</span>
+    </div>
+    <div class="result">
+      <div class="big" id="bigFrac">—</div>
+      <div class="sub2" id="mixed">—</div>
+      <div class="sub2" id="dec">—</div>
+    </div>
+    <p class="hint">支持负数与整数（分母为 1）。结果自动约分并给出带分数与小数形式。除数为 0 时会提示错误。</p>
+  </section>
+</main>
+<div class="status" id="status">就绪</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const status=$('status');
+  function setStatus(m,t){status.textContent=m;status.className='status'+(t?' '+t:'');}
+  function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){const t=a%b;a=b;b=t;}return a||1;}
+  function renderFrac(num,den){
+    if(den<0){num=-num;den=-den;}
+    const g=gcd(num,den); num/=g; den/=g;
+    return {num,den,str:num+'/'+den};
+  }
+  function fracHTML(f){
+    if(f.den===1) return '<span style="color:var(--accent)">'+f.num+'</span>';
+    return '<span class="fracdisp"><span class="t">'+f.num+'</span><span class="b">'+f.den+'</span></span>';
+  }
+  function calc(){
+    const n1=parseInt($('n1').value), d1=parseInt($('d1').value);
+    const n2=parseInt($('n2').value), d2=parseInt($('d2').value);
+    const op=$('op').value;
+    if([n1,d1,n2,d2].some(x=>isNaN(x))){setStatus('请输入整数分子与分母','err');return;}
+    if(d1===0||d2===0){setStatus('分母不能为 0','err');return;}
+    let num,den;
+    if(op==='+'){num=n1*d2+d1*n2;den=d1*d2;}
+    else if(op==='-'){num=n1*d2-d1*n2;den=d1*d2;}
+    else if(op==='*'){num=n1*n2;den=d1*d2;}
+    else if(op==='/'){ if(n2===0){setStatus('不能除以 0','err');return;} num=n1*d2;den=d1*n2; }
+    const r=renderFrac(num,den);
+    $('bigFrac').innerHTML=fracHTML(r);
+    // mixed number
+    if(r.den===1){ $('mixed').textContent='整数：'+r.num; }
+    else if(Math.abs(r.num)>=r.den){
+      const whole=Math.trunc(r.num/r.den), rem=r.num-whole*r.den;
+      $('mixed').textContent='带分数：'+whole+' '+Math.abs(rem)+'/'+r.den;
+    } else { $('mixed').textContent='真分数'; }
+    const dec=num/den;
+    $('dec').textContent='小数：'+(isFinite(dec)?(Math.round(dec*1e10)/1e10):'∞');
+    setStatus('✓ 已计算，已约分','ok');
+  }
+  ['n1','d1','n2','d2','op'].forEach(id=>$(id).addEventListener('input',calc));
+  $('op').addEventListener('change',calc);
+  $('btnSample').onclick=()=>{$('n1').value='1';$('d1').value='3';$('op').value='+';$('n2').value='1';$('d2').value='6';calc();};
+  calc();
+  setStatus('就绪');
+})();
+</script>
+</body>
+</html>
