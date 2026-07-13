@@ -111,7 +111,8 @@
     doMove(idx,dx,dy){ if(this.over) return false; if(!canMove(this.pieces,idx,dx,dy)) return false; this.pieces[idx].x+=dx; this.pieces[idx].y+=dy; this.moves++; this.updateUI(); if(this.pieces[0].x===1&&this.pieces[0].y===3) this.win(); return true; }
     win(){ this.over=true; this.stopAuto(); if(this.best===0||this.moves<this.best){ this.best=this.moves; localStorage.setItem('bestKlotski',this.best); } document.getElementById('win-msg').textContent='Solved in '+this.moves+' moves'; document.getElementById('overlay-win').classList.add('active'); }
     chooseAuto(){ if(this.over) return;
-      // Pick a random valid move
+      // Pick a random valid move (a proper solver is intentionally NOT wired in:
+      // the BFS over this piece set blows up to 300k+ states and would OOM)
       const idx=Math.floor(Math.random()*this.pieces.length);
       const dirs=[[0,-1],[0,1],[-1,0],[1,0]];
       for(const [dx,dy] of dirs){ if(canMove(this.pieces,idx,dx,dy)){ this.doMove(idx,dx,dy); return; } }
@@ -122,42 +123,30 @@
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI exploring…'; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    stopAuto(){ this.autoPlay=false; this._path=null; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     tick(ts){ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.render(); requestAnimationFrame(this._tick); }
     update(dt){ const k=1-Math.pow(0.0008,dt); for(let i=0;i<this.pieces.length;i++){ this.disp[i].x=lerp(this.disp[i].x,this.pieces[i].x,k); this.disp[i].y=lerp(this.disp[i].y,this.pieces[i].y,k); }
       if(this.autoPlay&&!this.over){ this.autoAccum+=dt; if(this.autoAccum>=0.5){ this.autoAccum=0; this.chooseAuto(); } }
     }
     bindInput(){ const wrap=document.getElementById('board-wrap');
-      // Swipe detection
-      let sx=0,sy=0,stId=null,fired=false; const TH=10;
+      // Drag-to-slide: grab a piece and drag; it follows your finger cell-by-cell
+      // and stops at the first obstacle. Much easier to control than 1-cell swipes.
+      let stId=null, startX=0, startY=0, pieceIdx=-1, axis=null, committed=0; const TH=6;
       wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; e.preventDefault();
-        sx=e.clientX; sy=e.clientY; stId=e.pointerId; fired=false;
-        try{wrap.setPointerCapture(e.pointerId);}catch(_){}
+        stId=e.pointerId; startX=e.clientX; startY=e.clientY;
+        pieceIdx=this.pieceAt(e.clientX,e.clientY);
+        axis=null; committed=0;
+        try{ wrap.setPointerCapture(e.pointerId); }catch(_){}
       });
-      wrap.addEventListener('pointermove',(e)=>{ if(stId===null||fired||this.autoPlay||this.over) return;
-        const dx=e.clientX-sx, dy=e.clientY-sy;
-        if(Math.max(Math.abs(dx),Math.abs(dy))<TH) return; fired=true;
-        // Find which piece to move — the one closest to the swipe start position
-        const rect=canvas.getBoundingClientRect();
-        const gx=(sx-rect.left)/this.cell, gy=(sy-rect.top)/this.cell;
-        const idx=this.pieceAt(sx,sy);
-        if(idx<0 || idx>=this.pieces.length) return;
-        let ddx=0, ddy=0;
-        if(Math.abs(dx)>Math.abs(dy)) ddx=dx>0?1:-1; else ddy=dy>0?1:-1;
-        this.doMove(idx,ddx,ddy);
+      wrap.addEventListener('pointermove',(e)=>{ if(stId===null||pieceIdx<0||this.autoPlay||this.over) return;
+        const dx=e.clientX-startX, dy=e.clientY-startY;
+        if(axis===null){ if(Math.max(Math.abs(dx),Math.abs(dy))<TH) return; axis = Math.abs(dx)>Math.abs(dy) ? 'x' : 'y'; }
+        const delta = axis==='x' ? dx : dy;
+        const target = Math.trunc(delta/this.cell);   // signed number of cells to reach
+        while(committed < target){ if(!this.doMove(pieceIdx, axis==='x'?1:0, axis==='y'?1:0)) break; committed++; }
+        while(committed > target){ if(!this.doMove(pieceIdx, axis==='x'?-1:0, axis==='y'?-1:0)) break; committed--; }
       });
-      const end=(e)=>{ if(e.pointerId!==stId) return; stId=null;
-        if(fired||this.autoPlay||this.over) return;
-        const dx=e.clientX-sx, dy=e.clientY-sy;
-        if(Math.max(Math.abs(dx),Math.abs(dy))>=TH){
-          const idx=this.pieceAt(sx,sy);
-          if(idx>=0 && idx<this.pieces.length){
-            let ddx=0, ddy=0;
-            if(Math.abs(dx)>Math.abs(dy)) ddx=dx>0?1:-1; else ddy=dy>0?1:-1;
-            this.doMove(idx,ddx,ddy);
-          }
-        }
-      };
+      const end=(e)=>{ if(e.pointerId!==stId) return; stId=null; pieceIdx=-1; axis=null; };
       wrap.addEventListener('pointerup',end); wrap.addEventListener('pointercancel',end);
       window.addEventListener('resize',()=>{ this.size=fitCanvas(); this.cell=this.size/COLS; });
     }
