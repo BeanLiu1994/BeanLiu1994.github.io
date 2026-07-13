@@ -97,7 +97,7 @@
         `<td data-v="&#${cp};">&#amp;#${cp};</td></tr>`;
     }
     tbody.innerHTML=rows;
-    tbody.querySelectorAll('td').forEach(td=>td.onclick=()=>copy(td.dataset.v)));
+    tbody.querySelectorAll('td').forEach(td=>td.onclick=()=>copy(td.dataset.v));
     setStatus('✓ 共 '+[...s].length+' 个字符','ok');
   }
   function decode(){

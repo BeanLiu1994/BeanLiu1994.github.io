@@ -66,7 +66,7 @@
   const $=id=>document.getElementById(id);
   const st=$('st');
   function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
-  function toLong(ip){const p=ip.split('.').map(Number);if(p.length!==4||p.some(n=>isNaN(n)||n<0||n>255))throw new Error('无效的 IPv4 地址');return((p[0]<<24)+(p[1]<<16)+(p[2]<<8)+p[3))>>>0;}
+  function toLong(ip){const p=ip.split('.').map(Number);if(p.length!==4||p.some(n=>isNaN(n)||n<0||n>255))throw new Error('无效的 IPv4 地址');return((p[0]<<24)+(p[1]<<16)+(p[2]<<8)+p[3])>>>0;}
   function toIp(n){return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.');}
   function maskFromPrefix(p){if(p<0||p>32||isNaN(p))throw new Error('掩码位数 0–32');return p===0?0:((0xFFFFFFFF<<(32-p))>>>0);}
   function calc(){

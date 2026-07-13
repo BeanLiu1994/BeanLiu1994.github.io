@@ -37,13 +37,13 @@
   <section class="pane">
     <div class="card">
       <div class="pane-head">① X 的百分之 Y 是多少</div>
-      <div class="row"><label>X</label><input type="number" data-m="1" data-f="a" value="200"><label>%</label><input type="number" data-m="1" data-f="b" value="15"></div>
+      <div class="row"><label>X</label><input type="number" id="m1a" data-m="1" data-f="a" value="200"><label>%</label><input type="number" id="m1b" data-m="1" data-f="b" value="15"></div>
       <div class="result" id="r1"></div>
       <div class="formula" id="f1"></div>
     </div>
     <div class="card">
       <div class="pane-head">② X 是 Y 的百分之多少</div>
-      <div class="row"><label>X</label><input type="number" data-m="2" data-f="a" value="30"><label>Y</label><input type="number" data-m="2" data-f="b" value="120"></div>
+      <div class="row"><label>X</label><input type="number" id="m2a" data-m="2" data-f="a" value="30"><label>Y</label><input type="number" id="m2b" data-m="2" data-f="b" value="120"></div>
       <div class="result" id="r2"></div>
       <div class="formula" id="f2"></div>
     </div>
@@ -51,7 +51,7 @@
   <section class="pane">
     <div class="card">
       <div class="pane-head">③ X 增加/减少 Y% 后</div>
-      <div class="row"><label>原值</label><input type="number" data-m="3" data-f="a" value="500"><label>%</label><input type="number" data-m="3" data-f="b" value="10"><label>±</label></div>
+      <div class="row"><label>原值</label><input type="number" id="m3a" data-m="3" data-f="a" value="500"><label>%</label><input type="number" id="m3b" data-m="3" data-f="b" value="10"><label>±</label></div>
       <div class="row"><label>方向</label>
         <div class="seg" id="dir"><button data-d="inc" class="on">增加 +</button><button data-d="dec">减少 −</button></div>
       </div>
@@ -60,7 +60,7 @@
     </div>
     <div class="card">
       <div class="pane-head">④ 涨跌幅度（A → B）</div>
-      <div class="row"><label>前</label><input type="number" data-m="4" data-f="a" value="80"><label>后</label><input type="number" data-m="4" data-f="b" value="100"></div>
+      <div class="row"><label>前</label><input type="number" id="m4a" data-m="4" data-f="a" value="80"><label>后</label><input type="number" id="m4b" data-m="4" data-f="b" value="100"></div>
       <div class="result" id="r4"></div>
       <div class="formula" id="f4"></div>
     </div>

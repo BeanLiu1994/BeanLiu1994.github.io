@@ -87,7 +87,7 @@
     const rows=parseCsv(text);
     if(!rows.length)return'';
     const cols=Math.max(...rows.map(r=>r.length));
-    const esc=s=>s.replace(/\|/g,'\\|').replace(/\n/gg,' ');
+    const esc=s=>s.replace(/\|/g,'\\|').replace(/\n/g,' ');
     const head=rows[0].map(c=>esc(c)).concat(Array(Math.max(0,cols-rows[0].length)).fill(''));
     let out='| '+head.join(' | ')+' |\n';
     out+='| '+Array(cols).fill('---').join(' | ')+' |\n';

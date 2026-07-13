@@ -58,6 +58,7 @@
 (function(){
   const $=id=>document.getElementById(id);
   const status=$('status');
+  function setStatus(m,t){ status.textContent=m; status.className='status'+(t?' '+t:''); }
   // dot arrays for a-z
   const L={
     a:[1],b:[1,2],c:[1,4],d:[1,4,5],e:[1,5],f:[1,2,4],g:[1,2,4,5],h:[1,2,5],i:[2,4],j:[2,4,5],
@@ -79,7 +80,7 @@
       } else if(ch>='0'&&ch<='9'){
         out+=String.fromCharCode(NUM);
         const idx=ch==='0'?9:(parseInt(ch)-1);
-        out+=letterCode('abcdefghi'.charAt(idx));
+        out+=letterCode('abcdefghij'.charAt(idx));
       } else if(PUNCT.hasOwnProperty(raw)){
         const d=PUNCT[raw];
         out+= d.length?dotsToChar(d):' ';

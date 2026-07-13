@@ -75,6 +75,7 @@
 (function(){
   const $=id=>document.getElementById(id);
   const st=$('st');
+  function setStatus(m,t){ st.textContent=m; st.className='status'+(t?' '+t:''); }
   const cv=$('cv'), ctx=cv.getContext('2d');
   function wrap(text,font,maxW){
     ctx.font=font;

@@ -102,7 +102,7 @@
     setStatus('✓ 已计算 '+bytes.length+' 字节的校验和','ok');
   }
   async function copy(v){ try{await navigator.clipboard.writeText(v);setStatus('✓ 已复制 '+v,'ok');}catch(e){setStatus('复制失败：'+e.message,'err');} }
-  function recompute(){
+  async function recompute(){
     if($('mode').value==='file'){
       const f=$('file').files[0];
       if(!f){setStatus('请选择一个文件','err');return;}
