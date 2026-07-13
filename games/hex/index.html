@@ -74,8 +74,16 @@
   'use strict';
   const N=7, RED=1, BLUE=2;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
-  const W=canvas.width, H=canvas.height, SIZE=37;
-  const MX=(W - SIZE*Math.sqrt(3)*(N-0.5))/2, MY=(H - (SIZE*1.5*N+SIZE))/2;
+  const W=canvas.width, H=canvas.height, PAD=22;
+  const SQ3=Math.sqrt(3), HEXR=0.86;
+  // The board is a rhombus (parallelogram): every row r is shifted right by r/2, so the
+  // bounding box of all N*N hexes is wider than a single row. Size the hexes so the WHOLE
+  // board (incl. hex radius + side labels) fits inside the canvas, then centre it.
+  const spanX = SQ3 * ((N-1) + (N-1)/2);   // horizontal distance between extreme cell centres
+  const spanY = 1.5 * (N-1);               // vertical distance between extreme cell centres
+  const SIZE = Math.floor(Math.min((W-2*PAD)/(spanX + 2*HEXR), (H-2*PAD)/(spanY + 2*HEXR)));
+  const MX = (W - (spanX + 2*HEXR)*SIZE)/2 + HEXR*SIZE; // left vertex of col-0 sits at the centred left edge
+  const MY = (H - (spanY + 2*HEXR)*SIZE)/2 + HEXR*SIZE; // top vertex of row-0 sits at the centred top edge
   const NB=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
   const idx=(q,r)=>r*N+q;
   const pix=(q,r)=>({x:MX+SIZE*Math.sqrt(3)*(q+r/2), y:MY+SIZE*1.5*r});
