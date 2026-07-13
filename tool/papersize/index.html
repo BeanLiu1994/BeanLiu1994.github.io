@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纸张尺寸速查 · Paper Sizes</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--bg);color:var(--muted);border:0;padding:8px 14px;font-size:13px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:right}
+  th{color:var(--muted)} td.k{text-align:left;color:var(--accent);font-weight:600}
+  .preview{display:flex;align-items:flex-end;justify-content:center;padding:20px;min-height:300px}
+  .sheet{background:#fff;border-radius:3px;box-shadow:0 8px 24px rgba(0,0,0,.4);position:relative}
+  .sheet span{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#333;font-size:12px}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>📄 纸张尺寸速查</h1><div class="sub">ISO A/B/C 系列 + 北美常见规格 · mm / cm / inch / px · 纯本地</div></div>
+  <div class="toolbar">
+    <div class="seg" id="series"><button data-s="A" class="on">A 系列</button><button data-s="B">B 系列</button><button data-s="C">C 系列</button><button data-s="US">北美</button></div>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">尺寸表（宽 × 高，纵向）</div>
+      <table id="tbl"><thead><tr><th class="k" style="text-align:left">规格</th><th>mm</th><th>cm</th><th>inch</th><th>px@300dpi</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">比例预览（点击表格行）</div>
+      <div class="preview" id="prev"></div>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  // 宽,高 (mm) 纵向
+  const DATA={
+    A:[['4A0',1682,2378],['2A0',1189,1682],['A0',841,1189],['A1',594,841],['A2',420,594],['A3',297,420],['A4',210,297],['A5',148,210],['A6',105,148],['A7',74,105],['A8',52,74]],
+    B:[['B0',1000,1414],['B1',707,1000],['B2',500,707],['B3',353,500],['B4',250,353],['B5',176,250],['B6',125,176],['B7',88,125]],
+    C:[['C0',917,1297],['C1',648,917],['C2',458,648],['C3',324,458],['C4',229,324],['C5',162,229],['C6',114,162],['C7',81,114],['DL(信封)',110,220]],
+    US:[['Letter',215.9,279.4],['Legal',215.9,355.6],['Tabloid',279.4,431.8],['Ledger',431.8,279.4],['Executive',184.15,266.7],['名片',88.9,50.8]]
+  };
+  let series='A';
+  function render(){
+    const rows=DATA[series];
+    const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+    rows.forEach(([nm,w,h])=>{
+      const tr=document.createElement('tr'); tr.style.cursor='pointer';
+      const inch=(v)=>(v/25.4).toFixed(2);
+      const px=(v)=>Math.round(v/25.4*300);
+      tr.innerHTML='<td class="k">'+nm+'</td><td>'+w+'×'+h+'</td><td>'+(w/10).toFixed(1)+'×'+(h/10).toFixed(1)+'</td><td>'+inch(w)+'×'+inch(h)+'</td><td>'+px(w)+'×'+px(h)+'</td>';
+      tr.onclick=()=>preview(nm,w,h);
+      tb.appendChild(tr);
+    });
+    preview(rows[0][0],rows[0][1],rows[0][2]);
+    $('st').textContent='✓ '+series+' 系列，共 '+rows.length+' 种规格';
+  }
+  function preview(nm,w,h){
+    const maxH=260; const sc=maxH/h; const W=w*sc,H=h*sc;
+    $('prev').innerHTML='<div class="sheet" style="width:'+W+'px;height:'+H+'px"><span>'+nm+'<br>'+w+'×'+h+' mm</span></div>';
+  }
+  $('series').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; series=b.dataset.s;
+    [...$('series').children].forEach(x=>x.classList.toggle('on',x===b)); render(); });
+  render();
+})();
+</script>
+</body>
+</html>

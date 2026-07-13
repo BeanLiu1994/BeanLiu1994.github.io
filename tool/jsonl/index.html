@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSONL ⇄ JSON 数组 · JSON Lines Converter</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:8px}
+  .pane-head{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between}
+  textarea{flex:1;min-height:340px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px;font-family:ui-monospace,Consolas,Menlo,monospace;font-size:13px;line-height:1.5;outline:none;resize:vertical}
+  textarea:focus{border-color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🧬 JSONL ⇄ JSON 数组</h1><div class="sub">JSON Lines（每行一个对象）与标准 JSON 数组互转 · 纯本地</div></div>
+  <div class="toolbar">
+    <button id="toArr" class="primary">JSONL → 数组 ▶</button>
+    <button id="toLines">◀ 数组 → JSONL</button>
+    <button id="clr">清空</button>
+  </div>
+</header>
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>JSONL（每行一条）</span><button id="cpL">复制</button></div>
+    <textarea id="left" placeholder='{"id":1,"name":"Alice"}
+{"id":2,"name":"Bob"}'></textarea>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span>JSON 数组</span><button id="cpR">复制</button></div>
+    <textarea id="right" placeholder='[
+  {"id":1,"name":"Alice"},
+  {"id":2,"name":"Bob"}
+]'></textarea>
+  </section>
+</main>
+<div class="status ok" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function ok(m){ const s=$('st'); s.className='status ok'; s.textContent='✓ '+m; }
+  function err(m){ const s=$('st'); s.className='status err'; s.textContent='✕ '+m; }
+  $('toArr').onclick=()=>{
+    const lines=$('left').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    const out=[]; let n=0;
+    for(const l of lines){ n++; try{ out.push(JSON.parse(l)); }catch(e){ return err('第 '+n+' 行解析失败：'+e.message); } }
+    $('right').value=JSON.stringify(out,null,2); ok('已转换为数组，共 '+out.length+' 条');
+  };
+  $('toLines').onclick=()=>{
+    let arr; try{ arr=JSON.parse($('right').value); }catch(e){ return err('JSON 数组解析失败：'+e.message); }
+    if(!Array.isArray(arr)) return err('顶层必须是数组');
+    $('left').value=arr.map(o=>JSON.stringify(o)).join('\n'); ok('已转换为 JSONL，共 '+arr.length+' 行');
+  };
+  $('clr').onclick=()=>{ $('left').value=''; $('right').value=''; ok('已清空'); };
+  async function cp(id){ try{ await navigator.clipboard.writeText($(id).value); ok('已复制'); }catch(e){ err('复制失败'); } }
+  $('cpL').onclick=()=>cp('left'); $('cpR').onclick=()=>cp('right');
+})();
+</script>
+</body>
+</html>

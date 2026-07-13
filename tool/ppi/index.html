@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>屏幕 PPI / DPI 计算器 · Pixel Density</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:100px}
+  input[type=number]{flex:1;min-width:100px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .result{font-size:30px;font-weight:700;color:var(--accent)}
+  .big-label{color:var(--muted);font-size:13px;margin-bottom:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--border);padding:7px 9px;text-align:right}
+  th{color:var(--muted)} td.k{text-align:left;color:var(--muted)}
+  td.v{color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .cur{color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📱 屏幕 PPI / DPI 计算器</h1>
+  <div class="sub">由分辨率与对角线尺寸计算像素密度、点距与实际显示尺寸 · 纯本地</div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">屏幕参数</div>
+      <div class="row"><label>横向像素</label><input type="number" id="w" value="2560"></div>
+      <div class="row"><label>纵向像素</label><input type="number" id="h" value="1440"></div>
+      <div class="row"><label>对角线(英寸)</label><input type="number" id="d" value="27" step="0.1"></div>
+      <div class="cur" id="myScreen"></div>
+    </div>
+    <div class="card">
+      <div class="big-label">像素密度</div>
+      <div class="result" id="rPpi">—</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">详细结果</div>
+      <table id="tbl"><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function calc(){
+    const w=+$('w').value||0,h=+$('h').value||0,d=+$('d').value||0;
+    if(w<=0||h<=0||d<=0){ $('st').textContent='请输入有效参数'; return; }
+    const diagPx=Math.sqrt(w*w+h*h);
+    const ppi=diagPx/d;
+    const dotmm=25.4/ppi;
+    const widthIn=w/ppi, heightIn=h/ppi;
+    const mp=(w*h/1e6);
+    let ratio=(w/h);
+    // 简化宽高比
+    function gcd(a,b){return b?gcd(b,a%b):a;} const g=gcd(w,h);
+    $('rPpi').textContent=ppi.toFixed(1)+' PPI';
+    const rows=[
+      ['宽高比',(w/g)+':'+(h/g)],
+      ['总像素',mp.toFixed(2)+' 百万像素'],
+      ['点距(点间距)',dotmm.toFixed(4)+' mm'],
+      ['显示宽度',widthIn.toFixed(2)+' 英寸 / '+(widthIn*25.4).toFixed(1)+' mm'],
+      ['显示高度',heightIn.toFixed(2)+' 英寸 / '+(heightIn*25.4).toFixed(1)+' mm'],
+      ['视网膜级别',ppi>=300?'✓ 高密度（≥300）':(ppi>=200?'较高':'普通')],
+    ];
+    const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+    rows.forEach(([k,v])=>{ const tr=document.createElement('tr'); tr.innerHTML='<td class="k">'+k+'</td><td class="v">'+v+'</td>'; tb.appendChild(tr); });
+    $('st').textContent='✓ 已计算';
+  }
+  document.querySelectorAll('input').forEach(i=>i.addEventListener('input',calc));
+  // 显示当前屏幕物理分辨率参考
+  const dpr=window.devicePixelRatio||1;
+  $('myScreen').textContent='当前屏幕逻辑分辨率 '+screen.width+'×'+screen.height+'，DPR '+dpr+'（物理约 '+(screen.width*dpr)+'×'+(screen.height*dpr)+'）';
+  calc();
+})();
+</script>
+</body>
+</html>

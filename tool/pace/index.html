@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跑步配速计算器 · Running Pace</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:64px}
+  input[type=number]{width:72px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .unit{color:var(--muted);font-size:13px}
+  .result{margin-top:4px;font-size:24px;font-weight:700;color:var(--accent)}
+  .big-label{color:var(--muted);font-size:13px;margin-bottom:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--border);padding:6px 8px;text-align:right}
+  th{color:var(--muted)} td.k{text-align:left;color:var(--muted)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+  .hint{color:var(--muted);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏃 跑步配速计算器</h1>
+  <div class="sub">配速 / 时间 / 距离 · 已知任意两项求第三项 · 纯本地</div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">输入（留空需要计算的一项）</div>
+      <div class="row"><label>距离</label><input type="number" id="dist" value="10" step="0.01"><span class="unit">公里</span></div>
+      <div class="row"><label>用时</label><input type="number" id="h" placeholder="时" value="0"><input type="number" id="m" placeholder="分" value="50"><input type="number" id="s" placeholder="秒" value="0"></div>
+      <div class="row"><label>配速</label><input type="number" id="pm" placeholder="分" value=""><input type="number" id="ps" placeholder="秒" value=""><span class="unit">/公里</span></div>
+      <div class="hint">修改上方任意字段将自动重算其余项。</div>
+    </div>
+    <div class="card">
+      <div class="big-label">配速</div><div class="result" id="oPace">—</div>
+      <div class="big-label" style="margin-top:12px">时速</div><div class="result" id="oKmh" style="color:var(--ok)">—</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">按当前配速的常见距离完赛预估</div>
+      <table id="tbl"><thead><tr><th class="k">项目</th><th>预计用时</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function pad(n){ n=Math.round(n); return (n<10?'0':'')+n; }
+  function hms(sec){ if(!isFinite(sec)||sec<0)return '—'; const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=Math.round(sec%60); return (h>0?h+':':'')+pad(m)+':'+pad(s); }
+  function ms(sec){ if(!isFinite(sec)||sec<0)return '—'; const m=Math.floor(sec/60),s=Math.round(sec%60); return m+'′'+pad(s)+'″'; }
+  let last='';
+  function calc(){
+    const dist=+$('dist').value||0;
+    const tsec=(+$('h').value||0)*3600+(+$('m').value||0)*60+(+$('s').value||0);
+    const psec=($('pm').value!==''||$('ps').value!=='')?((+$('pm').value||0)*60+(+$('ps').value||0)):0;
+    let pace=0;
+    if(last==='pace'&&psec>0){ pace=psec; if(dist>0){ const t=pace*dist; $('h').value=Math.floor(t/3600); $('m').value=Math.floor(t%3600/60); $('s').value=Math.round(t%60); } }
+    else if(tsec>0&&dist>0){ pace=tsec/dist; $('pm').value=Math.floor(pace/60); $('ps').value=Math.round(pace%60); }
+    else if(psec>0){ pace=psec; }
+    if(pace>0){
+      $('oPace').textContent=ms(pace)+' /公里';
+      $('oKmh').textContent=(3600/pace).toFixed(2)+' km/h';
+      const events=[['400 米',0.4],['1 公里',1],['5 公里',5],['10 公里',10],['半程马拉松',21.0975],['全程马拉松',42.195]];
+      const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+      events.forEach(([n,d])=>{ const tr=document.createElement('tr'); tr.innerHTML='<td class="k">'+n+'</td><td>'+hms(pace*d)+'</td>'; tb.appendChild(tr); });
+      $('st').textContent='✓ 已计算';
+    } else { $('st').textContent='请输入至少两项'; }
+  }
+  ['dist','h','m','s'].forEach(id=>$(id).addEventListener('input',()=>{last='time';calc();}));
+  ['pm','ps'].forEach(id=>$(id).addEventListener('input',()=>{last='pace';calc();}));
+  calc();
+})();
+</script>
+</body>
+</html>

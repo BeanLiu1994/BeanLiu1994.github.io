@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人所得税计算器 · IIT Calculator</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:96px}
+  input[type=number]{flex:1;min-width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .result{margin-top:8px;font-size:26px;font-weight:700;color:var(--accent)}
+  .big-label{color:var(--muted);font-size:13px;margin-bottom:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--border);padding:6px 8px;text-align:right}
+  th{color:var(--muted);text-align:right}
+  td.k{text-align:left;color:var(--muted)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <h1>💰 个人所得税计算器</h1>
+  <div class="sub">中国综合所得（工资薪金）· 累计预扣预缴 · 纯本地计算</div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">月度收入与扣除</div>
+      <div class="row"><label>税前月薪</label><input type="number" id="salary" value="20000"></div>
+      <div class="row"><label>五险一金</label><input type="number" id="insur" value="3000"></div>
+      <div class="row"><label>专项附加扣除</label><input type="number" id="special" value="1500"></div>
+      <div class="row"><label>起征点</label><input type="number" id="thr" value="5000"></div>
+      <div class="row"><label>其他扣除</label><input type="number" id="other" value="0"></div>
+    </div>
+    <div class="card">
+      <div class="big-label">本月应纳税额</div>
+      <div class="result" id="rTax">—</div>
+      <div class="big-label" style="margin-top:12px">本月税后到手</div>
+      <div class="result" id="rNet" style="color:var(--ok)">—</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">全年逐月明细（累计预扣）</div>
+      <table id="tbl">
+        <thead><tr><th class="k">月</th><th>累计应税</th><th>当月税</th><th>当月到手</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  // 综合所得年度税率表（累计预扣）
+  const B=[
+    [36000,0.03,0],[144000,0.10,2520],[300000,0.20,16920],
+    [420000,0.25,31920],[660000,0.30,52920],[960000,0.35,85920],
+    [Infinity,0.45,181920]
+  ];
+  function taxOf(cum){ for(const [cap,r,d] of B){ if(cum<=cap) return Math.max(0,cum*r-d); } return 0; }
+  function fmt(n){ return '¥'+(Math.round(n*100)/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function calc(){
+    const s=+$('salary').value||0, ins=+$('insur').value||0, sp=+$('special').value||0,
+      thr=+$('thr').value||0, ot=+$('other').value||0;
+    const monthTaxable=Math.max(0, s-ins-sp-thr-ot); // 每月应税所得额
+    const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+    let prevCumTax=0, thisMonthTax=0, thisMonthNet=0;
+    for(let m=1;m<=12;m++){
+      const cum=monthTaxable*m;
+      const cumTax=taxOf(cum);
+      const mtax=cumTax-prevCumTax;
+      prevCumTax=cumTax;
+      const net=s-ins-mtax;
+      if(m===1){ thisMonthTax=mtax; thisMonthNet=net; }
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td class="k">'+m+'月</td><td>'+fmt(cum)+'</td><td>'+fmt(mtax)+'</td><td>'+fmt(net)+'</td>';
+      tb.appendChild(tr);
+    }
+    $('rTax').textContent=fmt(thisMonthTax);
+    $('rNet').textContent=fmt(thisMonthNet);
+    $('st').textContent='✓ 已按累计预扣法计算（首月税额较低，后续可能递增）';
+  }
+  document.querySelectorAll('input').forEach(i=>i.addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>

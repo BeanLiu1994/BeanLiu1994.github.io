@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>理想体重计算器 · Ideal Body Weight</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:96px}
+  input[type=number]{flex:1;min-width:90px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--bg);color:var(--muted);border:0;padding:8px 16px;font-size:13px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  .result{font-size:26px;font-weight:700;color:var(--accent)}
+  .big-label{color:var(--muted);font-size:13px;margin-bottom:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:right}
+  th{color:var(--muted)} td.k{text-align:left;color:var(--muted)}
+  td.v{color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚖️ 理想体重计算器</h1>
+  <div class="sub">多种经典公式（Devine / Robinson / Miller / BMI 健康区间）· 纯本地</div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">参数</div>
+      <div class="row"><label>性别</label>
+        <div class="seg" id="sex"><button data-s="m" class="on">男</button><button data-s="f">女</button></div>
+      </div>
+      <div class="row"><label>身高(cm)</label><input type="number" id="ht" value="175"></div>
+    </div>
+    <div class="card">
+      <div class="big-label">理想体重（BMI 22 参考值）</div>
+      <div class="result" id="rMain">—</div>
+      <div class="big-label" style="margin-top:12px">健康体重范围（BMI 18.5–24）</div>
+      <div class="result" id="rRange" style="color:var(--ok);font-size:20px">—</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">各公式对照</div>
+      <table id="tbl"><thead><tr><th class="k">公式</th><th>理想体重(kg)</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let sex='m';
+  function inch(cm){ return cm/2.54; }
+  function calc(){
+    const cm=+$('ht').value||0;
+    if(cm<=0){ $('st').textContent='请输入身高'; return; }
+    const over5ft=Math.max(0, inch(cm)-60); // 超过 5 英尺(60英寸)的英寸数
+    const male=sex==='m';
+    const devine=(male?50:45.5)+2.3*over5ft;
+    const robinson=(male?52:49)+ (male?1.9:1.7)*over5ft;
+    const miller=(male?56.2:53.1)+ (male?1.41:1.36)*over5ft;
+    const m2=(cm/100)*(cm/100);
+    const bmi22=22*m2;
+    const lo=18.5*m2, hi=24*m2;
+    $('rMain').textContent=bmi22.toFixed(1)+' kg';
+    $('rRange').textContent=lo.toFixed(1)+' – '+hi.toFixed(1)+' kg';
+    const rows=[['Devine 公式',devine],['Robinson 公式',robinson],['Miller 公式',miller],['BMI 22 参考',bmi22]];
+    const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+    rows.forEach(([k,v])=>{ const tr=document.createElement('tr'); tr.innerHTML='<td class="k">'+k+'</td><td class="v">'+v.toFixed(1)+'</td>'; tb.appendChild(tr); });
+    $('st').textContent='✓ 已计算（结果仅供参考，非医疗建议）';
+  }
+  $('sex').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; sex=b.dataset.s;
+    [...$('sex').children].forEach(x=>x.classList.toggle('on',x===b)); calc(); });
+  $('ht').addEventListener('input',calc);
+  calc();
+})();
+</script>
+</body>
+</html>

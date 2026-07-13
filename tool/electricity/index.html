@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>阶梯电费计算器 · Tiered Electricity Bill</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:100px}
+  input[type=number]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none;width:110px}
+  input[type=number]:focus{border-color:var(--accent)}
+  .tier{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .tier .lbl{color:var(--muted);font-size:12px;min-width:52px}
+  button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  .del{color:var(--err);border-color:transparent;padding:4px 8px}
+  .result{font-size:30px;font-weight:700;color:var(--accent)}
+  .big-label{color:var(--muted);font-size:13px;margin-bottom:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--border);padding:7px 9px;text-align:right}
+  th{color:var(--muted)} td.k{text-align:left;color:var(--muted)}
+  td.v{color:var(--accent)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ 阶梯电费计算器</h1>
+  <div class="sub">按分档单价累进计算电费 · 分档可自定义（默认为常见居民阶梯示例）· 纯本地</div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="row"><label>本期用电量</label><input type="number" id="kwh" value="450"><span style="color:var(--muted)">度 (kWh)</span></div>
+    </div>
+    <div class="card">
+      <div class="pane-head"><span>阶梯分档（上限 / 单价 元）</span><button id="addTier">+ 添加档</button></div>
+      <div id="tiers"></div>
+      <div style="color:var(--muted);font-size:12px;margin-top:6px">最后一档上限留空 = 不封顶。上限指累计用电量档界。</div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="big-label">应缴电费</div>
+      <div class="result" id="rTotal">—</div>
+      <div class="big-label" style="margin-top:10px">平均电价</div>
+      <div class="result" id="rAvg" style="font-size:18px;color:var(--ok)">—</div>
+    </div>
+    <div class="card">
+      <div class="pane-head">分档明细</div>
+      <table id="tbl"><thead><tr><th class="k">档位</th><th>该档用量</th><th>单价</th><th>小计</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let tiers=[{cap:2760,price:0.5283},{cap:4800,price:0.5783},{cap:'',price:0.8283}];
+  function renderTiers(){
+    const box=$('tiers'); box.innerHTML='';
+    tiers.forEach((t,i)=>{
+      const el=document.createElement('div'); el.className='tier';
+      el.innerHTML='<span class="lbl">第 '+(i+1)+' 档</span>'+
+        '<input type="number" data-i="'+i+'" data-k="cap" placeholder="上限(度)" value="'+(t.cap===''?'':t.cap)+'" style="width:100px">'+
+        '<input type="number" data-i="'+i+'" data-k="price" step="0.0001" value="'+t.price+'" style="width:90px">'+
+        '<button class="del" data-del="'+i+'">✕</button>';
+      box.appendChild(el);
+    });
+  }
+  function readTiers(){
+    document.querySelectorAll('#tiers input').forEach(inp=>{
+      const i=+inp.dataset.i,k=inp.dataset.k;
+      tiers[i][k]= k==='cap' ? (inp.value===''?'':+inp.value) : (+inp.value||0);
+    });
+  }
+  function fmt(n){ return '¥'+(Math.round(n*100)/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function calc(){
+    readTiers();
+    const total=+$('kwh').value||0;
+    let remain=total, prevCap=0, sum=0;
+    const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+    for(let i=0;i<tiers.length && remain>0;i++){
+      const t=tiers[i];
+      const cap=(t.cap===''||i===tiers.length-1)?Infinity:+t.cap;
+      const width=cap-prevCap;
+      const use=Math.min(remain, isFinite(width)?width:remain);
+      const sub=use*t.price;
+      sum+=sub; remain-=use; prevCap=cap;
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td class="k">第'+(i+1)+'档</td><td>'+use.toFixed(1)+' 度</td><td>'+t.price+'</td><td class="v">'+fmt(sub)+'</td>';
+      tb.appendChild(tr);
+    }
+    $('rTotal').textContent=fmt(sum);
+    $('rAvg').textContent=total>0?(sum/total).toFixed(4)+' 元/度':'—';
+    $('st').textContent='✓ 已按 '+tiers.length+' 档累进计算';
+  }
+  $('addTier').onclick=()=>{ tiers.push({cap:'',price:1.0}); renderTiers(); calc(); };
+  $('tiers').addEventListener('input',calc);
+  $('tiers').addEventListener('click',e=>{ const b=e.target.closest('[data-del]'); if(!b)return;
+    if(tiers.length<=1)return; tiers.splice(+b.dataset.del,1); renderTiers(); calc(); });
+  $('kwh').addEventListener('input',calc);
+  renderTiers(); calc();
+})();
+</script>
+</body>
+</html>

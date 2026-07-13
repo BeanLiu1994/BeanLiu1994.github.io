@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>房贷提前还款计算器 · Mortgage Prepayment</title>
+<style>
+  :root{ --bg:#0f1115; --panel:#171a21; --border:#2a2f3a; --text:#e6e6e6;
+    --muted:#9aa4b2; --accent:#4f9cff; --ok:#3ecf8e; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  main{flex:1;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+  .pane{flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .pane-head{padding:6px 2px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  label{color:var(--muted);font-size:13px;min-width:110px}
+  input[type=number]{flex:1;min-width:100px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;outline:none}
+  input[type=number]:focus{border-color:var(--accent)}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--bg);color:var(--muted);border:0;padding:8px 12px;font-size:13px;cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:right}
+  th{color:var(--muted)} td.k{text-align:left;color:var(--muted)}
+  td.v{color:var(--accent)} td.g{color:var(--ok)}
+  .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 房贷提前还款计算器</h1>
+  <div class="sub">等额本息 · 对比"缩短年限"与"减少月供"两种方式的省息效果 · 纯本地</div>
+</header>
+<main>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">贷款信息</div>
+      <div class="row"><label>贷款总额(元)</label><input type="number" id="P" value="1000000"></div>
+      <div class="row"><label>年利率(%)</label><input type="number" id="rate" value="4.2" step="0.01"></div>
+      <div class="row"><label>贷款年限(年)</label><input type="number" id="years" value="30"></div>
+      <div class="row"><label>已还月数</label><input type="number" id="paid" value="12"></div>
+      <div class="row"><label>提前还款额(元)</label><input type="number" id="extra" value="200000"></div>
+      <div class="row"><label>提前还款后</label>
+        <div class="seg" id="mode"><button data-m="term" class="on">缩短年限</button><button data-m="pay">减少月供</button></div>
+      </div>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="card">
+      <div class="pane-head">对比结果</div>
+      <table id="tbl"><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+<div class="status" id="st">就绪</div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  let mode='term';
+  function pmt(P,i,n){ return i===0?P/n:P*i*Math.pow(1+i,n)/(Math.pow(1+i,n)-1); }
+  function fmt(n){ return '¥'+(Math.round(n*100)/100).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  // 剩余本金
+  function balance(P,i,n,k){ // 还了k期后的剩余本金
+    const m=pmt(P,i,n);
+    return i===0? P-m*k : P*Math.pow(1+i,k)-m*(Math.pow(1+i,k)-1)/i;
+  }
+  function totalInterest(P,i,n){ return pmt(P,i,n)*n - P; }
+  function calc(){
+    const P=+$('P').value||0, i=(+$('rate').value||0)/100/12, n=(+$('years').value||0)*12,
+      k=+$('paid').value||0, extra=+$('extra').value||0;
+    if(P<=0||n<=0||k>=n){ $('st').textContent='请检查输入'; return; }
+    const m=pmt(P,i,n);
+    const bal=balance(P,i,n,k);           // 提前还款前剩余本金
+    const remN=n-k;                        // 原剩余期数
+    const origRemInterest=m*remN-bal;      // 原方案剩余利息
+    const newBal=Math.max(0,bal-extra);    // 还款后本金
+    let out=[];
+    let newInterest, saved, line3;
+    if(mode==='term'){
+      // 月供不变，求剩余期数
+      const mm=m;
+      let newN;
+      if(i===0){ newN=newBal/mm; }
+      else { newN=Math.log(mm/(mm-newBal*i))/Math.log(1+i); }
+      newN=Math.ceil(newN);
+      newInterest=mm*newN-newBal;
+      saved=origRemInterest-newInterest;
+      out=[
+        ['当前月供',fmt(m),''],
+        ['提前还款额',fmt(extra),''],
+        ['新月供',fmt(m),''],
+        ['剩余期数',remN+' → '+newN+' 期',''],
+        ['缩短',(remN-newN)+' 期（约 '+((remN-newN)/12).toFixed(1)+' 年）',''],
+      ];
+    } else {
+      // 期数不变，求新月供
+      const nm=pmt(newBal,i,remN);
+      newInterest=nm*remN-newBal;
+      saved=origRemInterest-newInterest;
+      out=[
+        ['当前月供',fmt(m),''],
+        ['提前还款额',fmt(extra),''],
+        ['新月供',fmt(nm),''],
+        ['月供减少',fmt(m-nm),''],
+        ['剩余期数',remN+' 期（不变）',''],
+      ];
+    }
+    out.push(['原剩余总利息',fmt(origRemInterest),'']);
+    out.push(['新剩余总利息',fmt(newInterest),'']);
+    out.push(['共节省利息',fmt(saved),'g']);
+    const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+    out.forEach(([k2,v,cls])=>{ const tr=document.createElement('tr'); tr.innerHTML='<td class="k">'+k2+'</td><td class="'+(cls==='g'?'g':'v')+'">'+v+'</td>'; tb.appendChild(tr); });
+    $('st').textContent='✓ 已计算（'+(mode==='term'?'缩短年限':'减少月供')+'）';
+  }
+  $('mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m;
+    [...$('mode').children].forEach(x=>x.classList.toggle('on',x===b)); calc(); });
+  document.querySelectorAll('input').forEach(x=>x.addEventListener('input',calc));
+  calc();
+})();
+</script>
+</body>
+</html>
