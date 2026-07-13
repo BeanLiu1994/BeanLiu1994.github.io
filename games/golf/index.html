@@ -78,9 +78,26 @@
   // shortest distance from hole center to the ball's movement segment this frame (anti-tunneling)
   const segDist=(px,py,x,y,hx,hy)=>{ const dx=x-px, dy=y-py; const L2=dx*dx+dy*dy; let t=L2>0?((hx-px)*dx+(hy-py)*dy)/L2:0; t=clamp(t,0,1); const cx=px+dx*t, cy=py+dy*t; return Math.hypot(cx-hx,cy-hy); };
   const LEVELS=[
-    { ball:{x:60,y:H-60}, hole:{x:W-60,y:60}, par:2, walls:[ {x:W/2-14,y:120,w:28,h:H-240} ] },
-    { ball:{x:60,y:H-60}, hole:{x:W-60,y:H-60}, par:3, walls:[ {x:120,y:0,w:24,h:H-160}, {x:280,y:160,w:24,h:H} ] },
-    { ball:{x:60,y:60}, hole:{x:W-60,y:H-60}, par:3, walls:[ {x:100,y:200,w:220,h:24}, {x:200,y:360,w:24,h:240} ] },
+    { ball:{x:70,y:530}, hole:{x:350,y:70},  par:2, walls:[] },
+    { ball:{x:70,y:530}, hole:{x:350,y:530}, par:2, walls:[ {x:196,y:24,w:24,h:240} ] },
+    { ball:{x:70,y:300}, hole:{x:350,y:300}, par:2, walls:[ {x:170,y:230,w:80,h:80} ] },
+    { ball:{x:60,y:60},  hole:{x:360,y:540}, par:3, walls:[ {x:180,y:200,w:24,h:220} ] },
+    { ball:{x:80,y:540}, hole:{x:340,y:80},  par:3, walls:[ {x:196,y:24,w:24,h:456} ] },
+    { ball:{x:80,y:80},  hole:{x:340,y:540}, par:3, walls:[ {x:196,y:120,w:24,h:456} ] },
+    { ball:{x:80,y:80},  hole:{x:340,y:520}, par:3, walls:[ {x:24,y:300,w:280,h:24} ] },
+    { ball:{x:340,y:80}, hole:{x:80,y:520},  par:3, walls:[ {x:116,y:300,w:280,h:24} ] },
+    { ball:{x:80,y:540}, hole:{x:340,y:80},  par:4, walls:[ {x:196,y:200,w:24,h:376}, {x:196,y:200,w:200,h:24} ] },
+    { ball:{x:80,y:540}, hole:{x:340,y:80},  par:4, walls:[ {x:140,y:24,w:24,h:456}, {x:260,y:120,w:24,h:456} ] },
+    { ball:{x:80,y:80},  hole:{x:340,y:520}, par:4, walls:[ {x:140,y:120,w:24,h:456}, {x:260,y:24,w:24,h:456} ] },
+    { ball:{x:80,y:80},  hole:{x:340,y:520}, par:4, walls:[ {x:24,y:200,w:280,h:24}, {x:116,y:400,w:280,h:24} ] },
+    { ball:{x:80,y:520}, hole:{x:340,y:80},  par:4, walls:[ {x:116,y:200,w:280,h:24}, {x:24,y:400,w:280,h:24} ] },
+    { ball:{x:70,y:300}, hole:{x:350,y:300}, par:3, walls:[ {x:196,y:24,w:24,h:456} ] },
+    { ball:{x:70,y:530}, hole:{x:350,y:70},  par:4, walls:[ {x:120,y:0,w:24,h:340}, {x:240,y:260,w:24,h:340} ] },
+    { ball:{x:210,y:540},hole:{x:210,y:70},  par:4, walls:[ {x:160,y:200,w:100,h:22}, {x:160,y:380,w:100,h:22} ] },
+    { ball:{x:70,y:90},  hole:{x:350,y:90},  par:4, walls:[ {x:196,y:90,w:24,h:486} ] },
+    { ball:{x:70,y:530}, hole:{x:350,y:530}, par:4, walls:[ {x:120,y:300,w:180,h:22}, {x:200,y:322,w:22,h:208} ] },
+    { ball:{x:70,y:300}, hole:{x:350,y:300}, par:5, walls:[ {x:100,y:200,w:22,h:200}, {x:200,y:200,w:22,h:200}, {x:300,y:200,w:22,h:200} ] },
+    { ball:{x:60,y:540}, hole:{x:360,y:60},  par:5, walls:[ {x:140,y:0,w:22,h:380}, {x:260,y:220,w:22,h:380} ] },
   ];
 
   class Golf {
