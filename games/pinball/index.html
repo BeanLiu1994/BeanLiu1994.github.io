@@ -147,7 +147,7 @@
     restart(){
       this.stopAuto();
       this.score=0; this.lives=3; this.over=false;
-      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0; this._trapT=0; this.ballLife=0; this._fallAssist=0; this._lifeFrames=0;
+      this.ball=makeBall(); this.sinceDrain=0; this._stuck=0; this._trapT=0; this.ballLife=0; this._fallAssist=0; this._lifeFrames=0; this.flippedOnce=false;
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');
       this.updateUI();
@@ -208,7 +208,7 @@
         const cx=f.px+dx2*t, cy=f.py+dy2*t; const ddx=b.x-cx, ddy=b.y-cy; const d=Math.hypot(ddx,ddy);
         const th=7+R; if(d<th){ const n=Math.max(d,0.01); const nx=ddx/n, ny=ddy/n; b.x=cx+nx*th; b.y=cy+ny*th;
           const dot=b.vx*nx+b.vy*ny; b.vx-=2*dot*nx; b.vy-=2*dot*ny;
-          if(f.active){ b.vy-=7; b.vx+=(f.px<W/2?-1:1)*2.4; } else { b.vx*=0.96; b.vy*=0.96; } } }
+          if(f.active){ b.vy-=7; b.vx+=(f.px<W/2?-1:1)*2.4; this.flippedOnce=true; } else { b.vx*=0.96; b.vy*=0.96; } } }
       // drain: the ball is lost once it slips below the flipper line and is between
       // the two pivots (i.e. it fell through the center gap).
       const pivotY=this.flip[0].py;
@@ -274,13 +274,13 @@
         g.addColorStop(0,'#ffffff'); g.addColorStop(1,'#ff9de0'); ctx.fillStyle=g; ctx.shadowColor='#ff5db1'; ctx.shadowBlur=14;
         ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill(); ctx.shadowBlur=0; }
       // 新手提示：手动、尚未得分时，在挡板上方标出「按住左/右接球」
-      if(!this.autoPlay && !this.over && this.score===0){
+      if(!this.autoPlay && !this.over && !this.flippedOnce){
         ctx.save(); ctx.textAlign='center';
         ctx.globalAlpha=0.9; ctx.fillStyle='#ffd700'; ctx.font='bold 13px Segoe UI, sans-serif';
-        ctx.fillText('◀ 按住左半屏 / A', 96, 476);
+        ctx.fillText('◀ 按住左半屏 / A（别松手）', 96, 476);
         ctx.fillText('按住右半屏 / D ▶', W-96, 476);
         ctx.globalAlpha=0.5; ctx.fillStyle='#e0e0f0'; ctx.font='12px Segoe UI, sans-serif';
-        ctx.fillText('用挡板把下落的球弹回上方', W/2, 330);
+        ctx.fillText('球落向哪侧，就按住那侧把球弹回上方', W/2, 330);
         ctx.restore();
       }
     }
