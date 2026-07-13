@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#120a26" />
+<title>霓虹消珠 · Blob Drop</title>
+<style>
+  :root { --bg:#120a26; --surface:#1c1140; --board:#160e30; --text:#efeaff; --muted:#9b86d6; --accent:#b06bff; --accent-glow:#b06bff55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #2a1a55 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #1a0f3a 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#dcb6ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .main { display:flex; gap:12px; align-items:flex-start; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); flex:1; }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .side { width:74px; display:flex; flex-direction:column; gap:10px; }
+  .next-box { background:var(--surface); border:1px solid #ffffff0a; border-radius:12px; padding:8px; text-align:center; }
+  .next-box .lab { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:4px; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#120a26ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#120a26; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#120a26; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹消珠</h1>
+      <div class="sub">B L O B &nbsp; D R O P</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="board-wrap">
+      <canvas id="game" width="300" height="650"></canvas>
+      <div class="overlay lose" id="overlay-lose">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2>堆到顶了!</h2>
+          <p id="lose-msg">再想想落点</p>
+          <button class="btn primary" onclick="game.restart()">再来一局</button>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="next-box"><div class="lab">Next</div><canvas id="next" width="64" height="64"></canvas></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划落点中…</span>
+  </div>
+  <div class="status" id="status">左右移动、点击旋转，四颗同色相连即消除</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=6, ROWS=13;
+  const PAL=['#ff5d6a','#4d9fff','#4dff91','#ffd23f','#b06bff'];
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const ncanvas=document.getElementById('next'), nctx=ncanvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function nrr(x,y,w,h,r){ nctx.beginPath(); nctx.moveTo(x+r,y); nctx.arcTo(x+w,y,x+w,y+h,r); nctx.arcTo(x+w,y+h,x,y+h,r); nctx.arcTo(x,y+h,x,y,r); nctx.arcTo(x,y,x+w,y,r); nctx.closePath(); }
+
+  class Blob {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('blobBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(240,Math.min(r.width||300,360)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*ROWS/COLS; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.T=this.W/COLS;
+      ncanvas.width=64*d; ncanvas.height=64*d; nctx.setTransform(d,0,0,d,0,0); this.nT=64/2; }
+    emptyGrid(){ return Array.from({length:ROWS},()=>new Array(COLS).fill(-1)); }
+    off(rot){ return rot===0?[[0,0],[1,0]]:[[0,0],[0,1]]; }
+    canPlace(g,py,c,rot){
+      const o=this.off(rot);
+      for(const [dr,dc] of o){ const rr2=Math.round(py)+dr, cc=c+dc;
+        if(cc<0||cc>=COLS) return false;
+        if(rr2>=ROWS) return false;
+        if(rr2>=0 && g[rr2][cc]!==-1) return false;
+      }
+      return true;
+    }
+    spawn(){
+      this.piece={ c:Math.floor(COLS/2)-1, rot:Math.random()<0.5?0:1, py:-2, vy:0,
+        a:this.next.a, b:this.next.b };
+      this.next={ a:PAL[Math.floor(Math.random()*PAL.length)], b:PAL[Math.floor(Math.random()*PAL.length)] };
+      if(!this.canPlace(this.grid,this.piece.py,this.piece.c,this.piece.rot)){ this.gameOver(); return; }
+      if(this.autoPlay) this.autoPlan();
+    }
+    autoPlan(){
+      let best=null, bestScore=-1;
+      for(let c=0;c<COLS;c++) for(let rot=0;rot<2;rot++){
+        if(c===COLS-1 && rot===1) continue; // partner would exceed cols
+        const sc=this.simScore(c,rot); if(sc>bestScore){ bestScore=sc; best={c,rot}; }
+      }
+      if(best){ this.piece.c=best.c; this.piece.rot=best.rot; this.autoCol=best.c; }
+    }
+    simScore(c,rot){
+      const g=this.grid.map(r=>r.slice());
+      let py=-2; while(this.canPlace(g,py+1,c,rot)) py++;
+      const o=this.off(rot);
+      const cells=o.map(([dr,dc])=>[Math.round(py)+dr,c+dc]);
+      g[cells[0][0]][cells[0][1]]=this.piece.a; g[cells[1][0]][cells[1][1]]=this.piece.b;
+      return this.resolveClone(g);
+    }
+    resolveClone(g,ca,cb){
+      const colOf=v=> v===0?ca:cb;
+      let cleared=0, again=true;
+      while(again){ again=false;
+        const seen=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+        for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+          if(g[r][c]!==-1 && !seen[r][c]){
+            const col=g[r][c], st=[[r,c]], comp=[]; seen[r][c]=true;
+            while(st.length){ const [cr,cc]=st.pop(); comp.push([cr,cc]);
+              for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=cr+dr,nc=cc+dc; if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&!seen[nr][nc]&&g[nr][nc]===col){ seen[nr][nc]=true; st.push([nr,nc]); } } }
+            if(comp.length>=4){ for(const [cr,cc] of comp) g[cr][cc]=-1; cleared+=comp.length; again=true; }
+          }
+        }
+        if(again){ for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--) if(g[r][c]!==-1) col.push(g[r][c]); for(let r=ROWS-1,ci=0;r>=0;r--,ci++) g[r][c]= ci<col.length?col[ci]:-1; } }
+      }
+      return cleared;
+    }
+    lock(){
+      const o=this.off(this.piece.rot), p=this.piece;
+      const cells=o.map(([dr,dc])=>[Math.round(p.py)+dr,p.c+dc]);
+      const cols=[p.a,p.b];
+      for(let i=0;i<cells.length;i++){ const [r,c]=cells[i]; if(r>=0) this.grid[r][c]=cols[i]; }
+      this.resolve();
+    }
+    resolve(){
+      let chain=1, again=true;
+      while(again){ again=false;
+        const seen=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+        for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+          if(this.grid[r][c]!==-1 && !seen[r][c]){
+            const col=this.grid[r][c], st=[[r,c]], comp=[]; seen[r][c]=true;
+            while(st.length){ const [cr,cc]=st.pop(); comp.push([cr,cc]);
+              for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=cr+dr,nc=cc+dc; if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&!seen[nr][nc]&&this.grid[nr][nc]===col){ seen[nr][nc]=true; st.push([nr,nc]); } } }
+            if(comp.length>=4){ for(const [cr,cc] of comp){ this.flashes.push({x:(cc+0.5)*this.T,y:(cr+0.5)*this.T,color:PAL[col],life:1}); this.grid[cr][cc]=-1; } this.score+=comp.length*10*chain; chain++; again=true; }
+          }
+        }
+        if(again){ for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--) if(this.grid[r][c]!==-1) col.push(this.grid[r][c]); for(let r=ROWS-1,ci=0;r>=0;r--,ci++) this.grid[r][c]= ci<col.length?col[ci]:-1; } }
+      }
+      scoreEl.textContent=this.score;
+      if(chain>1) statusEl.textContent='连锁 x'+chain+'!';
+    }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('blobBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1100); }
+    move(d){ if(this.over||this.autoPlay) return; if(this.canPlace(this.grid,this.piece.py,this.piece.c+d,this.piece.rot)) this.piece.c+=d; }
+    rotate(){ if(this.over||this.autoPlay) return; const nr=this.piece.rot^1; if(this.canPlace(this.grid,this.piece.py,this.piece.c,nr)) this.piece.rot=nr; else if(this.canPlace(this.grid,this.piece.py,this.piece.c-1,nr)){ this.piece.c--; this.piece.rot=nr; } else if(this.canPlace(this.grid,this.piece.py,this.piece.c+1,nr)){ this.piece.c++; this.piece.rot=nr; } }
+    softDrop(){ if(this.over||this.autoPlay) return; this.piece.vy=Math.max(this.piece.vy,16); }
+    update(dt){
+      if(this.over) return; this.time+=dt;
+      const g=22;
+      if(this.piece){
+        this.piece.vy+=g*dt;
+        const step=this.piece.vy*dt;
+        let np=this.piece.py+step;
+        if(this.canPlace(this.grid,np,this.piece.c,this.piece.rot)) this.piece.py=np;
+        else { this.piece.py=Math.round(this.piece.py); this.lock(); this.piece=null; if(!this.over) this.spawn(); }
+      }
+      for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.6; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
+    }
+    bindInput(){
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); this.piece && (this.piece.c=Math.max(0,Math.min(COLS-1,this.piece.c))); this._downX=x; });
+      canvas.addEventListener('pointerup',e=>{ if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); const dx=x-(this._downX||x); if(Math.abs(dx)<this.T*0.4) this.rotate(); else if(dx>0) this.move(1); else this.move(-1); });
+      canvas.addEventListener('pointermove',e=>{ if(e.buttons && this.piece && !this.autoPlay && !this.over){ const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); const dx=x-(this._downX||x); if(dx> this.T*0.5){ this.move(1); this._downX=x; } else if(dx< -this.T*0.5){ this.move(-1); this._downX=x; } } });
+      window.addEventListener('keydown',e=>{ if(this.over||this.autoPlay) return; if(e.key==='ArrowLeft')this.move(-1); else if(e.key==='ArrowRight')this.move(1); else if(e.key==='ArrowUp'||e.key===' ')this.rotate(); else if(e.key==='ArrowDown')this.softDrop(); });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    blob(x,y,col,alpha,r){ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=col; ctx.shadowBlur=10; ctx.fillStyle=col; rr(x-r,y-r,r*2,r*2,r*0.32); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff44'; rr(x-r*0.62,y-r*0.62,r*0.5,r*0.5,r*0.2); ctx.fill(); ctx.restore(); }
+    drawNext(){
+      nctx.clearRect(0,0,64,64); const T=24; const a=this.next.a,b=this.next.b;
+      nctx.save(); nctx.shadowColor=a; nctx.shadowBlur=8; nctx.fillStyle=a; nrr(8,8,24,24,6); nctx.fill(); nctx.restore();
+      nctx.save(); nctx.shadowColor=b; nctx.shadowBlur=8; nctx.fillStyle=b; nrr(32,32,24,24,6); nctx.fill(); nctx.restore();
+    }
+    draw(){
+      const T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(this.grid[r][c]!==-1){ this.blob(c*T+T/2,r*T+T/2,PAL[this.grid[r][c]],1,T*0.46); } }
+      if(this.piece){ const o=this.off(this.piece.rot); const cols=[this.piece.a,this.piece.b];
+        for(let i=0;i<o.length;i++){ const rr2=Math.round(this.piece.py)+o[i][0], cc=this.piece.c+o[i][1]; const y=(rr2<0? rr2 : rr2)*T+T/2; this.blob(cc*T+T/2, y, cols[i], rr2<0?0.5:1, T*0.46); } }
+      if(this.autoPlay && this.autoCol!=null){ ctx.fillStyle='#b06bff'; ctx.globalAlpha=0.25+0.15*Math.sin(this.time*5); rr(this.autoCol*T+2,2,T-4,this.H-4,6); ctx.fill(); ctx.globalAlpha=1; }
+      for(const f of this.flashes){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life); ctx.strokeStyle=f.color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(f.x,f.y,T*0.5*(1.4-f.life),0,7); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); this.drawNext(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoCol=null; if(this.piece) this.autoPlan(); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; scoreEl.textContent='0'; this.grid=this.emptyGrid(); this.flashes=[]; this.next={a:PAL[Math.floor(Math.random()*PAL.length)],b:PAL[Math.floor(Math.random()*PAL.length)]}; this.piece=null; overlayLose.classList.remove('active'); statusEl.textContent='左右移动、点击旋转，四颗同色相连即消除'; this.spawn(); }
+  }
+  window.game=new Blob();
+})();
+</script>
+</body>
+</html>

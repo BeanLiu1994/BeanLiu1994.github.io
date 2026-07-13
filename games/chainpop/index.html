@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#241404" />
+<title>霓虹连锁 · Chain Pop</title>
+<style>
+  :root { --bg:#241404; --surface:#33200a; --board:#2a1b08; --text:#fff2e0; --muted:#d2a566; --accent:#ff9f4d; --accent-glow:#ff9f4d55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3e280c 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #2c1d06 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#ffd9a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#241404ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#241404; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#241404; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹连锁</h1>
+      <div class="sub">C H A I N &nbsp; P O P</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">高度</div><div class="value" id="h">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="300" height="600"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>堆到顶了!</h2>
+        <p id="lose-msg">方块顶到了天花板</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划交换中…</span>
+  </div>
+  <div class="status" id="status">左右拖动方块与邻格交换，三颗同色成线即消除</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=6, ROWS=12;
+  const PAL=['#ff5d6a','#4d9fff','#4dff91','#ffd23f','#b06bff'];
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), hEl=document.getElementById('h');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  class Chain {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('chainBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(240,Math.min(r.width||300,360)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*ROWS/COLS; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.T=this.W/COLS; }
+    emptyGrid(){ return Array.from({length:ROWS},()=>new Array(COLS).fill(-1)); }
+    newRow(){ let row; let t=0; do{ row=[]; for(let c=0;c<COLS;c++) row.push(Math.floor(Math.random()*PAL.length)); t++; } while(this.rowHas3(row) && t<12); return row; }
+    rowHas3(row){ for(let c=0;c<COLS-2;c++) if(row[c]===row[c+1]&&row[c]===row[c+2]) return true; return false; }
+    marks(g){
+      const mk=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+      for(let r=0;r<ROWS;r++){ let run=1; for(let c=1;c<=COLS;c++){ if(c<COLS && g[r][c]!==-1 && g[r][c]===g[r][c-1]) run++; else { if(run>=3) for(let k=c-run;k<c;k++) mk[r][k]=true; run=1; } } }
+      for(let c=0;c<COLS;c++){ let run=1; for(let r=1;r<=ROWS;r++){ if(r<ROWS && g[r][c]!==-1 && g[r][c]===g[r-1][c]) run++; else { if(run>=3) for(let k=r-run;k<r;k++) mk[k][c]=true; run=1; } } }
+      return mk;
+    }
+    resolveClone(g){
+      let cleared=0, again=true;
+      while(again){ again=false; const mk=this.marks(g); let any=false;
+        for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(mk[r][c]){ g[r][c]=-1; cleared++; any=true; }
+        if(any){ again=true; for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--) if(g[r][c]!==-1) col.push(g[r][c]); for(let r=ROWS-1,ci=0;r>=0;r--,ci++) g[r][c]= ci<col.length?col[ci]:-1; } }
+      }
+      return cleared;
+    }
+    swap(r,c,d){ if(c+d<0||c+d>=COLS) return; const t=this.grid[r][c]; this.grid[r][c]=this.grid[r][c+d]; this.grid[r][c+d]=t; this.autoSwap={r,c,c2:c+d}; }
+    resolve(){
+      let chain=1, again=true;
+      while(again){ again=false; const mk=this.marks(this.grid); let any=false;
+        for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(mk[r][c]){ this.flashes.push({x:(c+0.5)*this.T,y:(r+0.5)*this.T,color:PAL[this.grid[r][c]],life:1}); this.grid[r][c]=-1; any=true; }
+        if(any){ this.score+=3*10*chain; chain++; again=true; statusEl.textContent='连锁 x'+chain+'!';
+          for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--) if(this.grid[r][c]!==-1) col.push(this.grid[r][c]); for(let r=ROWS-1,ci=0;r>=0;r--,ci++) this.grid[r][c]= ci<col.length?col[ci]:-1; }
+        }
+      }
+      scoreEl.textContent=this.score;
+    }
+    rise(){
+      if(this.grid[0].some(v=>-1)){ this.gameOver(); return; }
+      for(let r=0;r<ROWS-1;r++) this.grid[r]=this.grid[r+1];
+      this.grid[ROWS-1]=this.newRow();
+      this.height++; hEl.textContent=this.height;
+    }
+    autoPlan(){
+      let best=null, bestScore=-1, bestSetup=null, bestSetupScore=-1;
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS-1;c++){
+        if(this.grid[r][c]===-1||this.grid[r][c+1]===-1) continue;
+        const g=this.grid.map(row=>row.slice()); const t=g[r][c]; g[r][c]=g[r][c+1]; g[r][c+1]=t;
+        const sc=this.resolveClone(g);
+        if(sc>bestScore){ bestScore=sc; best={r,c}; }
+        // setup: count pairs (2-in-row) after swap as potential
+        if(sc===0){ let pairs=0; for(let rr2=0;rr2<ROWS;rr2++) for(let cc=0;cc<COLS-1;cc++) if(g[rr2][cc]!==-1&&g[rr2][cc]===g[rr2][cc+1]) pairs++; if(pairs>bestSetupScore){ bestSetupScore=pairs; bestSetup={r,c}; } }
+      }
+      const pick = best||bestSetup;
+      if(pick){ this.swap(pick.r,pick.c,1); if(best) aiStatus.textContent='AI 制造消除…'; else aiStatus.textContent='AI 布局中…'; }
+    }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('chainBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1200); }
+    update(dt){
+      if(this.over) return; this.time+=dt;
+      this.riseT-=dt; if(this.riseT<=0){ this.rise(); this.riseT=Math.max(1.4, 4.2 - this.height*0.05); if(this.over) return; }
+      if(this.autoPlay && this.autoCD<=0 && !this.autoSwap){ this.autoPlan(); this.autoCD=0.45; }
+      if(this.autoCD>0) this.autoCD-=dt;
+      for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.4; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
+      if(this.autoSwap){ this.autoSwap.t=(this.autoSwap.t||0)+dt*4; if(this.autoSwap.t>=1){ const s=this.autoSwap; this.autoSwap=null; this.resolve(); } }
+    }
+    bindInput(){
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); this._r=Math.floor(y/this.T); this._c=Math.floor(x/this.T); this._dx=x; });
+      canvas.addEventListener('pointermove',e=>{ if(this._r===undefined||this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); const dx=x-this._dx; if(Math.abs(dx)>this.T*0.5){ const d=dx>0?1:-1; if(this._c+d>=0&&this._c+d<COLS && this.grid[this._r][this._c]!==-1 && this.grid[this._r][this._c+d]!==-1){ this.swap(this._r,this._c,d); this.autoSwap.t=0; this.resolve(); } this._dx=x; this._c=Math.floor(x/this.T); } });
+      canvas.addEventListener('pointerup',()=>{ this._r=undefined; });
+      window.addEventListener('keydown',e=>{ if(this.over||this.autoPlay) return; if(e.key==='ArrowLeft'){ if(this._c>0){ this.swap(this._r||0,this._c,-1); this.autoSwap={r:this._r||0,c:this._c,t:0}; this.resolve(); this._c--; } } else if(e.key==='ArrowRight'){ if(this._c<COLS-2){ this.swap(this._r||0,this._c,1); this.autoSwap={r:this._r||0,c:this._c,t:0}; this.resolve(); this._c++; } } });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    block(x,y,col,alpha){ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=col; ctx.shadowBlur=10; ctx.fillStyle=col; const s=this.T*0.9; rr(x-s/2,y-s/2,s,s,s*0.28); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff40'; rr(x-s/2+3,y-s/2+3,s-6,s*0.4,s*0.2); ctx.fill(); ctx.restore(); }
+    draw(){
+      const T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.grid[r][c]!==-1) this.block(c*T+T/2,r*T+T/2,PAL[this.grid[r][c]],1);
+      if(this.autoSwap){ const s=this.autoSwap; ctx.strokeStyle='#ff9f4d'; ctx.lineWidth=3; ctx.globalAlpha=0.6+0.4*Math.sin(this.time*6); ctx.strokeRect(s.c*T+2,s.r*T+2,T-4,T-4); ctx.strokeRect(s.c2*T+2,s.r*T+2,T-4,T-4); ctx.globalAlpha=1; }
+      for(const f of this.flashes){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life); ctx.strokeStyle=f.color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(f.x,f.y,T*0.5*(1.4-f.life),0,7); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoCD=0; this.autoSwap=null; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; this.height=0; scoreEl.textContent='0'; hEl.textContent='0'; this.grid=this.emptyGrid(); this.flashes=[]; this.autoSwap=null; this.autoCD=0; this.riseT=3; this._r=undefined;
+      for(let r=ROWS-3;r<ROWS;r++) this.grid[r]=this.newRow();
+      overlayLose.classList.remove('active'); statusEl.textContent='左右拖动方块与邻格交换，三颗同色成线即消除'; }
+  }
+  window.game=new Chain();
+})();
+</script>
+</body>
+</html>

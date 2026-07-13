@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#04161a" />
+<title>霓虹药丸 · Pill Pop</title>
+<style>
+  :root { --bg:#04161a; --surface:#08262c; --board:#061b20; --text:#e6fffb; --muted:#6fc0b8; --accent:#36e0c8; --accent-glow:#36e0c855; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0c3a40 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #072229 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#a6fff2); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .main { display:flex; gap:12px; align-items:flex-start; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); flex:1; }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .side { width:74px; display:flex; flex-direction:column; gap:10px; }
+  .next-box { background:var(--surface); border:1px solid #ffffff0a; border-radius:12px; padding:8px; text-align:center; }
+  .next-box .lab { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:4px; }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#04161aee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .overlay.win h2 { color:var(--accent); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#04161a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04161a; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹药丸</h1>
+      <div class="sub">P I L L &nbsp; P O P</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">病毒</div><div class="value" id="virus">0</div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="board-wrap">
+      <canvas id="game" width="320" height="560"></canvas>
+      <div class="overlay lose" id="overlay-lose">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2>堆到顶了!</h2>
+          <p id="lose-msg">药丸没地方落</p>
+          <button class="btn primary" onclick="game.restart()">再来一局</button>
+        </div>
+      </div>
+      <div class="overlay win" id="overlay-win">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2>病毒清零!</h2>
+          <p id="win-msg">进入下一关</p>
+          <button class="btn primary" onclick="game.restart()">继续</button>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="next-box"><div class="lab">Next</div><canvas id="next" width="64" height="64"></canvas></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划落点中…</span>
+  </div>
+  <div class="status" id="status">左右移动、点击旋转，三颗同色成线即消除</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=8, ROWS=14;
+  const PAL=['#ff5d6a','#4d9fff','#4dff91','#ffd23f'];
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const ncanvas=document.getElementById('next'), nctx=ncanvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), virusEl=document.getElementById('virus');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const overlayWin=document.getElementById('overlay-win'), winMsg=document.getElementById('win-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function nrr(x,y,w,h,r){ nctx.beginPath(); nctx.moveTo(x+r,y); nctx.arcTo(x+w,y,x+w,y+h,r); nctx.arcTo(x+w,y+h,x,y+h,r); nctx.arcTo(x,y+h,x,y,r); nctx.arcTo(x,y,x+w,y,r); nctx.closePath(); }
+
+  class Pill {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.win=false; this.time=0; this.level=1;
+      this.best=parseInt(localStorage.getItem('pillBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(240,Math.min(r.width||320,360)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*ROWS/COLS; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.T=this.W/COLS; ncanvas.width=64*d; ncanvas.height=64*d; nctx.setTransform(d,0,0,d,0,0); }
+    emptyGrid(){ return Array.from({length:ROWS},()=>new Array(COLS).fill(-1)); }
+    off(rot){ return rot===0?[[0,0],[0,1]]:[[0,0],[1,0]]; }
+    canPlace(g,py,c,rot){
+      const o=this.off(rot);
+      for(const [dr,dc] of o){ const rr2=Math.round(py)+dr, cc=c+dc;
+        if(cc<0||cc>=COLS) return false; if(rr2>=ROWS) return false; if(rr2>=0 && g[rr2][cc]!==-1) return false; }
+      return true;
+    }
+    placeViruses(){
+      this.grid=this.emptyGrid(); const n=Math.min(40, 5+this.level*3); let placed=0, tries=0;
+      while(placed<n && tries<400){ tries++;
+        const r=ROWS-1-Math.floor(Math.random()*(ROWS-5)); const c=Math.floor(Math.random()*COLS);
+        if(this.grid[r][c]!==-1) continue;
+        const col=Math.floor(Math.random()*PAL.length);
+        // avoid making 3-in-row
+        const h=(c>=2 && this.grid[r][c-1]===col && this.grid[r][c-2]===col);
+        const v=(r>=2 && this.grid[r-1][c]===col && this.grid[r-2][c]===col);
+        if(h||v) continue;
+        this.grid[r][c]=col+4; placed++;
+      }
+      this.virusLeft=placed; virusEl.textContent=placed;
+    }
+    spawn(){
+      this.piece={ c:Math.floor(COLS/2)-1, rot:0, py:-2, vy:0, a:this.next.a, b:this.next.b };
+      this.next={ a:Math.floor(Math.random()*PAL.length), b:Math.floor(Math.random()*PAL.length) };
+      if(!this.canPlace(this.grid,this.piece.py,this.piece.c,this.piece.rot)){ this.gameOver(); return; }
+      if(this.autoPlay) this.autoPlan();
+    }
+    autoPlan(){
+      let best=null, bestScore=-1;
+      for(let c=0;c<COLS;c++) for(let rot=0;rot<2;rot++){
+        if(rot===0 && c===COLS-1) continue;
+        const sc=this.simScore(c,rot); if(sc>bestScore){ bestScore=sc; best={c,rot}; }
+      }
+      if(best){ this.piece.c=best.c; this.piece.rot=best.rot; this.autoCol=best.c; }
+    }
+    simScore(c,rot){
+      const g=this.grid.map(r=>r.slice()); let py=-2; while(this.canPlace(g,py+1,c,rot)) py++;
+      const o=this.off(rot); const cells=o.map(([dr,dc])=>[Math.round(py)+dr,c+dc]);
+      g[cells[0][0]][cells[0][1]]=this.piece.a; g[cells[1][0]][cells[1][1]]=this.piece.b;
+      return this.resolveClone(g);
+    }
+    marks(g){
+      const colOf=v=> v<0? -1 : (v&3);
+      const mk=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+      for(let r=0;r<ROWS;r++){ let run=1; for(let c=1;c<=COLS;c++){ if(c<COLS && g[r][c]!==-1 && colOf(g[r][c])===colOf(g[r][c-1])) run++; else { if(run>=3) for(let k=c-run;k<c;k++) mk[r][k]=true; run=1; } } }
+      for(let c=0;c<COLS;c++){ let run=1; for(let r=1;r<=ROWS;r++){ if(r<ROWS && g[r][c]!==-1 && colOf(g[r][c])===colOf(g[r-1][c])) run++; else { if(run>=3) for(let k=r-run;k<r;k++) mk[k][c]=true; run=1; } } }
+      return mk;
+    }
+    resolveClone(g){
+      let cleared=0, again=true;
+      while(again){ again=false; const mk=this.marks(g); let any=false;
+        for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(mk[r][c]){ g[r][c]=-1; cleared++; any=true; }
+        if(any){ again=true; for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--) if(g[r][c]!==-1) col.push(g[r][c]); for(let r=ROWS-1,ci=0;r>=0;r--,ci++) g[r][c]= ci<col.length?col[ci]:-1; } }
+      }
+      return cleared;
+    }
+    lock(){
+      const o=this.off(this.piece.rot), p=this.piece; const cells=o.map(([dr,dc])=>[Math.round(p.py)+dr,p.c+dc]); const cols=[p.a,p.b];
+      for(let i=0;i<cells.length;i++){ const [r,c]=cells[i]; if(r>=0) this.grid[r][c]=cols[i]; }
+      this.resolve();
+    }
+    resolve(){
+      let chain=1, again=true;
+      while(again){ again=false; const mk=this.marks(this.grid); let any=false;
+        for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(mk[r][c]){ const v=this.grid[r][c]; if(v>=4) this.virusLeft--; this.flashes.push({x:(c+0.5)*this.T,y:(r+0.5)*this.T,color:PAL[v&3],life:1}); this.grid[r][c]=-1; any=true; }
+        if(any){ this.score+=3*10*chain; chain++; again=true;
+          for(let c=0;c<COLS;c++){ const col=[]; for(let r=ROWS-1;r>=0;r--) if(this.grid[r][c]!==-1) col.push(this.grid[r][c]); for(let r=ROWS-1,ci=0;r>=0;r--,ci++) this.grid[r][c]= ci<col.length?col[ci]:-1; }
+        }
+      }
+      scoreEl.textContent=this.score; virusEl.textContent=this.virusLeft;
+      if(this.virusLeft<=0){ this.victory(); }
+    }
+    victory(){ this.win=true; this.level++; if(this.score>this.best){ this.best=this.score; localStorage.setItem('pillBest',String(this.best)); bestEl.textContent=this.best; } winMsg.textContent='得分 '+this.score; overlayWin.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay){ this.win=false; overlayWin.classList.remove('active'); this.nextLevel(); } },1200); }
+    nextLevel(){ this.placeViruses(); this.spawn(); }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('pillBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1200); }
+    move(d){ if(this.over||this.autoPlay) return; if(this.canPlace(this.grid,this.piece.py,this.piece.c+d,this.piece.rot)) this.piece.c+=d; }
+    rotate(){ if(this.over||this.autoPlay) return; const nr=this.piece.rot^1; if(this.canPlace(this.grid,this.piece.py,this.piece.c,nr)) this.piece.rot=nr; else if(this.canPlace(this.grid,this.piece.py,this.piece.c-1,nr)){ this.piece.c--; this.piece.rot=nr; } else if(this.canPlace(this.grid,this.piece.py,this.piece.c+1,nr)){ this.piece.c++; this.piece.rot=nr; } }
+    update(dt){
+      if(this.over||this.win) return; this.time+=dt; const g=20;
+      if(this.piece){ this.piece.vy+=g*dt; const step=this.piece.vy*dt; const np=this.piece.py+step;
+        if(this.canPlace(this.grid,np,this.piece.c,this.piece.rot)) this.piece.py=np;
+        else { this.piece.py=Math.round(this.piece.py); this.lock(); this.piece=null; if(!this.over&&!this.win) this.spawn(); }
+      }
+      for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.6; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
+    }
+    bindInput(){
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); this._dx=x; });
+      canvas.addEventListener('pointerup',e=>{ if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); const dx=x-(this._dx||x); if(Math.abs(dx)<this.T*0.4) this.rotate(); else if(dx>0) this.move(1); else this.move(-1); });
+      canvas.addEventListener('pointermove',e=>{ if(e.buttons && this.piece && !this.autoPlay && !this.over){ const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width); const dx=x-(this._dx||x); if(dx>this.T*0.5){ this.move(1); this._dx=x; } else if(dx<-this.T*0.5){ this.move(-1); this._dx=x; } } });
+      window.addEventListener('keydown',e=>{ if(this.over||this.autoPlay) return; if(e.key==='ArrowLeft')this.move(-1); else if(e.key==='ArrowRight')this.move(1); else if(e.key==='ArrowUp'||e.key===' ')this.rotate(); });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    pill(x,y,col,half,alpha){ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=col; ctx.shadowBlur=10; ctx.fillStyle=col; const w=this.T*0.9; rr(x-w/2,y-w/2,w,w,w*0.32); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff3a'; rr(x-w/2+2,y-w/2+2,w-4,w*0.34,4); ctx.fill(); ctx.restore(); }
+    drawNext(){ nctx.clearRect(0,0,64,64); const a=this.next.a,b=this.next.b; nctx.save(); nctx.shadowColor=PAL[a]; nctx.shadowBlur=8; nctx.fillStyle=PAL[a]; nrr(8,22,24,24,7); nctx.fill(); nctx.shadowColor=PAL[b]; nctx.fillStyle=PAL[b]; nrr(32,22,24,24,7); nctx.fill(); nctx.restore(); }
+    draw(){
+      const T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ const v=this.grid[r][c]; if(v!==-1){ this.pill(c*T+T/2,r*T+T/2,PAL[v&3],0,1); if(v>=4){ ctx.save(); ctx.strokeStyle='#ffffff'; ctx.globalAlpha=0.55; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(c*T+T/2,r*T+T/2,T*0.34,0,7); ctx.stroke(); ctx.restore(); } } }
+      if(this.piece){ const o=this.off(this.piece.rot); const cols=[this.piece.a,this.piece.b];
+        for(let i=0;i<o.length;i++){ const rr2=Math.round(this.piece.py)+o[i][0], cc=this.piece.c+o[i][1]; const y=(rr2<0?rr2:rr2)*T+T/2; this.pill(cc*T+T/2,y,cols[i], rr2<0?0.5:1); } }
+      if(this.autoPlay && this.autoCol!=null){ ctx.fillStyle='#36e0c8'; ctx.globalAlpha=0.22+0.14*Math.sin(this.time*5); rr(this.autoCol*T+2,2,T-4,this.H-4,6); ctx.fill(); ctx.globalAlpha=1; }
+      for(const f of this.flashes){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life); ctx.strokeStyle=f.color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(f.x,f.y,T*0.5*(1.4-f.life),0,7); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); this.drawNext(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoCol=null; if(this.piece) this.autoPlan(); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    restart(){ this.stopAuto(); this.over=false; this.win=false; this.score=0; scoreEl.textContent='0'; this.flashes=[]; this.next={a:Math.floor(Math.random()*PAL.length),b:Math.floor(Math.random()*PAL.length)}; this.piece=null; this.placeViruses(); overlayLose.classList.remove('active'); overlayWin.classList.remove('active'); statusEl.textContent='左右移动、点击旋转，三颗同色成线即消除'; this.spawn(); }
+  }
+  window.game=new Pill();
+})();
+</script>
+</body>
+</html>

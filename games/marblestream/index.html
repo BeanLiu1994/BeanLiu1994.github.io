@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a0418" />
+<title>霓虹弹珠 · Marble Stream</title>
+<style>
+  :root { --bg:#1a0418; --surface:#260a22; --board:#1c071a; --text:#ffe6f6; --muted:#c47bb0; --accent:#ff5da2; --accent-glow:#ff5da255; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3a0f33 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #24091f 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#ffb3da); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:60px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#1a0418ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .overlay.win h2 { color:var(--accent); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0418; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0418; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹弹珠</h1>
+      <div class="sub">M A R B L E &nbsp; S T R E A M</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="380" height="520"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>珠串抵达终点!</h2>
+        <p id="lose-msg">再快一点就能清空</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+    <div class="overlay win" id="overlay-win">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>全部清空!</h2>
+        <p id="win-msg">漂亮的组合消除</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 自动瞄准中…</span>
+  </div>
+  <div class="status" id="status">拖拽瞄准并松手发射，三颗同色相连即可消除</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const overlayWin=document.getElementById('overlay-win'), winMsg=document.getElementById('win-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+  const PAL=['#ff5d6a','#4d9fff','#4dff91','#ffd23f','#b06bff','#ff8a3d'];
+  const rand=()=>PAL[Math.floor(Math.random()*PAL.length)];
+
+  class Stream {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.win=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('marbleBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||380,440)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.37; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.buildPath(); }
+    buildPath(){
+      const W=this.W,H=this.H;
+      const wp=[[0.06,0.16],[0.94,0.16],[0.94,0.30],[0.06,0.30],[0.06,0.45],[0.94,0.45]];
+      const P=wp.map(([x,y])=>({x:x*W,y:y*H}));
+      this.pts=[]; const seg=24;
+      for(let i=0;i<P.length-1;i++){ const a=P[i],b=P[i+1]; for(let s=0;s<seg;s++){ const u=s/seg; this.pts.push({x:a.x+(b.x-a.x)*u,y:a.y+(b.y-a.y)*u}); } }
+      this.pts.push(P[P.length-1]);
+      this.cum=[0]; for(let i=1;i<this.pts.length;i++){ const dd=Math.hypot(this.pts[i].x-this.pts[i-1].x,this.pts[i].y-this.pts[i-1].y); this.cum.push(this.cum[i-1]+dd); }
+      this.L=this.cum[this.cum.length-1];
+      this.mR=Math.max(7,this.W*0.022); this.spacing=this.mR*2*0.92;
+      this.sx=W*0.5; this.sy=H*0.9;
+    }
+    posAt(t){ t=Math.max(0,Math.min(this.L,t)); let lo=0,hi=this.cum.length-1; while(lo<hi){ const m=(lo+hi)>>1; if(this.cum[m]<t) lo=m+1; else hi=m; } const i=Math.max(1,lo); const t0=this.cum[i-1],t1=this.cum[i]; const f=(t-t0)/((t1-t0)||1); const a=this.pts[i-1],b=this.pts[i]; return {x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f}; }
+    restart(){
+      this.stopAuto(); this.over=false; this.win=false; this.score=0; this.time=0;
+      this.chain=[]; this.remaining=46; this.projectiles=[]; this.popAnim=[]; this.cool=0;
+      this.current=rand(); this.next=rand(); this.angle=-Math.PI/2; this.aiming=false;
+      overlayLose.classList.remove('active'); overlayWin.classList.remove('active');
+    }
+    spawn(){ this.chain.unshift({color:rand(), t:0}); this.remaining--; }
+    insert(tp,color){
+      let k=0; for(const c of this.chain){ if(c.t<tp) k++; else break; }
+      this.chain.splice(k,0,{color,t:tp});
+      this.resolve();
+    }
+    resolve(){
+      let combo=1;
+      while(true){
+        let a=-1,b=-1;
+        for(let i=0;i<this.chain.length;i++){ let j=i; while(j+1<this.chain.length && this.chain[j+1].color===this.chain[i].color) j++; if(j-i+1>=3){ a=i; b=j; break; } i=j; }
+        if(a<0) break;
+        const n=b-a+1; this.score+=n*10*combo; combo++;
+        for(let i=a;i<=b;i++){ const p=this.posAt(this.chain[i].t); this.popAnim.push({x:p.x,y:p.y,color:this.chain[i].color,life:1}); }
+        this.chain.splice(a,n);
+      }
+      scoreEl.textContent=this.score;
+      if(this.chain.length===0 && this.remaining<=0){ this.victory(); }
+    }
+    victory(){
+      this.win=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('marbleBest',String(this.best)); bestEl.textContent=this.best; }
+      winMsg.textContent='得分 '+this.score; overlayWin.classList.add('active');
+      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1100);
+    }
+    shoot(){
+      if(this.cool>0) return;
+      const vx=Math.cos(this.angle)*520, vy=Math.sin(this.angle)*520;
+      this.projectiles.push({x:this.sx,y:this.sy,vx,vy,color:this.current});
+      this.current=this.next; this.next=rand(); this.cool=0.18;
+    }
+    onHit(m,proj){
+      const im=this.chain.indexOf(m); if(im<0) return;
+      const ahead=this.chain[im+1], behind=this.chain[im-1]; let tp;
+      const pm=this.posAt(m.t);
+      if(ahead&&!behind) tp=(m.t+ahead.t)/2;
+      else if(behind&&!ahead) tp=(m.t+behind.t)/2;
+      else if(ahead&&behind){ const pa=this.posAt(ahead.t), pb=this.posAt(behind.t);
+        const da=Math.hypot(proj.x-pa.x,proj.y-pa.y), db=Math.hypot(proj.x-pb.x,proj.y-pb.y);
+        tp=da<db?(m.t+ahead.t)/2:(m.t+behind.t)/2; }
+      else tp=m.t;
+      this.insert(tp,proj.color); this.autoTarget=null;
+    }
+    autoShoot(){
+      let target=null, bestT=-1;
+      for(let i=0;i<this.chain.length-1;i++){ if(this.chain[i].color===this.chain[i+1].color){ const mid=(this.chain[i].t+this.chain[i+1].t)/2; if(mid>bestT){ bestT=mid; target={t:mid,color:this.chain[i].color}; } } }
+      if(target){ this.current=target.color; const p=this.posAt(target.t); this.aimAt(p.x,p.y); this.autoTarget=p; aiStatus.textContent='AI 瞄准最接近终点的同色组合…'; this.shoot(); }
+      else if(this.chain.length){ this.current=this.chain[0].color; const p=this.posAt(this.chain[0].t); this.aimAt(p.x,p.y); this.autoTarget=p; this.shoot(); }
+    }
+    aimAt(x,y){ this.angle=Math.atan2(y-this.sy, x-this.sx); }
+    update(dt){
+      if(this.over||this.win) return; this.time+=dt;
+      if(this.cool>0) this.cool-=dt;
+      const sp=30+Math.min(40,this.score*0.01);
+      for(const c of this.chain) c.t+=sp*dt;
+      if(this.chain.length===0 || this.chain[0].t>=this.spacing){ if(this.remaining>0) this.spawn(); }
+      for(const c of this.chain){ if(c.t>=this.L){ this.fail(); return; } }
+      // projectiles
+      for(let i=this.projectiles.length-1;i>=0;i--){ const p=this.projectiles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt;
+        let hit=false;
+        for(const c of this.chain){ const cp=this.posAt(c.t); if(Math.hypot(cp.x-p.x,cp.y-p.y)<this.mR+5){ this.onHit(c,p); hit=true; break; } }
+        if(hit){ this.projectiles.splice(i,1); continue; }
+        if(p.x<-30||p.x>this.W+30||p.y<-30||p.y>this.H+30){ this.projectiles.splice(i,1); }
+      }
+      for(let i=this.popAnim.length-1;i>=0;i--){ this.popAnim[i].life-=dt*2.4; if(this.popAnim[i].life<=0) this.popAnim.splice(i,1); }
+      if(this.autoPlay && this.cool<=0 && this.projectiles.length===0) this.autoShoot();
+    }
+    fail(){
+      this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('marbleBest',String(this.best)); bestEl.textContent=this.best; }
+      loseMsg.textContent='得分 '+this.score; overlayLose.classList.add('active');
+      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1100);
+    }
+    bindInput(){
+      const aim=e=>{ const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); this.aimAt(x,y); };
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.win||this.autoPlay) return; this.aiming=true; aim(e); });
+      canvas.addEventListener('pointermove',e=>{ if(this.aiming) aim(e); });
+      const fire=e=>{ if(!this.aiming) return; this.aiming=false; this.shoot(); };
+      canvas.addEventListener('pointerup',fire); canvas.addEventListener('pointercancel',fire);
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    marble(x,y,color,alpha){ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=color; ctx.shadowBlur=10; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,this.mR,0,7); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff55'; ctx.beginPath(); ctx.arc(x-this.mR*0.3,y-this.mR*0.3,this.mR*0.34,0,7); ctx.fill(); ctx.restore(); }
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // track
+      ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.strokeStyle='#ffffff10'; ctx.lineWidth=this.spacing*1.05; ctx.beginPath();
+      for(let i=0;i<this.pts.length;i++){ i?ctx.lineTo(this.pts[i].x,this.pts[i].y):ctx.moveTo(this.pts[i].x,this.pts[i].y); } ctx.stroke();
+      ctx.strokeStyle='#ffffff22'; ctx.lineWidth=this.spacing*0.7; ctx.beginPath();
+      for(let i=0;i<this.pts.length;i++){ i?ctx.lineTo(this.pts[i].x,this.pts[i].y):ctx.moveTo(this.pts[i].x,this.pts[i].y); } ctx.stroke();
+      ctx.restore();
+      // hole
+      const hole=this.posAt(this.L); ctx.save(); ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(hole.x,hole.y,this.mR*1.4,0,7); ctx.fill(); ctx.strokeStyle='#ff5da2'; ctx.lineWidth=2; ctx.globalAlpha=0.6+0.4*Math.sin(this.time*4); ctx.beginPath(); ctx.arc(hole.x,hole.y,this.mR*1.7,0,7); ctx.stroke(); ctx.restore();
+      // spawner
+      const sp0=this.posAt(0); ctx.save(); ctx.strokeStyle='#ffffff33'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(sp0.x,sp0.y,this.mR*1.3,0,7); ctx.stroke(); ctx.restore();
+      // marbles
+      for(const c of this.chain){ const p=this.posAt(c.t); this.marble(p.x,p.y,c.color); }
+      // pop bursts
+      for(const a of this.popAnim){ ctx.save(); ctx.globalAlpha=Math.max(0,a.life); ctx.strokeStyle=a.color; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(a.x,a.y,this.mR*(1.6-a.life*0.6),0,7); ctx.stroke(); ctx.restore(); }
+      // auto target ring
+      if(this.autoPlay && this.autoTarget){ const t=this.autoTarget; ctx.strokeStyle='#ff5da2'; ctx.lineWidth=2; ctx.globalAlpha=0.55+0.45*Math.sin(this.time*6); ctx.beginPath(); ctx.arc(t.x,t.y,this.mR*1.8,0,7); ctx.stroke(); ctx.globalAlpha=1; }
+      // projectiles
+      for(const p of this.projectiles) this.marble(p.x,p.y,p.color);
+      // shooter
+      ctx.save(); ctx.translate(this.sx,this.sy); ctx.rotate(this.angle); ctx.fillStyle='#fff'; ctx.shadowColor='#ff5da2'; ctx.shadowBlur=10; ctx.fillRect(0,-4,this.mR*2.2,8); ctx.restore();
+      ctx.save(); ctx.fillStyle='#2a0e25'; ctx.strokeStyle='#ff5da2'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(this.sx,this.sy,this.mR*1.7,0,7); ctx.fill(); ctx.stroke(); ctx.restore();
+      this.marble(this.sx+Math.cos(this.angle)*this.mR*2.4, this.sy+Math.sin(this.angle)*this.mR*2.4, this.current);
+      // next
+      ctx.save(); ctx.globalAlpha=0.8; this.marble(this.sx-this.mR*3.2, this.sy+this.mR*1.6, this.next, 0.8); ctx.restore();
+      ctx.fillStyle='#ffe6f6'; ctx.font='bold '+Math.round(W*0.05)+'px Segoe UI'; ctx.textAlign='left'; ctx.fillText('得分 '+this.score,10,24);
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over||this.win) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+  }
+  window.game=new Stream();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f24" />
+<title>霓虹弹弓 · Slingshot</title>
+<style>
+  :root { --bg:#0a0f24; --surface:#121a3a; --board:#0d1430; --text:#e9ecff; --muted:#8a93c8; --accent:#ff6b6b; --accent-glow:#ff6b6b55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #1c2a5e 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #0e1330 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#ffb3b3); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0f24ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .overlay.win h2 { color:var(--accent); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0a0f24; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a0f24; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹弹弓</h1>
+      <div class="sub">S L I N G &nbsp; S H O T</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Birds</div><div class="value" id="birds">4</div></div>
+      <div class="score-card"><div class="label">Pigs</div><div class="value" id="pigs">3</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="440" height="300"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>弹尽粮绝!</h2>
+        <p id="lose-msg">还有小猪没打掉</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+    <div class="overlay win" id="overlay-win">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>全部击破!</h2>
+        <p id="win-msg">漂亮的一击</p>
+        <button class="btn primary" onclick="game.restart()">下一关</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 计算弹道中…</span>
+  </div>
+  <div class="status" id="status">从弹弓向后拖拽并松手发射，击落所有小猪</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), birdsEl=document.getElementById('birds'), pigsEl=document.getElementById('pigs');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const overlayWin=document.getElementById('overlay-win'), winMsg=document.getElementById('win-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  class Sling {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.win=false; this.time=0; this.level=1;
+      this.best=parseInt(localStorage.getItem('slingBest')||'0');
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(300,Math.min(r.width||440,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*0.68; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); this.groundY=this.H*0.86; this.anchor={x:w*0.16,y:this.groundY-46}; this.bR=Math.max(9,w*0.026); }
+    makeLevel(){
+      this.blocks=[]; this.pigs=[];
+      const px=this.W*0.56; const gy=this.groundY; const hpB=2+Math.min(3,this.level);
+      const add=(x,y,w,h,hp)=>this.blocks.push({x,y,w,h,hp,maxhp:hp,color:['#caa06b','#9aa0b0','#b07a4d'][Math.floor(Math.random()*3)]});
+      add(px,gy-58,18,58,hpB); add(px+46,gy-58,18,58,hpB);
+      add(px-8,gy-104,90,16,hpB);
+      add(px+18,gy-140,18,40,hpB);
+      add(px+120,gy-50,18,50,hpB);
+      const pr=this.W*0.03;
+      this.pigs.push({x:px+30,y:gy-pr-2,r:pr,alive:true});
+      this.pigs.push({x:px+30,y:gy-104-pr-2,r:pr,alive:true});
+      this.pigs.push({x:px+120,y:gy-pr-2,r:pr,alive:true});
+      if(this.level>=2) this.pigs.push({x:px+70,y:gy-150-pr-2,r:pr,alive:true});
+      this.birdsLeft=3+this.level; birdsEl.textContent=this.birdsLeft;
+      this.pigsLeft=this.pigs.length; pigsEl.textContent=this.pigsLeft;
+    }
+    hitRect(b,r){ const cx=Math.max(r.x,Math.min(b.x,r.x+r.w)); const cy=Math.max(r.y,Math.min(b.y,r.y+r.h)); const dx=b.x-cx, dy=b.y-cy; const d2=dx*dx+dy*dy; if(d2<b.r*b.r){ const d=Math.sqrt(d2)||0.001; let nx=dx/d, ny=dy/d; if(d2<0.01){ const l=b.x-r.x,ri=r.x+r.w-b.x,t=b.y-r.y,bo=r.y+r.h-b.y; const m=Math.min(l,ri,t,bo); if(m===l){nx=-1;ny=0;} else if(m===ri){nx=1;ny=0;} else if(m===t){nx=0;ny=-1;} else {nx=0;ny=1;} } return {nx,ny,cx,cy}; } return null; }
+    sim(vx,vy){ const bb={x:this.anchor.x,y:this.anchor.y,r:this.bR,vx,vy}; const blocks=this.blocks.map(b=>({x:b.x,y:b.y,w:b.w,h:b.h,hp:b.hp})); const pigs=this.pigs.map(p=>({x:p.x,y:p.y,r:p.r,alive:p.alive})); let destroyed=0,broken=0; const g=1400; for(let i=0;i<260;i++){ bb.vy+=g/60; bb.x+=bb.vx/60; bb.y+=bb.vy/60; for(const p of pigs){ if(p.alive && Math.hypot(bb.x-p.x,bb.y-p.y)<bb.r+p.r){ p.alive=false; destroyed++; } } for(const b of blocks){ if(b.hp<=0) continue; const h=this.hitRect(bb,b); if(h){ const vd=bb.vx*h.nx+bb.vy*h.ny; if(vd<0){ bb.vx-=1.5*vd*h.nx; bb.vy-=1.5*vd*h.ny; } bb.x=h.cx+h.nx*(bb.r+0.5); bb.y=h.cy+h.ny*(bb.r+0.5); b.hp-=1; if(b.hp<=0) broken++; bb.vx*=0.99; bb.vy*=0.99; } } if(bb.y>this.groundY-bb.r && Math.hypot(bb.vx,bb.vy)<70) break; if(bb.x<-40||bb.x>this.W+40||bb.y>this.H+80) break; } return destroyed*3+broken; }
+    autoPlan(){ let best=null,bv=-1; for(let ang=18;ang<=74;ang+=2){ for(let sp=620;sp<=1140;sp+=70){ const vx=Math.cos(ang*Math.PI/180)*sp, vy=-Math.sin(ang*Math.PI/180)*sp; const s=this.sim(vx,vy); if(s>bv){ bv=s; best={vx,vy}; } } } return best; }
+    launch(vx,vy){ this.bird={x:this.anchor.x,y:this.anchor.y,r:this.bR,vx,vy,t:0}; this.state='fly'; this.birdsLeft--; birdsEl.textContent=Math.max(0,this.birdsLeft); }
+    endBird(){ this.bird=null; if(this.pigsLeft<=0){ this.victory(); return; } if(this.birdsLeft<=0){ this.gameOver(); return; } this.state='aim'; this.cool=0.5; }
+    update(dt){
+      if(this.over||this.win) return; this.time+=dt;
+      if(this.cool>0) this.cool-=dt;
+      if(this.autoPlay && this.state==='aim' && this.cool<=0){ const b=this.autoPlan(); if(b){ this.autoV=b; this.launch(b.vx,b.vy); aiStatus.textContent='AI 发射!'; } else this.endBird(); }
+      if(this.state==='fly' && this.bird){
+        const b=this.bird; b.vy+=1400*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.t+=dt;
+        for(const p of this.pigs){ if(p.alive && Math.hypot(b.x-p.x,b.y-p.y)<b.r+p.r){ p.alive=false; this.pigsLeft--; this.score+=120; scoreEl.textContent=this.score; pigsEl.textContent=this.pigsLeft; this.booms.push({x:p.x,y:p.y,r:p.r,life:1}); } }
+        for(const bl of this.blocks){ if(bl.hp<=0) continue; const h=this.hitRect(b,bl); if(h){ const vd=b.vx*h.nx+b.vy*h.ny; if(vd<0){ b.vx-=1.5*vd*h.nx; b.vy-=1.5*vd*h.ny; } b.x=h.cx+h.nx*(b.r+0.5); b.y=h.cy+h.ny*(b.r+0.5); bl.hp-=1; if(bl.hp<=0) this.booms.push({x:bl.x+bl.w/2,y:bl.y+bl.h/2,r:Math.max(bl.w,bl.h)/2,life:1}); b.vx*=0.99; b.vy*=0.99; } }
+        if(b.y>this.groundY-b.r){ b.y=this.groundY-b.r; b.vy=-b.vy*0.42; b.vx*=0.7; if(Math.hypot(b.vx,b.vy)<70){ this.endBird(); return; } }
+        if(b.x<-40||b.x>this.W+40||b.y>this.H+100||b.t>6){ this.endBird(); return; }
+      }
+      for(let i=this.booms.length-1;i>=0;i--){ this.booms[i].life-=dt*2.6; if(this.booms[i].life<=0) this.booms.splice(i,1); }
+    }
+    victory(){ this.win=true; this.level++; if(this.score>this.best){ this.best=this.score; localStorage.setItem('slingBest',String(this.best)); } winMsg.textContent='得分 '+this.score; overlayWin.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay){ this.win=false; overlayWin.classList.remove('active'); this.score=this.score; this.makeLevel(); this.state='aim'; } },1300); }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('slingBest',String(this.best)); } loseMsg.textContent='得分 '+this.score+'，剩 '+this.pigsLeft+' 只'; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1300); }
+    bindInput(){
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.win||this.autoPlay||this.state!=='aim') return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); if(Math.hypot(x-this.anchor.x,y-this.anchor.y)<this.W*0.18){ this.drag=true; this.aim={x,y}; } });
+      canvas.addEventListener('pointermove',e=>{ if(this.drag){ e.preventDefault(); const r=canvas.getBoundingClientRect(); this.aim={x:(e.clientX-r.left)*(this.W/r.width),y:(e.clientY-r.top)*(this.H/r.height)}; } });
+      const fire=e=>{ if(!this.drag) return; this.drag=false; const ax=this.anchor.x-this.aim.x, ay=this.anchor.y-this.aim.y; let vx=ax*7, vy=ay*7; const sp=Math.hypot(vx,vy); if(sp>1150){ vx*=1150/sp; vy*=1150/sp; } if(sp<60) return; this.launch(vx,vy); this.aim=null; };
+      canvas.addEventListener('pointerup',fire); canvas.addEventListener('pointercancel',fire);
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    curBird(){ return this.state==='aim' ? {x:this.anchor.x,y:this.anchor.y,r:this.bR} : this.bird; }
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // sky already via bg; ground
+      ctx.save(); ctx.fillStyle='#10331f'; ctx.fillRect(0,this.groundY,W,H-this.groundY); ctx.fillStyle='#1c5238'; ctx.fillRect(0,this.groundY,W,5); ctx.restore();
+      // blocks
+      for(const b of this.blocks){ if(b.hp<=0) continue; ctx.save(); ctx.shadowColor=b.color; ctx.shadowBlur=8; ctx.fillStyle=b.color; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.shadowBlur=0; ctx.strokeStyle='#00000040'; ctx.lineWidth=2; for(let i=1;i<b.maxhp;i++){ const yy=b.y+b.h*(i/b.maxhp); ctx.beginPath(); ctx.moveTo(b.x,yy); ctx.lineTo(b.x+b.w,yy); ctx.stroke(); } if(b.hp<b.maxhp){ ctx.strokeStyle='#00000055'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(b.x+b.w*0.3,b.y+2); ctx.lineTo(b.x+b.w*0.5,b.y+b.h*0.5); ctx.stroke(); } ctx.restore(); }
+      // pigs
+      for(const p of this.pigs){ if(!p.alive) continue; ctx.save(); ctx.shadowColor='#7be07b'; ctx.shadowBlur=10; ctx.fillStyle='#7be07b'; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#5fbf5f'; ctx.beginPath(); ctx.arc(p.x,p.y+p.r*0.3,p.r*0.7,0,7); ctx.fill(); ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(p.x-p.r*0.32,p.y-p.r*0.2,p.r*0.12,0,7); ctx.arc(p.x+p.r*0.32,p.y-p.r*0.2,p.r*0.12,0,7); ctx.fill(); ctx.fillStyle='#e98aa0'; ctx.beginPath(); ctx.ellipse(p.x,p.y+p.r*0.15,p.r*0.22,p.r*0.16,0,0,7); ctx.fill(); ctx.restore(); }
+      // slingshot fork
+      ctx.save(); ctx.strokeStyle='#8a5a32'; ctx.lineWidth=this.bR*0.5; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(this.anchor.x,this.groundY); ctx.lineTo(this.anchor.x,this.anchor.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(this.anchor.x,this.anchor.y); ctx.lineTo(this.anchor.x-this.bR*0.9,this.anchor.y-this.bR*1.2); ctx.moveTo(this.anchor.x,this.anchor.y); ctx.lineTo(this.anchor.x+this.bR*0.9,this.anchor.y-this.bR*1.2); ctx.stroke(); ctx.restore();
+      // aim preview + bands + bird
+      const cb=this.curBird();
+      if(this.state==='aim' && (this.autoPlay?this.autoV:this.aim)){
+        let vx,vy; if(this.autoPlay){ vx=this.autoV.vx; vy=this.autoV.vy; } else { vx=(this.anchor.x-this.aim.x)*7; vy=(this.anchor.y-this.aim.y)*7; const sp=Math.hypot(vx,vy); if(sp>1150){ vx*=1150/sp; vy*=1150/sp; } }
+        // trajectory dots
+        let sx=this.anchor.x, sy=this.anchor.y, svx=vx, svy=vy;
+        ctx.save(); ctx.fillStyle='#ffffff66'; for(let i=0;i<26;i++){ svx*=0.992; svy=svy*0.992+1400/60; sx+=svx/60; sy+=svy/60; if(i%2===0){ ctx.globalAlpha=0.6-i*0.02; ctx.beginPath(); ctx.arc(sx,sy,2.2,0,7); ctx.fill(); } } ctx.restore();
+        // bands
+        ctx.save(); ctx.strokeStyle='#5a3a22'; ctx.lineWidth=this.bR*0.35; ctx.beginPath(); ctx.moveTo(this.anchor.x-this.bR*0.9,this.anchor.y-this.bR*1.2); ctx.lineTo(cb.x,cb.y); ctx.moveTo(this.anchor.x+this.bR*0.9,this.anchor.y-this.bR*1.2); ctx.lineTo(cb.x,cb.y); ctx.stroke(); ctx.restore();
+      }
+      if(cb){ ctx.save(); ctx.shadowColor='#ff6b6b'; ctx.shadowBlur=12; ctx.fillStyle='#ff6b6b'; ctx.beginPath(); ctx.arc(cb.x,cb.y,cb.r,0,7); ctx.fill(); const ang=Math.atan2(cb.vy||0,cb.vx||1); ctx.shadowBlur=0; ctx.fillStyle='#ffd23f'; ctx.beginPath(); ctx.moveTo(cb.x,cb.y); ctx.lineTo(cb.x+Math.cos(ang)*cb.r*1.1,cb.y+Math.sin(ang)*cb.r*1.1); ctx.lineTo(cb.x+Math.cos(ang+1)*cb.r*0.5,cb.y+Math.sin(ang+1)*cb.r*0.5); ctx.fill(); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cb.x-cb.r*0.3,cb.y-cb.r*0.3,cb.r*0.22,0,7); ctx.fill(); ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(cb.x-cb.r*0.3,cb.y-cb.r*0.3,cb.r*0.1,0,7); ctx.fill(); ctx.restore(); }
+      // booms
+      for(const f of this.booms){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life); ctx.strokeStyle='#ffce4a'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(f.x,f.y,f.r*(1.5-f.life),0,7); ctx.stroke(); ctx.restore(); }
+      ctx.fillStyle='#e9ecff'; ctx.font='bold '+Math.round(W*0.04)+'px Segoe UI'; ctx.textAlign='left'; ctx.fillText('得分 '+this.score,W-110,24);
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over||this.win) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.aim=null; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    restart(){ this.stopAuto(); this.over=false; this.win=false; this.score=0; scoreEl.textContent='0'; this.booms=[]; this.bird=null; this.aim=null; this.drag=false; this.cool=0; this.state='aim'; this.makeLevel(); overlayLose.classList.remove('active'); overlayWin.classList.remove('active'); }
+  }
+  window.game=new Sling();
+})();
+</script>
+</body>
+</html>

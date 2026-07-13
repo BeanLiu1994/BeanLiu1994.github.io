@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c1a2e" />
+<title>单词寻宝 · Word Hunt</title>
+<style>
+  :root { --bg:#0c1a2e; --surface:#10253f; --board:#0d1c30; --text:#e6f1ff; --muted:#7fa6cf; --accent:#4dd0ff; --accent-glow:#4dd0ff55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #143055 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #0e2036 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#b6ecff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; align-items:center; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .timebar { height:8px; background:var(--surface); border-radius:6px; overflow:hidden; margin-bottom:10px; }
+  .timefill { height:100%; width:100%; background:linear-gradient(90deg,var(--accent),#4dff91); transition:width .2s linear; }
+  .main { display:flex; gap:12px; align-items:flex-start; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); flex:1; }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .side { width:120px; display:flex; flex-direction:column; gap:8px; }
+  .side .lab { font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .wordlist { background:var(--surface); border:1px solid #ffffff0a; border-radius:12px; padding:8px; height:300px; overflow:hidden; display:flex; flex-direction:column; gap:4px; }
+  .wordlist .w { font-size:0.8rem; padding:3px 6px; background:var(--board); border-radius:6px; color:var(--accent); display:flex; justify-content:space-between; }
+  .wordlist .w .sc { color:var(--gold); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0c1a2eee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0c1a2e; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0c1a2e; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>单词寻宝</h1>
+      <div class="sub">W O R D &nbsp; H U N T</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">Found</div><div class="value" id="found">0</div></div>
+    </div>
+  </div>
+  <div class="timebar"><div class="timefill" id="timefill"></div></div>
+  <div class="main">
+    <div class="board-wrap">
+      <canvas id="game" width="360" height="360"></canvas>
+      <div class="overlay lose" id="overlay-lose">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2>时间到!</h2>
+          <p id="lose-msg">找到的单词数</p>
+          <button class="btn primary" onclick="game.restart()">再来一局</button>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="lab">已找到</div>
+      <div class="wordlist" id="wordlist"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 解词中…</span>
+  </div>
+  <div class="status" id="status">滑动连接相邻字母组成单词（可斜向），松手提交</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=4;
+  const DICT=['the','and','that','this','with','from','they','will','your','what','have','been','were','said','each','which','their','time','will','more','when','much','some','them','then','than','look','only','come','over','also','back','after','work','first','well','year','give','most','word','book','good','food','wood','moon','star','rain','snow','leaf','tree','fish','bird','lion','bear','wolf','frog','duck','goat','deer','mouse','snake','horse','sheep','apple','grape','lemon','mango','peach','berry','bread','water','sugar','spice','green','blue','red','gold','pink','white','black','stone','cloud','river','ocean','earth','flame','light','storm','quiet','happy','smart','brave','quick','calm','soft','hard','warm','cold','sweet','fresh','clean','round','sharp','small','large','tall','wide','deep','high','low','open','close','start','stop','play','read','write','speak','learn','think','dream','smile','laugh','dance','sing','walk','run','jump','swim','climb','catch','throw','build','paint','music','drum','song','game','puzzle','magic','power','shine','glow','spark','frost','wind','sand','hill','lake','pond','nest','wing','tail','horn','claw','fang','song','tune','note','beat','echo','flash','beam','dawn','dusk','noon','hour','week','month','spring','summer','autumn','winter','king','queen','knight','sword','shield','crown','castle','dragon','ghost','witch','wizard','spell','charm','lucky','peace','hope','love','friend','heart','soul','mind','world','space','orbit','comet','planet','galaxy','robot','laser','pixel','code','data','byte','cloud','metal','crystal','amber','jade','pearl','ruby','ivory','coral','ember','blaze','tide','wave','reef','shell','shark','whale','otter','raven','hawk','owl','fox','cat','dog','pig','cow','hen','bee','ant','bug','moth','fern','moss','root','seed','bloom','petal','branch','forest','meadow','valley','canyon','cave','tunnel','bridge','tower','temple','garden','flower','grass','wheat','corn','rice','bean','pea','nut','plum','lime','fig','date','olive','violet','indigo','teal','amber2','bronze','silver','steel','iron','rust','ash','coal','smoke','mist','fog','frosty','icy','sunny','rainy','windy','cloudy'];
+  const DSET=new Set(DICT);
+  const FREQ='eeeeetttttaoaoaoinshrdlcumfgwybvkjxqz';
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), foundEl=document.getElementById('found');
+  const statusEl=document.getElementById('status'), timeFill=document.getElementById('timefill'), wordList=document.getElementById('wordlist');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+  const NB=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  const wordScore=w=> w.length===3?100:(w.length===4?200:(w.length===5?400:(w.length===6?700:1100)));
+
+  class Hunt {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('wordBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||360,400)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.T=this.W/N; }
+    genGrid(){
+      for(let attempt=0; attempt<14; attempt++){
+        let g=Array.from({length:N},()=>new Array(N).fill(''));
+        let ok=true;
+        const K=6;
+        for(let w=0; w<K && ok; w++){
+          const word=DICT[Math.floor(Math.random()*DICT.length)];
+          let placed=false;
+          for(let t=0;t<50 && !placed;t++){
+            const copy=g.map(r=>r.slice());
+            let r=Math.floor(Math.random()*N), c=Math.floor(Math.random()*N); const seen=[[r,c]];
+            copy[r][c]=word[0]; let good=true;
+            for(let i=1;i<word.length;i++){
+              const nb=NB.filter(([dr,dc])=>{ const nr=r+dr,nc=c+dc; return nr>=0&&nr<N&&nc>=0&&nc<N && !seen.some(s=>s[0]===nr&&s[1]===nc); });
+              if(!nb.length){ good=false; break; }
+              const [dr,dc]=nb[Math.floor(Math.random()*nb.length)]; r+=dr; c+=dc; seen.push([r,c]);
+              if(copy[r][c]==='') copy[r][c]=word[i];
+              else if(copy[r][c]!==word[i]){ good=false; break; }
+            }
+            if(good && seen.length===word.length){ g=copy; placed=true; }
+          }
+          if(!placed) ok=false;
+        }
+        if(ok){
+          for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(g[r][c]==='') g[r][c]=FREQ[Math.floor(Math.random()*FREQ.length)];
+          this.grid=g;
+          this.sols=this.solve();
+          if(this.sols.length>=5) return;
+        }
+      }
+      // fallback: fill random
+      this.grid=Array.from({length:N},()=>Array.from({length:N},()=>FREQ[Math.floor(Math.random()*FREQ.length)]));
+      this.sols=this.solve();
+    }
+    solve(){
+      const res={}; const g=this.grid;
+      const dfs=(r,c,str,vis,path)=>{
+        str+=g[r][c]; path.push([r,c]);
+        if(str.length>=3 && DSET.has(str) && !res[str]) res[str]=path.slice();
+        if(str.length<7){ for(const [dr,dc] of NB){ const nr=r+dr,nc=c+dc; if(nr>=0&&nr<N&&nc>=0&&nc<N&&!vis.has(nr+','+nc)){ vis.add(nr+','+nc); dfs(nr,nc,str,vis,path); vis.delete(nr+','+nc); } } }
+        path.pop();
+      };
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const vis=new Set([r+','+c]); dfs(r,c,'',vis,[]); }
+      const out=Object.keys(res).map(w=>({word:w,path:res[w]}));
+      return out;
+    }
+    cellAt(x,y){ const T=this.T; const c=Math.floor(x/T), r=Math.floor(y/T); if(r<0||r>=N||c<0||c>=N) return null; return {r,c}; }
+    adj(a,b){ return Math.max(Math.abs(a.r-b.r),Math.abs(a.c-b.c))===1; }
+    submit(path){
+      const w=path.map(p=>this.grid[p.r][p.c]).join('');
+      if(w.length>=3 && DSET.has(w) && !this.foundSet.has(w)){
+        this.foundSet.add(w); this.score+=wordScore(w); scoreEl.textContent=this.score; foundEl.textContent=this.foundSet.size;
+        const div=document.createElement('div'); div.className='w'; div.innerHTML='<span>'+w+'</span><span class="sc">+'+wordScore(w)+'</span>'; wordList.prepend(div);
+        if(this.score>this.best){ this.best=this.score; localStorage.setItem('wordBest',String(this.best)); bestEl.textContent=this.best; }
+        statusEl.textContent='找到 "'+w+'" +'+wordScore(w);
+        return true;
+      }
+      return false;
+    }
+    autoTick(){
+      // pick an unfound solution word
+      const remaining=this.sols.filter(s=>!this.foundSet.has(s.word));
+      if(!remaining.length){ if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },900); this.over=true; this.timeUp(); return; }
+      const pick=remaining[Math.floor(Math.random()*remaining.length)];
+      this.autoPath=pick.path.slice(); this.autoWord=pick.word; this.autoStep=0; this.autoTimer=0;
+      aiStatus.textContent='AI 拼写 "'+pick.word+'"';
+    }
+    timeUp(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('wordBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='找到 '+this.foundSet.size+' 个单词'; overlayLose.classList.add('active'); if(this.autoPlay && this.sols.filter(s=>!this.foundSet.has(s.word)).length) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1200); }
+    update(dt){
+      if(this.over) return; this.time+=dt;
+      this.timeLeft-=dt; timeFill.style.width=Math.max(0,this.timeLeft/this.maxTime*100)+'%';
+      if(this.timeLeft<=0){ this.timeUp(); return; }
+      if(this.autoPlay){
+        if(this.autoPath){ this.autoTimer+=dt; if(this.autoTimer>0.18){ this.autoTimer=0; this.autoStep++; if(this.autoStep>=this.autoPath.length){ this.submit(this.autoPath); this.autoPath=null; this.autoCD=0.5; } }
+        } else if(this.autoCD>0){ this.autoCD-=dt; if(this.autoCD<=0) this.autoTick(); }
+      }
+    }
+    bindInput(){
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); const cell=this.cellAt(x,y); if(cell){ this.path=[cell]; this.drag=true; } });
+      canvas.addEventListener('pointermove',e=>{ if(!this.drag||this.autoPlay) return; e.preventDefault(); const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); const cell=this.cellAt(x,y); if(cell){ const last=this.path[this.path.length-1]; if(cell.r!==last.r||cell.c!==last.c){ if(!this.path.some(p=>p.r===cell.r&&p.c===cell.c) && this.adj(cell,last)) this.path.push(cell); } } });
+      const end=e=>{ if(!this.drag) return; this.drag=false; if(this.path.length>=2) this.submit(this.path); this.path=[]; };
+      canvas.addEventListener('pointerup',end); canvas.addEventListener('pointercancel',end);
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    draw(){
+      const T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      const path=this.autoPath? this.autoPath.slice(0,Math.max(1,this.autoStep+ (this.autoPath?1:0))) : this.path;
+      // grid tiles
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        const x=c*T, y=r*T, pad=T*0.06; const sel=path&&path.some(p=>p.r===r&&p.c===c);
+        ctx.save(); ctx.fillStyle=sel?'#15324f':'#102b45'; ctx.strokeStyle=sel?'#4dd0ff':'#ffffff14'; ctx.lineWidth=sel?3:1.5;
+        ctx.shadowColor=sel?'#4dd0ff':'transparent'; ctx.shadowBlur=sel?14:0;
+        ctx.beginPath(); ctx.roundRect(x+pad,y+pad,T-2*pad,T-2*pad,10); ctx.fill(); ctx.stroke(); ctx.restore();
+        ctx.fillStyle='#e6f1ff'; ctx.font='bold '+Math.round(T*0.42)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(this.grid[r][c].toUpperCase(), x+T/2, y+T/2+1);
+      }
+      // connecting line
+      if(path&&path.length>1){ ctx.save(); ctx.strokeStyle='#4dd0ff'; ctx.lineWidth=4; ctx.globalAlpha=0.8; ctx.shadowColor='#4dd0ff'; ctx.shadowBlur=10; ctx.beginPath(); for(let i=0;i<path.length;i++){ const p=path[i]; const px=p.c*T+T/2, py=p.r*T+T/2; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.stroke(); ctx.restore(); }
+      if(this.autoPath){ const p=this.autoPath[Math.min(this.autoStep,this.autoPath.length-1)]; const px=p.c*T+T/2, py=p.r*T+T/2; ctx.save(); ctx.strokeStyle='#ffd700'; ctx.lineWidth=3; ctx.globalAlpha=0.6+0.4*Math.sin(this.time*6); ctx.beginPath(); ctx.arc(px,py,T*0.42,0,7); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoPath=null; this.autoCD=0.4; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; scoreEl.textContent='0'; foundEl.textContent='0'; this.timeLeft=90; this.maxTime=90; timeFill.style.width='100%'; this.foundSet=new Set(); wordList.innerHTML=''; this.path=[]; this.drag=false; this.autoPath=null; this.autoCD=0; this.genGrid(); overlayLose.classList.remove('active'); statusEl.textContent='滑动连接相邻字母组成单词（可斜向），松手提交'; if(this.autoPlay) this.autoTick(); }
+  }
+  window.game=new Hunt();
+})();
+</script>
+</body>
+</html>

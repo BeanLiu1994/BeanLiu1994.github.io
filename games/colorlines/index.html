@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0e0a24" />
+<title>霓虹连线 · Color Lines</title>
+<style>
+  :root { --bg:#0e0a24; --surface:#16103a; --board:#100b2c; --text:#efeaff; --muted:#9b8fd6; --accent:#ff4dd2; --accent-glow:#ff4dd255; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #281a55 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#ffb3ec); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0e0a24ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0e0a24; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0e0a24; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹连线</h1>
+      <div class="sub">C O L O R &nbsp; L I N E S</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="360" height="360"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>无处落子!</h2>
+        <p id="lose-msg">棋盘被填满了</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划移动中…</span>
+  </div>
+  <div class="status" id="status">点击小球再点空位移动，五子同色连线即消除</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=9;
+  const PAL=['#ff5d6a','#4d9fff','#4dff91','#ffd23f','#b06bff','#ff8a3d','#ffe14d'];
+  const NB=[[1,0],[-1,0],[0,1],[0,-1]];
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  class Lines {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('linesBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||360,440)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.T=this.W/N; }
+    emptyGrid(){ return Array.from({length:N},()=>new Array(N).fill(-1)); }
+    lineCells(g,r,c,color){
+      const dirs=[[0,1],[1,0],[1,1],[1,-1]]; const cells=[];
+      for(const [dr,dc] of dirs){ const run=[];
+        for(let s=1;s<5;s++){ const nr=r+dr*s,nc=c+dc*s; if(nr<0||nr>=N||nc<0||nc>=N||g[nr][nc]!==color) break; run.push([nr,nc]); }
+        for(let s=1;s<5;s++){ const nr=r-dr*s,nc=c-dc*s; if(nr<0||nr>=N||nc<0||nc>=N||g[nr][nc]!==color) break; run.push([nr,nc]); }
+        if(run.length+1>=5){ for(const [a,b] of run) cells.push([a,b]); cells.push([r,c]); }
+      }
+      return cells;
+    }
+    maxRun(g,r,c,color){
+      let best=1;
+      for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){ let n=1;
+        for(let s=1;s<9;s++){ const nr=r+dr*s,nc=c+dc*s; if(nr<0||nr>=N||nc<0||nc>=N||g[nr][nc]!==color) break; n++; }
+        for(let s=1;s<9;s++){ const nr=r-dr*s,nc=c-dc*s; if(nr<0||nr>=N||nc<0||nc>=N||g[nr][nc]!==color) break; n++; }
+        best=Math.max(best,n);
+      }
+      return best;
+    }
+    bfsPath(s,d){
+      if(s.r===d.r&&s.c===d.c) return [s];
+      const prev={}, seen=new Set([s.r+','+s.c]), q=[s];
+      const pass=(r,c)=> (r===d.r&&c===d.c) || (r>=0&&r<N&&c>=0&&c<N&&this.grid[r][c]===-1);
+      while(q.length){ const cur=q.shift();
+        if(cur.r===d.r&&cur.c===d.c){ const path=[]; let k=cur.r+','+cur.c; while(k!==undefined){ const p=k.split(',').map(Number); path.unshift({r:p[0],c:p[1]}); k=prev[k]; } return path; }
+        for(const [dr,dc] of NB){ const nr=cur.r+dr,nc=cur.c+dc; if(!pass(nr,nc)) continue; const key=nr+','+nc; if(seen.has(key)) continue; seen.add(key); prev[key]=cur.r+','+cur.c; q.push({r:nr,c:nc}); }
+      }
+      return null;
+    }
+    spawn3(){
+      const empties=[]; for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(this.grid[r][c]===-1) empties.push([r,c]);
+      if(empties.length===0){ this.gameOver(); return; }
+      for(let i=0;i<3 && empties.length;i++){ const idx=Math.floor(Math.random()*empties.length); const [r,c]=empties.splice(idx,1)[0]; this.grid[r][c]=Math.floor(Math.random()*PAL.length); }
+    }
+    resolveLines(r,c,color){
+      const set=new Set(); for(const [a,b] of this.lineCells(this.grid,r,c,color)) set.add(a+','+b);
+      if(set.size>=5){ let n=0; for(const k of set){ const [a,b]=k.split(',').map(Number); this.flashes.push({x:(b+0.5)*this.T,y:(a+0.5)*this.T,color:PAL[color],life:1}); this.grid[a][b]=-1; n++; } this.score+=n*12; scoreEl.textContent=this.score; }
+    }
+    executeMove(s,d){
+      const path=this.bfsPath(s,d); if(!path) return false;
+      const color=this.grid[s.r][s.c];
+      this.grid[d.r][d.c]=color; this.grid[s.r][s.c]=-1;
+      this.anim={path, color, idx:0, t:0, dr:d.r, dc:d.c};
+      statusEl.textContent='移动中…';
+      return true;
+    }
+    autoPlan(){
+      let best=null, bestScore=-1;
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(this.grid[r][c]===-1) continue;
+        const color=this.grid[r][c];
+        for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++){ if(this.grid[rr][cc]!==-1) continue;
+          if(!this.bfsPath({r,c},{r:rr,c:cc})) continue;
+          const g=this.grid.map(row=>row.slice()); g[rr][cc]=color; g[r][c]=-1;
+          const clears=this.lineCells(g,rr,cc,color).length; const run=this.maxRun(g,rr,cc,color);
+          const sc=(clears>=5?1000:0)+run;
+          if(sc>bestScore){ bestScore=sc; best={s:{r,c},d:{r:rr,c:cc},clears:clears>=5}; }
+        }
+      }
+      if(best){ if(best.clears) aiStatus.textContent='AI 连消中…'; else aiStatus.textContent='AI 布局中…'; this.autoTarget=best.d; return this.executeMove(best.s,best.d); }
+      this.autoTarget=null; return false;
+    }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('linesBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1300); }
+    update(dt){
+      if(this.over) return; this.time+=dt;
+      if(this.anim){ const a=this.anim; a.t+=dt*7; while(a.t>=1 && a.idx<a.path.length-1){ a.t-=1; a.idx++; } if(a.idx>=a.path.length-1){ const a2=this.anim; this.anim=null; this.resolveLines(a2.dr,a2.dc,a2.color); this.spawn3(); this.autoCD=0.45; }
+        for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.6; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
+        return;
+      }
+      if(this.autoPlay && this.autoCD<=0){ this.autoPlan(); if(!this.anim) this.autoCD=0.5; }
+      if(this.autoCD>0) this.autoCD-=dt;
+      for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.6; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
+    }
+    bindInput(){
+      const cellAt=(e)=>{ const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); const c=Math.floor(x/this.T), rr=Math.floor(y/this.T); if(rr<0||rr>=N||c<0||c>=N) return null; return {r:rr,c}; };
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay||this.anim) return; const cl=cellAt(e); if(!cl) return;
+        if(this.sel && this.grid[cl.r][cl.c]===-1){ if(this.executeMove(this.sel,cl)) this.sel=null; }
+        else if(this.grid[cl.r][cl.c]!==-1){ this.sel={r:cl.r,c:cl.c}; }
+        else { this.sel=null; }
+      });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    ball(x,y,color,alpha,r){ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=color; ctx.shadowBlur=12; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff55'; ctx.beginPath(); ctx.arc(x-r*0.3,y-r*0.3,r*0.32,0,7); ctx.fill(); ctx.restore(); }
+    draw(){
+      const T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const x=c*T,y=r*T; ctx.fillStyle='#ffffff08'; ctx.fillRect(x+2,y+2,T-4,T-4); }
+      // selected + auto target
+      if(this.sel){ ctx.strokeStyle='#ff4dd2'; ctx.lineWidth=3; ctx.globalAlpha=0.6+0.4*Math.sin(this.time*6); ctx.strokeRect(this.sel.c*T+3,this.sel.r*T+3,T-6,T-6); ctx.globalAlpha=1; }
+      if(this.autoPlay && this.autoTarget){ ctx.strokeStyle='#ff4dd2'; ctx.lineWidth=3; ctx.globalAlpha=0.5+0.4*Math.sin(this.time*6); ctx.strokeRect(this.autoTarget.c*T+3,this.autoTarget.r*T+3,T-6,T-6); ctx.globalAlpha=1; }
+      // grid balls
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(this.grid[r][c]!==-1) this.ball(c*T+T/2,r*T+T/2,PAL[this.grid[r][c]],1,T*0.4);
+      // move anim comet
+      if(this.anim){ const a=this.anim; const cur=a.path[a.idx], nxt=a.path[Math.min(a.idx+1,a.path.length-1)]; const f=a.t; const x=(cur.c+(nxt.c-cur.c)*f+0.5)*T, y=(cur.r+(nxt.r-cur.r)*f+0.5)*T; this.ball(x,y,PAL[a.color],1,T*0.4); }
+      // path line
+      if(this.anim){ ctx.save(); ctx.strokeStyle='#ffffff88'; ctx.lineWidth=2; ctx.beginPath(); for(let i=0;i<this.anim.path.length;i++){ const p=this.anim.path[i]; const px=(p.c+0.5)*T, py=(p.r+0.5)*T; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.stroke(); ctx.restore(); }
+      for(const fl of this.flashes){ ctx.save(); ctx.globalAlpha=Math.max(0,fl.life); ctx.strokeStyle=fl.color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(fl.x,fl.y,T*0.5*(1.4-fl.life),0,7); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; this.autoCD=0.3; if(!this.anim) this.autoPlan(); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; scoreEl.textContent='0'; this.sel=null; this.anim=null; this.flashes=[]; this.autoTarget=null; this.autoCD=0; this.grid=this.emptyGrid(); overlayLose.classList.remove('active'); this.spawn3(); statusEl.textContent='点击小球再点空位移动，五子同色连线即消除'; }
+  }
+  window.game=new Lines();
+})();
+</script>
+</body>
+</html>

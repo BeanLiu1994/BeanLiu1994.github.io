@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#07101f" />
+<title>霓虹迷宫 · Neon Maze</title>
+<style>
+  :root { --bg:#07101f; --surface:#0e1830; --board:#0a1322; --text:#eaf2ff; --muted:#7c93b8; --accent:#ffd23f; --accent-glow:#ffd23f55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #12233f 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #0a1a2e 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#fff2b0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:60px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#07101fee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .overlay.win h2 { color:var(--accent); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#07101f; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#07101f; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹迷宫</h1>
+      <div class="sub">N E O N &nbsp; M A Z E</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card"><div class="label">Level</div><div class="value" id="lvl">1</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="456" height="456"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>被抓住了!</h2>
+        <p id="lose-msg">幽灵追上了你</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 自动游玩中…</span>
+  </div>
+  <div class="status" id="status">滑动或方向键移动，吃光所有光点即可过关</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=19, ROWS=19;
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), lvlEl=document.getElementById('lvl');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+  const DIRS=[{dc:1,dr:0},{dc:-1,dr:0},{dc:0,dr:1},{dc:0,dr:-1}];
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  class Maze {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0; this.level=1;
+      this.best=parseInt(localStorage.getItem('mazeBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const r=canvas.getBoundingClientRect();
+      const w=Math.max(280,Math.min(r.width||360,460));
+      const d=window.devicePixelRatio||1;
+      this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0);
+      this.T=this.W/COLS;
+    }
+    genMaze(){
+      const wall=Array.from({length:ROWS},()=>new Array(COLS).fill(true));
+      const carve=(c,r)=>{
+        wall[r][c]=false;
+        const ds=shuffle([[0,-2],[0,2],[-2,0],[2,0]]);
+        for(const [dc,dr] of ds){ const nc=c+dc,nr=r+dr;
+          if(nc>0&&nc<COLS-1&&nr>0&&nr<ROWS-1&&wall[nr][nc]){ wall[r+dr/2][c+dc/2]=false; carve(nc,nr); } }
+      };
+      carve(1,1);
+      for(let r=1;r<ROWS-1;r++) for(let c=1;c<COLS-1;c++){
+        if(wall[r][c] && Math.random()<0.13){
+          if(r%2===1 && c%2===0 && !wall[r][c-1] && !wall[r][c+1]) wall[r][c]=false;
+          else if(c%2===1 && r%2===0 && !wall[r-1][c] && !wall[r+1][c]) wall[r][c]=false;
+        }
+      }
+      return wall;
+    }
+    restart(){
+      this.stopAuto(); this.over=false; this.dotsLeft=0; this.score=0; scoreEl.textContent='0'; lvlEl.textContent=this.level;
+      this.wall=this.genMaze();
+      this.dot=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(!this.wall[r][c]) this.dot[r][c]=true;
+      const ghostStarts=[[COLS-2,ROWS-2],[COLS-2,1],[1,ROWS-2]];
+      const pStart=[1,1];
+      this.dot[pStart[1]][pStart[0]]=false;
+      this.player={ c:pStart[0], r:pStart[1], x:pStart[0]+0.5, y:pStart[1]+0.5, dir:{dc:1,dr:0}, ndir:{dc:1,dr:0}, tc:pStart[0], tr:pStart[1], speed:5.2 };
+      this.ghosts=ghostStarts.map((g,i)=>{
+        this.dot[g[1]][g[0]]=false;
+        const vdirs=DIRS.filter(d=>!this.wall[g[1]+d.dr][g[0]+d.dc]);
+        return { c:g[0], r:g[1], x:g[0]+0.5, y:g[1]+0.5, dir:vdirs[0]||{dc:1,dr:0}, tc:g[0], tr:g[1], speed:4.0+this.level*0.35, color:['#ff5d6a','#4d9fff','#b06bff','#4dff91'][i%4] };
+      });
+      this.dotsLeft=0; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.dot[r][c]) this.dotsLeft++;
+      this.autoTarget=null;
+      overlayLose.classList.remove('active');
+      statusEl.textContent='滑动或方向键移动，吃光所有光点即可过关';
+    }
+    validDirs(c,r,cur){
+      let v=DIRS.filter(d=> c+d.dc>=0&&c+d.dc<COLS&&r+d.dr>=0&&r+d.dr<ROWS && !this.wall[r+d.dr][c+d.dc]);
+      const rev=v.filter(d=> !(d.dc===-cur.dc&&d.dr===-cur.dr));
+      return rev.length?rev:v;
+    }
+    bfsStep(c,r){
+      const key=(cc,rr)=>rr*COLS+cc; const visited=new Set([key(c,r)]); const prev=new Map();
+      let q=[[c,r]];
+      while(q.length){
+        const [cc,cr]=q.shift();
+        if(this.dot[cr][cc] && !(cc===c&&cr===r)){
+          let cur=key(cc,cr);
+          while(prev.get(cur)!==undefined && prev.get(cur)!==key(c,r)) cur=prev.get(cur);
+          const pc=cur%COLS, pr=Math.floor(cur/COLS);
+          return {dc:pc-c, dr:pr-r};
+        }
+        for(const d of DIRS){ const nc=cc+d.dc, nr=cr+d.dr;
+          if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
+          const k=key(nc,nr); if(visited.has(k)) continue;
+          visited.add(k); prev.set(k,key(cc,cr)); q.push([nc,nr]);
+        }
+      }
+      return null;
+    }
+    autoDecide(){
+      let threat=null, td=1e9;
+      for(const g of this.ghosts){ const d=Math.abs(g.c-this.player.c)+Math.abs(g.r-this.player.r); if(d<td){td=d;threat=g;} }
+      if(td<=3){
+        const v=this.validDirs(this.player.c,this.player.r,this.player.dir);
+        let best=null,bv=-1e9;
+        for(const d of v){ const nc=this.player.c+d.dc, nr=this.player.r+d.dr; let md=1e9;
+          for(const g of this.ghosts) md=Math.min(md,Math.abs(g.c-nc)+Math.abs(g.r-nr));
+          if(md>bv){bv=md;best=d;} }
+        this.player.ndir=best; this.autoTarget=best?{c:this.player.c+best.dc,r:this.player.r+best.dr}:null;
+        aiStatus.textContent='AI 躲避幽灵中…';
+      } else {
+        const step=this.bfsStep(this.player.c,this.player.r);
+        if(step){ this.player.ndir=step; this.autoTarget={c:this.player.c+step.dc,r:this.player.r+step.dr}; aiStatus.textContent='AI 寻找光点中…'; }
+      }
+    }
+    onArrivePlayer(){
+      if(this.autoPlay) this.autoDecide();
+      if(this.player.ndir && !this.wall[this.player.r+this.player.ndir.dr][this.player.c+this.player.ndir.dc]) this.player.dir=this.player.ndir;
+      if(this.wall[this.player.r+this.player.dir.dr][this.player.c+this.player.dir.dc]){
+        const v=this.validDirs(this.player.c,this.player.r,this.player.dir);
+        if(v.length) this.player.dir=v[0]; else { this.player.tc=this.player.c; this.player.tr=this.player.r; return; }
+      }
+      this.player.tc=this.player.c+this.player.dir.dc; this.player.tr=this.player.r+this.player.dir.dr;
+      if(this.dot[this.player.r][this.player.c]){ this.dot[this.player.r][this.player.c]=false; this.dotsLeft--; this.score=(this.score||0)+10; scoreEl.textContent=this.score; if(this.dotsLeft<=0) this.nextLevel(); }
+    }
+    onArriveGhost(g){
+      const v=this.validDirs(g.c,g.r,g.dir);
+      let best=v[0], bv=1e9;
+      for(const d of v){ const nc=g.c+d.dc, nr=g.r+d.dr; const val=Math.abs(nc-this.player.c)+Math.abs(nr-this.player.r); if(val<bv){bv=val;best=d;} }
+      g.dir=best; g.tc=g.c+best.dc; g.tr=g.r+best.dr;
+    }
+    moveEnt(e,dt){
+      const tx=e.tc+0.5, ty=e.tr+0.5; const dx=tx-e.x, dy=ty-e.y; const dist=Math.hypot(dx,dy); const step=e.speed*dt;
+      if(dist<=step){ e.x=tx; e.y=ty; e.c=e.tc; e.r=e.tr; return true; }
+      e.x+=dx/dist*step; e.y+=dy/dist*step; return false;
+    }
+    nextLevel(){
+      this.level++; lvlEl.textContent=this.level; statusEl.textContent='第 '+this.level+' 关！迷宫重置，速度提升';
+      this.player.score=this.score; this.restartKeepScore();
+    }
+    restartKeepScore(){ const s=this.score; this.restart(); this.score=s; scoreEl.textContent=s; }
+    update(dt){
+      if(this.over) return; this.time+=dt;
+      if(this.autoPlay) this.autoDecide();
+      if(this.moveEnt(this.player,dt)) this.onArrivePlayer();
+      for(const g of this.ghosts){ if(this.moveEnt(g,dt)) this.onArriveGhost(g); }
+      for(const g of this.ghosts){ if(Math.hypot(g.x-this.player.x,g.y-this.player.y)<0.55){ this.caught(g); return; } }
+    }
+    caught(g){
+      this.over=true; const s=this.score||0;
+      if(s>this.best){ this.best=s; localStorage.setItem('mazeBest',String(this.best)); bestEl.textContent=this.best; }
+      loseMsg.textContent='本局得分 '+s+' · 幽灵从 '+Math.round(g.x)+','+Math.round(g.y)+' 抓住了你';
+      overlayLose.classList.add('active');
+      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay){ this.restartKeepScore(); } },900);
+    }
+    bindInput(){
+      const setDir=(dc,dr)=>{ if(this.over||this.autoPlay) return; this.player.ndir={dc,dr}; };
+      let sx=0,sy=0;
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); sx=e.clientX; sy=e.clientY; });
+      canvas.addEventListener('pointerup',e=>{ e.preventDefault(); const dx=e.clientX-sx, dy=e.clientY-sy;
+        if(Math.abs(dx)>Math.abs(dy)) setDir(dx>0?1:-1,0); else if(Math.abs(dy)>6) setDir(0,dy>0?1:-1); });
+      window.addEventListener('keydown',e=>{ if(e.key==='ArrowUp')setDir(0,-1); else if(e.key==='ArrowDown')setDir(0,1); else if(e.key==='ArrowLeft')setDir(-1,0); else if(e.key==='ArrowRight')setDir(1,0); });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    drawGhost(g){
+      const T=this.T, x=g.x*T, y=g.y*T, rad=T*0.42;
+      ctx.save(); ctx.shadowColor=g.color; ctx.shadowBlur=12; ctx.fillStyle=g.color;
+      ctx.beginPath(); ctx.arc(x,y-rad*0.1,rad,Math.PI,0); const bottom=y+rad*0.9;
+      ctx.lineTo(x+rad,bottom); const n=3,w=2*rad/n;
+      for(let i=0;i<n;i++){ ctx.lineTo(x+rad-w*(i+0.5), bottom-(i%2?rad*0.28:0)); ctx.lineTo(x+rad-w*(i+1),bottom); }
+      ctx.closePath(); ctx.fill();
+      ctx.shadowBlur=0; ctx.fillStyle='#fff';
+      const ex=g.dir.dc*rad*0.25, ey=g.dir.dr*rad*0.25;
+      ctx.beginPath(); ctx.arc(x-rad*0.3,y-rad*0.15,rad*0.18,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(x+rad*0.3,y-rad*0.15,rad*0.18,0,7); ctx.fill();
+      ctx.fillStyle='#13315c';
+      ctx.beginPath(); ctx.arc(x-rad*0.3+ex,y-rad*0.15+ey,rad*0.09,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(x+rad*0.3+ex,y-rad*0.15+ey,rad*0.09,0,7); ctx.fill();
+      ctx.restore();
+    }
+    drawPlayer(){
+      const T=this.T, x=this.player.x*T, y=this.player.y*T, rad=T*0.42;
+      const ang=Math.atan2(this.player.dir.dr,this.player.dir.dc);
+      ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=14; ctx.fillStyle='#ffe27a';
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.arc(x,y,rad,ang+0.4,ang+Math.PI*2-0.4); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    draw(){
+      const T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        if(this.wall[r][c]){ const x=c*T,y=r*T; ctx.fillStyle='#15263f'; rr(x+1,y+1,T-2,T-2,5); ctx.fill(); ctx.fillStyle='#1c3052'; rr(x+1,y+1,T-2,(T-2)*0.4,5); ctx.fill(); }
+      }
+      ctx.save(); ctx.shadowColor='#9fc0ff'; ctx.shadowBlur=6;
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.dot[r][c]){ ctx.fillStyle='#bcd4ff'; ctx.beginPath(); ctx.arc(c*T+T/2,r*T+T/2,T*0.09,0,7); ctx.fill(); }
+      ctx.restore();
+      if(this.autoPlay && this.autoTarget){ const x=this.autoTarget.c*T+T/2, y=this.autoTarget.r*T+T/2; ctx.strokeStyle='#ffd23f'; ctx.lineWidth=2; ctx.globalAlpha=0.55+0.45*Math.sin(this.time*6); ctx.beginPath(); ctx.arc(x,y,T*0.45,0,7); ctx.stroke(); ctx.globalAlpha=1; }
+      for(const g of this.ghosts) this.drawGhost(g);
+      this.drawPlayer();
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restartKeepScore(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+  }
+  window.game=new Maze();
+})();
+</script>
+</body>
+</html>
