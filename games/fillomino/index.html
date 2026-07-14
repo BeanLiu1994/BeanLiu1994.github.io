@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>填数宫 · Fillomino</title>
+<style>
+  :root{ --bg:#080b16; --surface:#121a2e; --board:#0d1426; --text:#e8eeff; --muted:#8b97c0;
+    --accent:#4fd6ff; --accent2:#9b6bff; --accent-glow:rgba(79,214,255,.5);
+    --gold:#ffd24d; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 18% 12%,#1c2f5e 0%,transparent 55%),radial-gradient(ellipse at 84% 88%,#2a1b5e 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:460px;padding:14px;}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .title-block h1{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),#bfe9ff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+  .title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:5px 11px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:.5rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:12px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap *{touch-action:none;}
+  .grid{display:grid;gap:4px;justify-content:center;}
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--board);
+    font-size:1.25rem;font-weight:800;color:var(--text);cursor:pointer;border:1px solid #ffffff10;transition:background .14s,box-shadow .2s,transform .1s;position:relative;}
+  .cell:active{transform:scale(.93);}
+  .cell.clue{color:var(--accent);background:rgba(79,214,255,.08);cursor:default;}
+  .cell.sel{box-shadow:inset 0 0 0 2px var(--accent),0 0 12px var(--accent-glow);}
+  .cell.flash{animation:flash .4s ease-out;}
+  @keyframes flash{0%{transform:scale(.5);box-shadow:0 0 22px var(--accent);}100%{transform:scale(1);}}
+  .pad{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;justify-content:center;}
+  .pad button{padding:10px 0;width:38px;border:1px solid #ffffff12;border-radius:10px;background:var(--surface);color:var(--text);font-size:1rem;font-weight:700;cursor:pointer;transition:all .14s;}
+  .pad button:active{transform:scale(.93);background:var(--accent);color:#06121f;}
+  .pad button.erase{width:auto;padding:10px 14px;color:var(--muted);}
+  .controls{display:flex;gap:8px;margin-top:12px;}
+  .btn{flex:1;min-width:80px;padding:11px 12px;border:1px solid #ffffff12;border-radius:11px;background:var(--surface);color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .18s;text-align:center;}
+  .btn:hover{background:#ffffff10;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06121f;}
+  .btn.primary:hover{box-shadow:0 0 22px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06121f;animation:pg 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pg{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bk .8s infinite;}
+  @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .hint{color:var(--muted);font-size:.74rem;text-align:center;margin-top:8px;line-height:1.5;}
+  @media(max-width:420px){.title-block h1{font-size:1.25rem;}.cell{font-size:1.05rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>填数宫</h1><div class="sub">FILLOMINO</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><div class="grid" id="grid"></div></div>
+  <div class="pad" id="pad"></div>
+  <div class="controls">
+    <button class="btn primary" id="newBtn">新谜题</button>
+    <button class="btn" id="autoBtn">自动</button>
+  </div>
+  <div class="ai-indicator" id="ai" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 填制中…</span></div>
+  <div class="hint">把每个区域填满相同的数字，使<strong>同一连通块的大小</strong>恰好等于该数字；相邻方块若数字相同必属同一块。点格子选中，再用下方数字键填入。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=5;
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+  // Valid Fillomino solution generator: each cell starts as its own region (size 1);
+  // repeatedly merge orthogonally-adjacent regions of EQUAL size. This removes every
+  // equal-size adjacency, yielding a valid partition (no two adjacent regions share a size).
+  function genSolution(){
+    const rid=[];const size=new Array(N*N).fill(1);
+    for(let r=0;r<N;r++){rid.push([]);for(let c=0;c<N;c++)rid[r].push(r*N+c);}
+    function adjPairs(){const seen=new Set(),res=[];
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){const a=rid[r][c];const nb=[[r,c+1],[r+1,c]];
+        for(const [nr,nc] of nb){ if(nr>=N||nc>=N)continue; const b=rid[nr][nc];
+          if(a!==b&&size[a]===size[b]){ const k=Math.min(a,b)+'-'+Math.max(a,b); if(!seen.has(k)){seen.add(k);res.push([a,b]);} } } }
+      return res;
+    }
+    let guard=0;
+    while(guard++<6000){ const p=adjPairs(); if(!p.length)break;
+      const [a,b]=p[(Math.random()*p.length)|0];
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(rid[r][c]===b) rid[r][c]=a;
+      size[a]+=size[b];
+    }
+    const sol=[];for(let r=0;r<N;r++){sol.push([]);for(let c=0;c<N;c++)sol[r].push(size[rid[r][c]]);}
+    return sol;
+  }
+  class Fillomino{
+    constructor(){
+      this.gridEl=document.getElementById('grid');
+      this.padEl=document.getElementById('pad');
+      this.solvedCount=parseInt(localStorage.getItem('filloBest')||'0')||0;this.best=this.solvedCount;this.updateBest();
+      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.gridEl.style.gridTemplateColumns='repeat('+N+',1fr)';
+      this.buildPadInit();this.restart();
+    }
+    buildPadInit(){ this.padEl.innerHTML=''; }
+    buildPad(maxVal){ this.padEl.innerHTML=''; for(let n=1;n<=maxVal;n++){const b=document.createElement('button');b.textContent=n;b.dataset.n=n;b.addEventListener('pointerdown',e=>{e.preventDefault();this.input(n);});this.padEl.appendChild(b);} const er=document.createElement('button');er.className='erase';er.textContent='⌫';er.addEventListener('pointerdown',e=>{e.preventDefault();this.erase();});this.padEl.appendChild(er); }
+    gen(){
+      let best=null,bestMx=999;
+      for(let t=0;t<200;t++){ const s=genSolution(); let mx=0; for(const row of s)for(const v of row)mx=Math.max(mx,v);
+        if(mx<=9){ best=s;bestMx=mx;break; } if(mx<bestMx){ best=s;bestMx=mx; } }
+      const sol=best;
+      this.sol=sol; this.maxVal=bestMx; this.buildPad(bestMx);
+      this.clue=sol.map(row=>row.map(()=>false));
+      const flat=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)flat.push([r,c]); shuffle(flat);
+      const reveal=Math.floor(N*N*0.42);
+      for(let i=0;i<reveal;i++){const [r,c]=flat[i];this.clue[r][c]=true;}
+      const seen=new Set();
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){const v=sol[r][c];if(this.clue[r][c])seen.add(v);}
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){const v=sol[r][c];if(!seen.has(v)){this.clue[r][c]=true;seen.add(v);break;}}
+      this.board=sol.map((row,r)=>row.map((v,c)=>this.clue[r][c]?v:0));
+      this.sel=null;
+    }
+    build(){
+      this.gridEl.innerHTML='';this.cellEls=[];
+      for(let r=0;r<N;r++){const rowEls=[];for(let c=0;c<N;c++){const cell=document.createElement('div');cell.className='cell';cell.dataset.r=r;cell.dataset.c=c;cell.addEventListener('pointerdown',e=>{e.preventDefault();this.select(r,c);});this.gridEl.appendChild(cell);rowEls.push(cell);}this.cellEls.push(rowEls);}
+    }
+    select(r,c){ if(this.autoPlay)return; if(this.clue[r][c]){this.sel=null;this.render();return;} this.sel=[r,c];this.render(); }
+    input(n){ if(this.autoPlay||!this.sel)return; const [r,c]=this.sel; if(this.clue[r][c])return; this.board[r][c]=n; this.after(); }
+    erase(){ if(this.autoPlay||!this.sel)return; const [r,c]=this.sel; if(this.clue[r][c])return; this.board[r][c]=0; this.render(); }
+    after(){ this.render(); this.checkWin(); }
+    cellClass(r,c){ const el=this.cellEls[r][c]; const v=this.board[r][c]; el.textContent=v?v:''; el.className='cell'; if(this.clue[r][c])el.classList.add('clue'); if(this.sel&&this.sel[0]===r&&this.sel[1]===c)el.classList.add('sel'); }
+    render(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++)this.cellClass(r,c); }
+    checkWin(){
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(this.board[r][c]===0)return;
+      const vis=Array.from({length:N},()=>Array(N).fill(false));
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+        if(vis[r][c])continue; const v=this.board[r][c]; const st=[[r,c]];vis[r][c]=true;let area=0;
+        while(st.length){const [cr,cc]=st.pop();area++;const nb=[[cr,cc+1],[cr,cc-1],[cr+1,cc],[cr-1,cc]];for(const[nr,nc]of nb){if(nr>=0&&nr<N&&nc>=0&&nc<N&&!vis[nr][nc]&&this.board[nr][nc]===v){vis[nr][nc]=true;st.push([nr,nc]);}}}
+        if(area!==v)return;
+      }
+      this.win();
+    }
+    win(){
+      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('filloBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('filloBest',String(this.best)); this.updateBest(); document.getElementById('solved').textContent=this.solvedCount;
+    }
+    updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
+    restart(){ this.stopAuto(); this.gen(); this.build(); this.render(); document.getElementById('solved').textContent=this.solvedCount; }
+    schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
+    toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
+    startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').style.display='flex';this.autoReplay();}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').style.display='none';}
+    autoReplay(){
+      if(!this.autoPlay)return;
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+        if(this.board[r][c]!==this.sol[r][c]){
+          this.board[r][c]=this.sol[r][c];this._autoProgress++;
+          this.cellEls[r][c].classList.add('flash');setTimeout(()=>this.cellEls[r][c].classList.remove('flash'),400);
+          this.cellClass(r,c);
+          document.getElementById('ai-status').textContent='AI 填入 ('+(r+1)+','+(c+1)+') = '+this.sol[r][c];
+          this.checkWin();
+          if(this.autoPlay)this.schedule(()=>this.autoReplay(),130);
+          return;
+        }
+      }
+      this.checkWin();
+    }
+  }
+  window.game=new Fillomino();
+  document.getElementById('newBtn').onclick=()=>game.restart();
+  document.getElementById('autoBtn').onclick=()=>game.toggleAuto();
+})();
+</script>
+</body>
+</html>

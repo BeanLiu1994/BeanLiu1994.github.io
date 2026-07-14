@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>数连 · Kakurasu</title>
+<style>
+  :root{ --bg:#080b16; --surface:#121a2e; --board:#0d1426; --text:#e8eeff; --muted:#8b97c0;
+    --accent:#4fd6ff; --accent2:#9b6bff; --accent-glow:rgba(79,214,255,.5);
+    --gold:#ffd24d; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 18% 12%,#1c2f5e 0%,transparent 55%),radial-gradient(ellipse at 84% 88%,#2a1b5e 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:460px;padding:14px;}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .title-block h1{font-size:1.55rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),#bfe9ff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+  .title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:5px 11px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:.5rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:12px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap *{touch-action:none;}
+  .grid{display:grid;gap:5px;justify-content:center;}
+  .clue{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;border-radius:8px;color:var(--muted);transition:color .2s,text-shadow .2s;}
+  .clue.ok{color:var(--ok);text-shadow:0 0 10px rgba(62,207,142,.7);}
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--board);cursor:pointer;
+    border:1px solid #ffffff10;transition:background .15s,box-shadow .2s,transform .1s;position:relative;overflow:hidden;}
+  .cell:active{transform:scale(.94);}
+  .cell.shaded{background:linear-gradient(135deg,rgba(79,214,255,.35),rgba(155,107,255,.3));box-shadow:inset 0 0 14px rgba(79,214,255,.4),0 0 12px var(--accent-glow);}
+  .cell.flash{animation:flash .4s ease-out;}
+  @keyframes flash{0%{transform:scale(.5);box-shadow:0 0 22px var(--accent);}100%{transform:scale(1);}}
+  .controls{display:flex;gap:8px;margin-top:12px;}
+  .btn{flex:1;min-width:80px;padding:11px 12px;border:1px solid #ffffff12;border-radius:11px;background:var(--surface);color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .18s;text-align:center;}
+  .btn:hover{background:#ffffff10;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06121f;}
+  .btn.primary:hover{box-shadow:0 0 22px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06121f;animation:pg 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pg{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bk .8s infinite;}
+  @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .hint{color:var(--muted);font-size:.74rem;text-align:center;margin-top:8px;line-height:1.5;}
+  @media(max-width:420px){.title-block h1{font-size:1.3rem;}.clue{font-size:.85rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>数连</h1><div class="sub">KAKURASU</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Puzzles</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><div class="grid" id="grid"></div></div>
+  <div class="controls">
+    <button class="btn primary" id="newBtn">新谜题</button>
+    <button class="btn" id="autoBtn">自动</button>
+  </div>
+  <div class="ai-indicator" id="ai" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 解题中…</span></div>
+  <div class="hint">点亮格子，使每行/每列中<strong>亮起格子</strong>的序号之和，恰好等于左侧/顶部的提示数。点格子切换明暗。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=6;
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+  class Kakurasu{
+    constructor(){
+      this.gridEl=document.getElementById('grid');
+      this.solvedCount=parseInt(localStorage.getItem('kakBest')||'0')||0;
+      this.best=this.solvedCount;
+      this.updateBest();
+      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.gridEl.style.gridTemplateColumns='repeat('+(N+1)+',1fr)';
+      this.restart();
+    }
+    gen(){
+      const sol=[];let rowClue=[],colClue=[];
+      for(let r=0;r<N;r++){sol.push([]);for(let c=0;c<N;c++)sol[r].push(Math.random()<0.45?1:0);}
+      for(let r=0;r<N;r++){let s=0;for(let c=0;c<N;c++)if(sol[r][c])s+=(c+1);rowClue[r]=s;}
+      for(let c=0;c<N;c++){let s=0;for(let r=0;r<N;r++)if(sol[r][c])s+=(r+1);colClue[c]=s;}
+      this.sol=sol;this.rowClue=rowClue;this.colClue=colClue;
+      this.shaded=sol.map(row=>row.map(()=>false));
+    }
+    build(){
+      this.gridEl.innerHTML='';this.cellEls=[];this.colClueEls=[];this.rowClueEls=[];
+      // corner
+      const corner=document.createElement('div');this.gridEl.appendChild(corner);
+      for(let c=0;c<N;c++){const cl=document.createElement('div');cl.className='clue col';this.gridEl.appendChild(cl);this.colClueEls.push(cl);}
+      for(let r=0;r<N;r++){
+        const rl=document.createElement('div');rl.className='clue row';this.gridEl.appendChild(rl);this.rowClueEls.push(rl);
+        const rowEls=[];
+        for(let c=0;c<N;c++){
+          const cell=document.createElement('div');cell.className='cell';
+          cell.addEventListener('pointerdown',e=>{e.preventDefault();this.toggle(r,c);});
+          this.gridEl.appendChild(cell);rowEls.push(cell);
+        }
+        this.cellEls.push(rowEls);
+      }
+    }
+    toggle(r,c){ if(this.autoPlay)return; this.shaded[r][c]=!this.shaded[r][c]; this.renderCell(r,c); this.renderClues(); this.checkWin(); }
+    renderCell(r,c){ const el=this.cellEls[r][c]; const on=this.shaded[r][c]; el.classList.toggle('shaded',on); }
+    renderClues(){
+      const rowOk=this.rowClue.map((cl,r)=>{let s=0;for(let c=0;c<N;c++)if(this.shaded[r][c])s+=(c+1);return s===cl;});
+      const colOk=this.colClue.map((cl,c)=>{let s=0;for(let r=0;r<N;r++)if(this.shaded[r][c])s+=(r+1);return s===cl;});
+      for(let c=0;c<N;c++){this.colClueEls[c].textContent=this.colClue[c];this.colClueEls[c].classList.toggle('ok',colOk[c]);}
+      for(let r=0;r<N;r++){this.rowClueEls[r].textContent=this.rowClue[r];this.rowClueEls[r].classList.toggle('ok',rowOk[r]);}
+    }
+    checkWin(){
+      for(let r=0;r<N;r++){let s=0;for(let c=0;c<N;c++)if(this.shaded[r][c])s+=(c+1);if(s!==this.rowClue[r])return;}
+      for(let c=0;c<N;c++){let s=0;for(let r=0;r<N;r++)if(this.shaded[r][c])s+=(r+1);if(s!==this.colClue[c])return;}
+      this.win();
+    }
+    win(){
+      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('kakBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('kakBest',String(this.best)); this.updateBest();
+      document.getElementById('solved').textContent=this.solvedCount;
+    }
+    updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
+    restart(){ this.stopAuto(); this.gen(); this.build(); this.renderAll(); document.getElementById('solved').textContent=this.solvedCount; }
+    renderAll(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++)this.renderCell(r,c); this.renderClues(); }
+    schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
+    toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
+    startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').style.display='flex';this.autoReplay();}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').style.display='none';}
+    autoReplay(){
+      if(!this.autoPlay)return;
+      // find next unshaded solution cell
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+        if(this.sol[r][c]&&!this.shaded[r][c]){
+          this.shaded[r][c]=true;this._autoProgress++;
+          this.cellEls[r][c].classList.add('flash');setTimeout(()=>this.cellEls[r][c].classList.remove('flash'),400);
+          this.renderCell(r,c);this.renderClues();
+          document.getElementById('ai-status').textContent='AI 点亮 ('+(r+1)+','+(c+1)+')';
+          if(this._allShaded()){this.win();return;}
+          this.schedule(()=>this.autoReplay(),150);return;
+        }
+      }
+      this.win();
+    }
+    _allShaded(){for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(this.sol[r][c]&&!this.shaded[r][c])return false;return true;}
+  }
+  window.game=new Kakurasu();
+  document.getElementById('newBtn').onclick=()=>game.restart();
+  document.getElementById('autoBtn').onclick=()=>game.toggleAuto();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>填涂 · Tapa</title>
+<style>
+  :root{ --bg:#080b16; --surface:#121a2e; --board:#0d1426; --text:#e8eeff; --muted:#8b97c0;
+    --accent:#4fd6ff; --accent2:#9b6bff; --accent-glow:rgba(79,214,255,.5);
+    --gold:#ffd24d; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 18% 12%,#1c2f5e 0%,transparent 55%),radial-gradient(ellipse at 84% 88%,#2a1b5e 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:470px;padding:14px;}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .title-block h1{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),#bfe9ff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+  .title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:5px 11px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:.5rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:12px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap *{touch-action:none;}
+  .grid{display:grid;gap:4px;justify-content:center;}
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--board);
+    font-size:.78rem;font-weight:800;color:var(--gold);cursor:pointer;border:1px solid #ffffff10;transition:background .14s,box-shadow .2s,transform .1s;position:relative;line-height:1;text-align:center;}
+  .cell:active{transform:scale(.93);}
+  .cell.painted{background:linear-gradient(135deg,rgba(79,214,255,.4),rgba(155,107,255,.35));box-shadow:inset 0 0 14px rgba(79,214,255,.5),0 0 12px var(--accent-glow);}
+  .cell.clue{background:rgba(255,210,77,.08);color:var(--gold);cursor:default;}
+  .cell.flash{animation:flash .4s ease-out;}
+  @keyframes flash{0%{transform:scale(.5);box-shadow:0 0 22px var(--accent);}100%{transform:scale(1);}}
+  .controls{display:flex;gap:8px;margin-top:12px;}
+  .btn{flex:1;min-width:80px;padding:11px 12px;border:1px solid #ffffff12;border-radius:11px;background:var(--surface);color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .18s;text-align:center;}
+  .btn:hover{background:#ffffff10;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06121f;}
+  .btn.primary:hover{box-shadow:0 0 22px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06121f;animation:pg 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pg{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bk .8s infinite;}
+  @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .hint{color:var(--muted);font-size:.74rem;text-align:center;margin-top:8px;line-height:1.5;}
+  @media(max-width:420px){.title-block h1{font-size:1.25rem;}.cell{font-size:.66rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>填涂</h1><div class="sub">TAPA</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><div class="grid" id="grid"></div></div>
+  <div class="controls">
+    <button class="btn primary" id="newBtn">新谜题</button>
+    <button class="btn" id="autoBtn">自动</button>
+  </div>
+  <div class="ai-indicator" id="ai" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 涂格中…</span></div>
+  <div class="hint">把部分格子涂成霓虹色，使每个<strong>黄字格</strong>周围（八方向顺时针）连续涂色段的长度，恰好等于它标注的数字。涂色块不能出现 2×2 全涂。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=7;
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+  function inB(r,c){return r>=0&&r<N&&c>=0&&c<N;}
+  const NB=[[-1,0],[-1,1],[0,1],[1,1],[1,0],[1,-1],[0,-1],[-1,-1]];
+  function no2x2(black){
+    for(let r=0;r<N-1;r++)for(let c=0;c<N-1;c++){ if(black[r][c]&&black[r][c+1]&&black[r+1][c]&&black[r+1][c+1]) return false; }
+    return true;
+  }
+  function genBlack(){
+    for(let attempt=0;attempt<60;attempt++){
+      const black=Array.from({length:N},()=>Array(N).fill(false));
+      const sr=(Math.random()*N)|0,sc=(Math.random()*N)|0; black[sr][sc]=true;
+      let size=1; const target=10+((Math.random()*8)|0);
+      let guard=0;
+      while(size<target&&guard++<400){
+        // collect frontier (white cells adjacent to black)
+        const fr=[];
+        for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if(black[r][c])continue; let touch=false;
+          for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) if(inB(r+dr,c+dc)&&black[r+dr][c+dc]) touch=true;
+          if(touch) fr.push([r,c]); }
+        if(!fr.length)break;
+        const [r,c]=fr[(Math.random()*fr.length)|0];
+        black[r][c]=true;
+        if(!no2x2(black)){ black[r][c]=false; continue; }
+        size++;
+      }
+      if(size>=8) return black;
+    }
+    // fallback
+    const black=Array.from({length:N},()=>Array(N).fill(false));
+    for(let i=0;i<12;i++){const r=(Math.random()*N)|0,c=(Math.random()*N)|0;black[r][c]=true;}
+    return black;
+  }
+  function clueOf(r,c,black){
+    const seq=NB.map(([dr,dc])=>{const nr=r+dr,nc=c+dc;return (inB(nr,nc)&&black[nr][nc])?1:0;});
+    const runs=[];let i=0;while(i<8){if(seq[i]===1){let j=i;while(j<8&&seq[j]===1)j++;runs.push(j-i);i=j;}else i++;}
+    return runs;
+  }
+  class Tapa{
+    constructor(){
+      this.gridEl=document.getElementById('grid');
+      this.solvedCount=parseInt(localStorage.getItem('tapaBest')||'0')||0;this.best=this.solvedCount;this.updateBest();
+      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.gridEl.style.gridTemplateColumns='repeat('+N+',1fr)';
+      this.restart();
+    }
+    gen(){
+      const black=genBlack();
+      this.sol=black;
+      // choose clue cells = white cells with >=1 black neighbor
+      const clueCell=Array.from({length:N},()=>Array(N).fill(false));
+      const clues={};
+      const whites=[];
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(!black[r][c]) whites.push([r,c]);
+      shuffle(whites);
+      let want=Math.max(6,Math.floor(N*N*0.28));
+      for(const [r,c] of whites){
+        if(want<=0)break;
+        let touch=false; for(const [dr,dc] of NB){const nr=r+dr,nc=c+dc;if(inB(nr,nc)&&black[nr][nc])touch=true;}
+        if(!touch)continue;
+        const runs=clueOf(r,c,black);
+        if(!runs.length)continue;
+        clueCell[r][c]=true; clues[r*N+c]=runs; want--;
+      }
+      this.clueCell=clueCell; this.clues=clues;
+      this.paint=black.map(row=>row.map(()=>false));
+    }
+    build(){
+      this.gridEl.innerHTML='';this.cellEls=[];
+      for(let r=0;r<N;r++){const rowEls=[];for(let c=0;c<N;c++){
+        const cell=document.createElement('div');cell.className='cell';
+        if(this.clueCell[r][c]){ cell.classList.add('clue'); cell.textContent=this.clues[r*N+c].join(','); }
+        cell.addEventListener('pointerdown',e=>{e.preventDefault();this.tap(r,c);});
+        this.gridEl.appendChild(cell);rowEls.push(cell);}this.cellEls.push(rowEls);}
+    }
+    tap(r,c){ if(this.autoPlay)return; if(this.clueCell[r][c])return; this.paint[r][c]=!this.paint[r][c]; this.renderCell(r,c); this.checkWin(); }
+    renderCell(r,c){ const el=this.cellEls[r][c]; el.classList.toggle('painted',this.paint[r][c]&&!this.clueCell[r][c]); }
+    render(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++)this.renderCell(r,c); }
+    checkWin(){
+      for(const key in this.clues){ const r=(key/N)|0,c=key%N; const got=clueOf(r,c,this.paint); const exp=this.clues[key];
+        if(got.length!==exp.length)return;
+        for(let i=0;i<exp.length;i++) if(got[i]!==exp[i]) return; }
+      // no 2x2 painted
+      for(let r=0;r<N-1;r++)for(let c=0;c<N-1;c++){ if(this.paint[r][c]&&this.paint[r][c+1]&&this.paint[r+1][c]&&this.paint[r+1][c+1]) return; }
+      this.win();
+    }
+    win(){
+      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('tapaBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('tapaBest',String(this.best)); this.updateBest(); document.getElementById('solved').textContent=this.solvedCount;
+    }
+    updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
+    restart(){ this.stopAuto(); this.gen(); this.build(); this.render(); document.getElementById('solved').textContent=this.solvedCount; }
+    schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
+    toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
+    startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').style.display='flex';this.autoReplay();}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').style.display='none';}
+    autoReplay(){
+      if(!this.autoPlay)return;
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+        if(this.sol[r][c]&&!this.paint[r][c]){
+          this.paint[r][c]=true;this._autoProgress++;
+          this.cellEls[r][c].classList.add('flash');setTimeout(()=>this.cellEls[r][c].classList.remove('flash'),400);
+          this.renderCell(r,c);
+          document.getElementById('ai-status').textContent='AI 涂 ('+(r+1)+','+(c+1)+')';
+          this.checkWin();
+          if(this.autoPlay)this.schedule(()=>this.autoReplay(),110);
+          return;
+        }
+      }
+      this.checkWin();
+    }
+  }
+  window.game=new Tapa();
+  document.getElementById('newBtn').onclick=()=>game.restart();
+  document.getElementById('autoBtn').onclick=()=>game.toggleAuto();
+})();
+</script>
+</body>
+</html>

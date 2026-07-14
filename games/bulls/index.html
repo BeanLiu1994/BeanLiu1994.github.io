@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>1A2B · 猜数字</title>
+<style>
+  :root{ --bg:#080b16; --surface:#121a2e; --board:#0d1426; --text:#e8eeff; --muted:#8b97c0;
+    --accent:#4fd6ff; --accent2:#9b6bff; --accent-glow:rgba(79,214,255,.5);
+    --gold:#ffd24d; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 18% 12%,#1c2f5e 0%,transparent 55%),radial-gradient(ellipse at 84% 88%,#2a1b5e 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:440px;padding:14px;}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .title-block h1{font-size:1.55rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),#bfe9ff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+  .title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:5px 11px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:.5rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .slots{display:flex;gap:10px;justify-content:center;margin:6px 0 12px;}
+  .slot{width:62px;height:74px;border-radius:14px;background:var(--surface);border:1px solid #ffffff14;display:flex;align-items:center;justify-content:center;
+    font-size:2.1rem;font-weight:800;color:var(--accent);box-shadow:inset 0 0 18px #00000040;transition:transform .12s,box-shadow .2s,border-color .2s;}
+  .slot.active{border-color:var(--accent);box-shadow:inset 0 0 18px #00000040,0 0 18px var(--accent-glow);transform:translateY(-3px);}
+  .slot.fill{color:var(--text);}
+  .history{background:var(--board);border:1px solid #ffffff0a;border-radius:14px;padding:8px 10px;height:188px;overflow:hidden;display:flex;flex-direction:column-reverse;gap:5px;}
+  .row{display:flex;align-items:center;gap:8px;font-size:.9rem;animation:slidein .25s ease-out;}
+  @keyframes slidein{from{opacity:0;transform:translateX(-12px);}to{opacity:1;transform:translateX(0);}}
+  .row .g{display:flex;gap:4px;}
+  .row .d{width:24px;height:28px;border-radius:6px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.95rem;}
+  .row .fb{margin-left:auto;display:flex;gap:6px;font-weight:700;}
+  .row .a{color:var(--ok);} .row .b{color:var(--accent);} .row .win{color:var(--gold);font-size:1rem;}
+  .pad{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:12px;}
+  .pad button{padding:13px 0;border:1px solid #ffffff12;border-radius:11px;background:var(--surface);color:var(--text);font-size:1.15rem;font-weight:700;cursor:pointer;transition:all .14s;}
+  .pad button:active{transform:scale(.93);background:var(--accent);color:#06121f;}
+  .pad button.used{opacity:.28;}
+  .controls{display:flex;gap:8px;margin-top:10px;}
+  .btn{flex:1;min-width:80px;padding:11px 12px;border:1px solid #ffffff12;border-radius:11px;background:var(--surface);color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .18s;text-align:center;}
+  .btn:hover{background:#ffffff10;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06121f;}
+  .btn.primary:hover{box-shadow:0 0 22px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06121f;animation:pg 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pg{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bk .8s infinite;}
+  @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#060912d9;backdrop-filter:blur(6px);z-index:20;}
+  .overlay.show{display:flex;animation:pop .3s ease;}
+  @keyframes pop{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:scale(1);}}
+  .card{background:var(--surface);border:1px solid #ffffff14;border-radius:18px;padding:26px 30px;text-align:center;box-shadow:0 0 50px var(--accent-glow);}
+  .card h2{margin:0 0 6px;font-size:1.7rem;color:var(--gold);}
+  .card p{margin:4px 0;color:var(--muted);font-size:.92rem;}
+  .card button{margin-top:14px;}
+  @media(max-width:420px){.slot{width:54px;height:66px;font-size:1.8rem;}.title-block h1{font-size:1.3rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>1A2B</h1><div class="sub">BULLS &amp; COWS</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Guesses</div><div class="value" id="guesses">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="slots" id="slots"></div>
+  <div class="history" id="history"></div>
+  <div class="pad" id="pad"></div>
+  <div class="controls">
+    <button class="btn primary" id="guessBtn">猜！</button>
+    <button class="btn" id="newBtn">新谜题</button>
+    <button class="btn" id="autoBtn">自动</button>
+  </div>
+  <div class="ai-indicator" id="ai" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 推理中…</span></div>
+</div>
+<div class="overlay" id="overlay"><div class="card">
+  <h2 id="ovTitle">猜中啦！</h2>
+  <p id="ovMsg"></p>
+  <button class="btn primary" id="ovBtn" onclick="game.restart()">再来一局</button>
+</div></div>
+<script>
+(function(){
+  'use strict';
+  const DIGITS=[0,1,2,3,4,5,6,7,8,9];
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+  // all 4-distinct-digit secrets
+  const ALL=[];
+  for(let a=0;a<10;a++)for(let b=0;b<10;b++)if(b!==a)for(let c=0;c<10;c++)if(c!==a&&c!==b)for(let d=0;d<10;d++)if(d!==a&&d!==b&&d!==c)ALL.push([a,b,c,d]);
+  function feedback(guess,secret){
+    let A=0,B=0;const sg=secret.slice(),gg=guess.slice();
+    for(let i=0;i<4;i++) if(guess[i]===secret[i]){A++;sg[i]=-1;gg[i]=-1;}
+    for(let i=0;i<4;i++) if(gg[i]>=0){ for(let j=0;j<4;j++) if(sg[j]>=0&&gg[i]===sg[j]){B++;sg[j]=-1;break;} }
+    return A*10+B;
+  }
+  function fbText(code){const A=(code/10)|0,B=code%10;return {A,B};}
+
+  class Bulls{
+    constructor(){
+      this.slotsEl=document.getElementById('slots');
+      this.padEl=document.getElementById('pad');
+      this.histEl=document.getElementById('history');
+      this.best=parseInt(localStorage.getItem('best1a2b')||'0')||0;
+      this.updateBest();
+      this.buildSlots();this.buildPad();
+      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.restart();
+    }
+    buildSlots(){
+      this.slotsEl.innerHTML='';this.slotEls=[];
+      for(let i=0;i<4;i++){const d=document.createElement('div');d.className='slot';d.addEventListener('pointerdown',e=>{e.preventDefault();this.focus(i);});this.slotsEl.appendChild(d);this.slotEls.push(d);}
+    }
+    buildPad(){
+      this.padEl.innerHTML='';
+      for(let n=0;n<=9;n++){const b=document.createElement('button');b.textContent=n;b.dataset.n=n;b.addEventListener('pointerdown',e=>{e.preventDefault();this.input(n);});this.padEl.appendChild(b);}
+    }
+    focus(i){ if(this.won||this.autoPlay)return; this.cur=i; this.renderSlots(); }
+    input(n){
+      if(this.won||this.autoPlay||this.cur===null)return;
+      this.entry[this.cur]=n;
+      const nx=(this.cur+1)%4; this.cur=nx; this.renderSlots(); this.renderPad();
+    }
+    renderSlots(){
+      for(let i=0;i<4;i++){const el=this.slotEls[i];const v=this.entry[i];el.textContent=v===null?'':v;el.classList.toggle('fill',v!==null);el.classList.toggle('active',!this.won&&!this.autoPlay&&this.cur===i);}
+    }
+    renderPad(){ for(const b of this.padEl.children){const n=+b.dataset.n;const used=this.entry.includes(n);b.classList.toggle('used',used);} }
+    restart(){
+      this.stopAuto();this._hideOverlay();
+      this.secret=ALL[(Math.random()*ALL.length)|0].slice();
+      this.entry=[null,null,null,null];this.cur=0;this.guesses=0;
+      this.history=[];this.won=false;
+      this.cands=ALL.slice();
+      this.renderSlots();this.renderPad();this.renderHistory();this.renderStats();
+    }
+    guess(){
+      if(this.won||this.autoPlay)return;
+      if(this.entry.some(v=>v===null))return;
+      const g=this.entry.slice();
+      this.commitGuess(g);
+      this.entry=[null,null,null,null];this.cur=0;this.renderSlots();this.renderPad();
+    }
+    commitGuess(g){
+      const code=feedback(g,this.secret);const {A,B}=fbText(code);
+      this.guesses++;this.history.push({g,A,B});
+      // keep cands consistent (for auto display)
+      this.cands=this.cands.filter(c=>feedback(c,this.secret)===code);
+      this.renderHistory();this.renderStats();
+      if(A===4){ this.win(); }
+    }
+    win(){
+      this.won=true;this.renderSlots();
+      if(!this.best||this.guesses<this.best){this.best=this.guesses;localStorage.setItem('best1a2b',String(this.best));this.updateBest();}
+      const title=document.getElementById('ovTitle');title.textContent='猜中啦！';
+      document.getElementById('ovMsg').textContent='答案 '+this.secret.join(' ')+' · 用了 '+this.guesses+' 次';
+      document.getElementById('overlay').classList.add('show');
+      if(this.autoPlay) this.schedule(()=>{this.stopAuto();this._hideOverlay();this.restart();this.startAuto();},900);
+    }
+    updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
+    renderStats(){document.getElementById('guesses').textContent=this.guesses;}
+    renderHistory(){
+      this.histEl.innerHTML='';
+      for(const h of this.history){
+        const row=document.createElement('div');row.className='row';
+        const g=document.createElement('div');g.className='g';
+        for(const d of h.g){const e=document.createElement('div');e.className='d';e.textContent=d;g.appendChild(e);}
+        const fb=document.createElement('div');fb.className='fb';
+        if(h.A===4){const w=document.createElement('span');w.className='win';w.textContent='WIN';fb.appendChild(w);}
+        else{const a=document.createElement('span');a.className='a';a.textContent=h.A+'A';const b=document.createElement('span');b.className='b';b.textContent=h.B+'B';fb.appendChild(a);fb.appendChild(b);}
+        row.appendChild(g);row.appendChild(fb);this.histEl.appendChild(row);
+      }
+    }
+    schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
+    // ---- auto solver (minimax-lite) ----
+    toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
+    startAuto(){ if(this.won){this._hideOverlay();this.restart();} this.autoPlay=true;this._autoProgress=0;
+      const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');
+      document.getElementById('ai').style.display='flex';
+      this.cands=ALL.slice();this.autoStep(); }
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}
+      const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');
+      document.getElementById('ai').style.display='none';}
+    pickGuess(){
+      const C=this.cands;
+      if(C.length===1)return C[0];
+      if(C.length<=12)return C[0];
+      // sample candidate guesses, choose min worst-case bucket
+      const sample=shuffle(C.slice()).slice(0,Math.min(24,C.length));
+      let best=null,bestMax=1e9;
+      for(const g of sample){
+        const buckets={};
+        for(const c of C){const code=feedback(g,c);buckets[code]=(buckets[code]||0)+1;}
+        let mx=0;for(const k in buckets)if(buckets[k]>mx)mx=buckets[k];
+        if(mx<bestMax){bestMax=mx;best=g;}
+      }
+      return best||C[0];
+    }
+    autoStep(){
+      if(!this.autoPlay)return;
+      if(this.won){return;}
+      const g=this.pickGuess();
+      this._autoProgress++;
+      document.getElementById('ai-status').textContent='AI 推理：候选 '+this.cands.length+' · 试 '+g.join('');
+      this.commitGuess(g);
+      if(!this.won)this.schedule(()=>this.autoStep(),320);
+    }
+    _hideOverlay(){document.getElementById('overlay').classList.remove('show');}
+  }
+  window.game=new Bulls();
+  document.getElementById('guessBtn').onclick=()=>game.guess();
+  document.getElementById('newBtn').onclick=()=>game.restart();
+  document.getElementById('autoBtn').onclick=()=>game.toggleAuto();
+  document.getElementById('ovBtn').onclick=()=>game.restart();
+  window.addEventListener('keydown',e=>{
+    if(game.autoPlay||game.won)return;
+    if(e.key>='0'&&e.key<='9')game.input(+e.key);
+    else if(e.key==='Enter')game.guess();
+    else if(e.key==='Backspace'){ for(let i=3;i>=0;i--){if(game.entry[i]!==null){game.entry[i]=null;game.cur=i;break;}} game.renderSlots();game.renderPad(); }
+  });
+})();
+</script>
+</body>
+</html>

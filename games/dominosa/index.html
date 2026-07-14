@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>骨牌 · Dominosa</title>
+<style>
+  :root{ --bg:#080b16; --surface:#121a2e; --board:#0d1426; --text:#e8eeff; --muted:#8b97c0;
+    --accent:#4fd6ff; --accent2:#9b6bff; --accent-glow:rgba(79,214,255,.5);
+    --gold:#ffd24d; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 18% 12%,#1c2f5e 0%,transparent 55%),radial-gradient(ellipse at 84% 88%,#2a1b5e 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .container{width:100%;max-width:470px;padding:14px;}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .title-block h1{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),#bfe9ff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+  .title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0a;border-radius:10px;padding:5px 11px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:.5rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{background:var(--surface);border:1px solid #ffffff0a;border-radius:14px;padding:12px;box-shadow:0 0 40px #00000030,0 0 70px var(--accent-glow);}
+  .board-wrap *{touch-action:none;}
+  .grid{display:grid;gap:4px;justify-content:center;}
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--board);
+    font-size:1.3rem;font-weight:800;color:var(--text);cursor:pointer;border:1px solid #ffffff10;transition:transform .1s,box-shadow .2s,background .15s;position:relative;}
+  .cell:active{transform:scale(.93);}
+  .cell.sel{box-shadow:inset 0 0 0 3px var(--gold),0 0 14px rgba(255,210,77,.6);}
+  .cell.flash{animation:flash .4s ease-out;}
+  @keyframes flash{0%{transform:scale(.6);box-shadow:0 0 22px var(--err);}100%{transform:scale(1);}}
+  .cell.placed{box-shadow:inset 0 0 0 2px rgba(79,214,255,.5);}
+  .controls{display:flex;gap:8px;margin-top:12px;}
+  .btn{flex:1;min-width:80px;padding:11px 12px;border:1px solid #ffffff12;border-radius:11px;background:var(--surface);color:var(--text);font-size:.85rem;font-weight:600;cursor:pointer;transition:all .18s;text-align:center;}
+  .btn:hover{background:#ffffff10;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06121f;}
+  .btn.primary:hover{box-shadow:0 0 22px var(--accent-glow);}
+  .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06121f;animation:pg 2s infinite;--glow:var(--accent-glow);}
+  @keyframes pg{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bk .8s infinite;}
+  @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+  .hint{color:var(--muted);font-size:.74rem;text-align:center;margin-top:8px;line-height:1.5;}
+  @media(max-width:420px){.title-block h1{font-size:1.25rem;}.cell{font-size:1.05rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>骨牌</h1><div class="sub">DOMINOSA</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Solved</div><div class="value" id="solved">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">--</div></div>
+    </div>
+  </div>
+  <div class="board-wrap"><div class="grid" id="grid"></div></div>
+  <div class="controls">
+    <button class="btn primary" id="newBtn">新谜题</button>
+    <button class="btn" id="autoBtn">自动</button>
+  </div>
+  <div class="ai-indicator" id="ai" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 拼骨牌中…</span></div>
+  <div class="hint">把棋盘划分成不重叠的<strong>骨牌（相邻两格）</strong>，使每一对数字组合在整个棋盘上<strong>只出现一次</strong>。点一格再点相邻格成牌；点已放置的牌可撤销。</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const R=7,C=6;
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+  function genSolution(){
+    const pairs=[];for(let a=0;a<7;a++)for(let b=a;b<7;b++)pairs.push([a,b]);
+    shuffle(pairs);
+    const dominoes=[];let id=0;
+    for(let r=0;r<R;r++)for(let k=0;k<C;k+=2){ dominoes.push({cells:[[r,k],[r,k+1]],pair:pairs[id],id:id}); id++; }
+    const nums=Array.from({length:R},()=>Array(C).fill(0));
+    for(const d of dominoes){ const [a,b]=d.pair; const o=Math.random()<0.5?[a,b]:[b,a];
+      nums[d.cells[0][0]][d.cells[0][1]]=o[0]; nums[d.cells[1][0]][d.cells[1][1]]=o[1]; }
+    return {nums,dominoes};
+  }
+  class Dominosa{
+    constructor(){
+      this.gridEl=document.getElementById('grid');
+      this.solvedCount=parseInt(localStorage.getItem('domBest')||'0')||0;this.best=this.solvedCount;this.updateBest();
+      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.gridEl.style.gridTemplateColumns='repeat('+C+',1fr)';
+      this.restart();
+    }
+    gen(){
+      const s=genSolution();this.nums=s.nums;this.dominoes=s.dominoes;
+      this.owner=Array.from({length:R},()=>Array(C).fill(-1));
+      this.usedPairs=new Set();
+      this.sel=null;
+    }
+    build(){
+      this.gridEl.innerHTML='';this.cellEls=[];
+      for(let r=0;r<R;r++){const rowEls=[];for(let c=0;c<C;c++){
+        const cell=document.createElement('div');cell.className='cell';cell.dataset.r=r;cell.dataset.c=c;cell.textContent=this.nums[r][c];
+        cell.addEventListener('pointerdown',e=>{e.preventDefault();this.tap(r,c);});
+        this.gridEl.appendChild(cell);rowEls.push(cell);}this.cellEls.push(rowEls);}
+    }
+    tap(r,c){
+      if(this.autoPlay)return;
+      if(this.owner[r][c]!==-1){ this.removeDomino(this.owner[r][c]); this.sel=null; this.render(); return; }
+      if(this.sel===null){ this.sel=[r,c]; this.render(); return; }
+      const [sr,sc]=this.sel;
+      const adj=(sr===r&&Math.abs(sc-c)===1)||(sc===c&&Math.abs(sr-r)===1);
+      if(!adj){ this.sel=[r,c]; this.render(); return; }
+      const a=this.nums[sr][sc],b=this.nums[r][c]; const key=Math.min(a,b)+'-'+Math.max(a,b);
+      if(this.usedPairs.has(key)){ this.flash(r,c); this.flash(sr,sc); return; }
+      const id=this.owner[sr][sc]; // -1
+      this.owner[sr][sc]=this._nextId(); this.owner[r][c]=this.owner[sr][sc];
+      this.usedPairs.add(key);
+      this.sel=null; this.render(); this.checkWin();
+    }
+    _nextId(){ let i=0; while(this._usedId&&this._usedId.has(i))i++; this._usedId=this._usedId||new Set(); this._usedId.add(i); return i; }
+    removeDomino(id){
+      const cells=[];
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++) if(this.owner[r][c]===id) cells.push([r,c]);
+      if(cells.length===2){
+        const key=Math.min(this.nums[cells[0][0]][cells[0][1]],this.nums[cells[1][0]][cells[1][1]])+'-'+Math.max(this.nums[cells[0][0]][cells[0][1]],this.nums[cells[1][0]][cells[1][1]]);
+        this.usedPairs.delete(key);
+      }
+      for(const [r,c] of cells) this.owner[r][c]=-1;
+      if(this._usedId)this._usedId.delete(id);
+    }
+    flash(r,c){ const el=this.cellEls[r][c]; el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),400); }
+    render(){
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+        const el=this.cellEls[r][c]; el.className='cell';
+        if(this.owner[r][c]!==-1) el.classList.add('placed');
+        if(this.sel&&this.sel[0]===r&&this.sel[1]===c) el.classList.add('sel');
+      }
+    }
+    checkWin(){
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++) if(this.owner[r][c]===-1) return;
+      if(this.usedPairs.size!==(R*C/2)) return;
+      this.win();
+    }
+    win(){
+      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('domBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('domBest',String(this.best)); this.updateBest(); document.getElementById('solved').textContent=this.solvedCount;
+    }
+    updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
+    restart(){ this.stopAuto(); this._usedId=new Set(); this.gen(); this.build(); this.render(); document.getElementById('solved').textContent=this.solvedCount; }
+    schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
+    toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
+    startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').style.display='flex';this.autoReplay();}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').style.display='none';}
+    autoReplay(){
+      if(!this.autoPlay)return;
+      for(const d of this.dominoes){
+        const [p,q]=d.cells;
+        if(this.owner[p[0]][p[1]]!==-1) continue;
+        const key=Math.min(d.pair[0],d.pair[1])+'-'+Math.max(d.pair[0],d.pair[1]);
+        const id=this._nextId(); this.owner[p[0]][p[1]]=id; this.owner[q[0]][q[1]]=id; this.usedPairs.add(key);
+        this._autoProgress++;
+        for(const cc of [p,q]){ const el=this.cellEls[cc[0]][cc[1]]; el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),400); }
+        this.render();
+        document.getElementById('ai-status').textContent='AI 放骨牌 '+d.pair[0]+'·'+d.pair[1];
+        this.checkWin();
+        if(this.autoPlay)this.schedule(()=>this.autoReplay(),120);
+        return;
+      }
+      this.checkWin();
+    }
+  }
+  window.game=new Dominosa();
+  document.getElementById('newBtn').onclick=()=>game.restart();
+  document.getElementById('autoBtn').onclick=()=>game.toggleAuto();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>斜线谜题 · Slant</title>
+<style>
+  :root{ --bg:#080b16; --surface:#121a2e; --board:#0d1426; --text:#e8eeff; --muted:#8b97c0;
+    --accent:#4fd6ff; --accent2:#9b6bff; --accent-glow:rgba(79,214,255,.5);
+    --gold:#ffd24d; --ok:#3ecf8e; --err:#ff5d6c; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);background-image:radial-gradient(ellipse at 18% 12%,#1c2f5e 0%,transparent 55%),radial-gradient(ellipse at 84% 88%,#2a1b5e 0%,transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  .app{display:flex;flex-direction:column;height:100%;max-width:560px;margin:0 auto;padding:12px;}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 2px 8px;}
+  h1{font-size:1.5rem;margin:0;letter-spacing:-.5px;background:linear-gradient(90deg,var(--accent),#bfe9ff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .toolbar{display:flex;gap:8px;}
+  button{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;cursor:pointer;transition:transform .12s ease,box-shadow .2s,background .2s;}
+  button:active{transform:scale(.95);}
+  button.on{background:linear-gradient(90deg,#1c6f9c,#4fd6ff);box-shadow:0 0 16px var(--accent-glow);color:#06121f;}
+  .board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;}
+  .board-wrap *{touch-action:none;}
+  canvas{width:100%;height:100%;max-width:min(94vw,520px);max-height:88%;border-radius:14px;background:var(--board);box-shadow:0 0 40px rgba(79,214,255,.12),inset 0 0 0 1px rgba(255,255,255,.05);}
+  .status{text-align:center;color:var(--muted);font-size:13px;padding:8px 4px;min-height:20px;}
+  .hint{text-align:center;color:var(--muted);font-size:12px;line-height:1.5;padding:2px 8px 6px;opacity:.85;}
+  .banner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,11,22,.74);backdrop-filter:blur(6px);z-index:20;}
+  .banner.show{display:flex;animation:pop .3s ease;}
+  @keyframes pop{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:scale(1);}}
+  .card{background:var(--surface);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:24px 28px;text-align:center;box-shadow:0 0 50px var(--accent-glow);}
+  .card h2{margin:0 0 6px;font-size:1.6rem;color:var(--gold);}
+  .card p{margin:4px 0;color:var(--muted);font-size:14px;}
+  .card button{margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>斜线谜题 · Slant</h1>
+    <div class="toolbar">
+      <button id="newBtn">新谜题</button>
+      <button id="autoBtn">自动</button>
+    </div>
+  </header>
+  <div class="board-wrap"><canvas id="c"></canvas></div>
+  <div class="status" id="status">点格子切换斜线，使每个数字等于其周围指向它的斜线数。</div>
+  <div class="hint">Gokigen Naname：给每个方格画一条对角线，使所有斜线不构成任何闭合环；顶点上的数字 = 周围指向它的斜线条数。</div>
+</div>
+<div class="banner" id="banner"><div class="card">
+  <h2>完成！</h2>
+  <p id="bannerMsg"></p>
+  <button id="bannerBtn">再来一局</button>
+</div></div>
+<script>
+(function(){
+  'use strict';
+  const N=6;
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+  // diagonal: 0 = '\' (TL-BR), 1 = '/' (TR-BL)
+  function endpoints(r,c,d){ // returns [v1,v2] vertex indices
+    if(d===0) return [[r,c],[r+1,c+1]];
+    return [[r,c+1],[r+1,c]];
+  }
+  function acyclic(diag){
+    const V=(N+1)*(N+1); const parent=new Array(V); for(let i=0;i<V;i++)parent[i]=i;
+    function find(x){while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;}
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){const [a,b]=endpoints(r,c,diag[r][c]);const fa=find(a),fb=find(b);if(fa===fb)return false;parent[fa]=fb;}
+    return true;
+  }
+  function genSolution(){
+    const diag=Array.from({length:N},()=>Array(N).fill(0));
+    for(let iter=0;iter<400;iter++){
+      const r=(Math.random()*N)|0,c=(Math.random()*N)|0;
+      diag[r][c]^=1;
+      if(!acyclic(diag)) diag[r][c]^=1;
+    }
+    return diag;
+  }
+  function computeClues(diag){
+    const clues=Array.from({length:N+1},()=>Array(N+1).fill(0));
+    for(let vr=0;vr<=N;vr++)for(let vc=0;vc<=N;vc++){
+      let cnt=0;
+      if(vr<N&&vc<N&&diag[vr][vc]===0)cnt++;            // TL of (vr,vc)
+      if(vr<N&&vc>0&&diag[vr][vc-1]===1)cnt++;          // TR of (vr,vc-1)
+      if(vr>0&&vc<N&&diag[vr-1][vc]===1)cnt++;          // BL of (vr-1,vc)
+      if(vr>0&&vc>0&&diag[vr-1][vc-1]===0)cnt++;        // BR of (vr-1,vc-1)
+      clues[vr][vc]=cnt;
+    }
+    return clues;
+  }
+  class Slant{
+    constructor(){
+      this.canvas=document.getElementById('c');this.ctx=this.canvas.getContext('2d');
+      this.autoPlay=false;this._autoProgress=0;this._t=null;this._last=null;this._cssW=0;
+      this.solvedCount=parseInt(localStorage.getItem('slantBest')||'0')||0;this.best=this.solvedCount;this.updateBest();
+      this.fit();this.restart();
+      this._raf=requestAnimationFrame(this.loop.bind(this));
+    }
+    fit(){
+      const rect=this.canvas.getBoundingClientRect();const dpr=window.devicePixelRatio||1;
+      const w=rect.width||360,h=rect.height||360;this.W=w;this.H=h;
+      this.canvas.width=Math.round(w*dpr);this.canvas.height=Math.round(h*dpr);
+      this.ctx.setTransform(dpr,0,0,dpr,0,0);this._cssW=rect.width;
+    }
+    gen(){
+      this.sol=genSolution();this.clues=computeClues(this.sol);
+      this.diag=this.sol.map(row=>row.slice());
+      this.anim={}; // key -> progress 0..1
+      this.animSpeed=6;
+    }
+    restart(){ this.stopAuto(); this.gen(); this._hideBanner(); this.updateStatus(); }
+    updateBest(){ document.getElementById('bestVal')&&(document.getElementById('bestVal').textContent=this.best?this.best:'--'); }
+    updateStatus(){ document.getElementById('status').textContent='点格子切换斜线 · 已解 '+this.solvedCount; }
+    toggle(r,c){ if(this.autoPlay)return; this.diag[r][c]^=1; this.anim[r*N+c]=0; this.checkWin(); }
+    vertexClueCount(r,c){ return this.clues[r][c]; }
+    checkWin(){
+      for(let vr=0;vr<=N;vr++)for(let vc=0;vc<=N;vc++){
+        let cnt=0;
+        if(vr<N&&vc<N&&this.diag[vr][vc]===0)cnt++;
+        if(vr<N&&vc>0&&this.diag[vr][vc-1]===1)cnt++;
+        if(vr>0&&vc<N&&this.diag[vr-1][vc]===1)cnt++;
+        if(vr>0&&vc>0&&this.diag[vr-1][vc-1]===0)cnt++;
+        if(cnt!==this.clues[vr][vc])return;
+      }
+      this.win();
+    }
+    win(){
+      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('slantBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('slantBest',String(this.best)); this.updateBest();
+      document.getElementById('bannerMsg').textContent='无环解达成 · 已解 '+this.solvedCount;
+      document.getElementById('banner').classList.add('show');
+    }
+    schedule(fn,ms){ if(this._t){clearTimeout(this._t);} this._t=setTimeout(()=>{this._t=null;fn();},ms); }
+    toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
+    startAuto(){ this.autoPlay=true;this._autoProgress=0;document.getElementById('autoBtn').classList.add('on');document.getElementById('autoBtn').textContent='停止';this.autoReplay(); }
+    stopAuto(){ this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}document.getElementById('autoBtn').classList.remove('on');document.getElementById('autoBtn').textContent='自动'; }
+    autoReplay(){
+      if(!this.autoPlay)return;
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+        if(this.diag[r][c]!==this.sol[r][c]){
+          this.diag[r][c]=this.sol[r][c];this.anim[r*N+c]=0;this._autoProgress++;
+          this.checkWin();
+          if(this.autoPlay)this.schedule(()=>this.autoReplay(),140);
+          return;
+        }
+      }
+      this.checkWin();
+    }
+    loop(ts){
+      const rect=this.canvas.getBoundingClientRect();
+      if(rect.width&&rect.width!==this._cssW)this.fit();
+      const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);this._last=ts;
+      // advance anims
+      for(const k in this.anim){ if(this.anim[k]<1){ this.anim[k]=Math.min(1,this.anim[k]+dt*this.animSpeed); if(this.anim[k]>=1) delete this.anim[k]; } }
+      this.render();
+      this._raf=requestAnimationFrame(this.loop.bind(this));
+    }
+    render(){
+      const ctx=this.ctx,W=this.W,H=this.H;const M=Math.min(W,H)*0.10;
+      const size=Math.min(W,H)-2*M;const cell=size/N;const bx=M,by=(H-size)/2;
+      ctx.clearRect(0,0,W,H);
+      // grid
+      ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=1;
+      for(let i=0;i<=N;i++){ ctx.beginPath();ctx.moveTo(bx,by+i*cell);ctx.lineTo(bx+size,by+i*cell);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(bx+i*cell,by);ctx.lineTo(bx+i*cell,by+size);ctx.stroke(); }
+      // diagonals
+      for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+        const x0=bx+c*cell,y0=by+r*cell;const d=this.diag[r][c];
+        const p=this.anim[r*N+c]; const draw=(p===undefined)?1:p;
+        let x1,y1,x2,y2;
+        if(d===0){x1=x0;y1=y0;x2=x0+cell;y2=y0+cell;}
+        else{x1=x0+cell;y1=y0;x2=x0;y2=y0+cell;}
+        // partial draw from midpoint outward by draw
+        const mx=(x1+x2)/2,my=(y1+y2)/2;
+        const ax=mx+(x1-mx)*draw, ay=my+(y1-my)*draw, bx2=mx+(x2-mx)*draw, by2=my+(y2-my)*draw;
+        ctx.strokeStyle='rgba(79,214,255,.9)';ctx.lineWidth=3;ctx.lineCap='round';
+        ctx.shadowColor='rgba(79,214,255,.7)';ctx.shadowBlur=10;
+        ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx2,by2);ctx.stroke();ctx.shadowBlur=0;
+      }
+      // clues
+      ctx.font='bold '+Math.max(11,Math.floor(cell*0.34))+'px system-ui,sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      for(let vr=0;vr<=N;vr++)for(let vc=0;vc<=N;vc++){
+        const cl=this.clues[vr][vc];if(cl===0)continue;
+        const x=bx+vc*cell,y=by+vr*cell;
+        ctx.fillStyle='rgba(255,210,77,.95)';
+        ctx.fillText(cl,x,y);
+      }
+    }
+    _bind(){
+      const cv=this.canvas;
+      cv.addEventListener('pointerdown',e=>{e.preventDefault();if(this.autoPlay)return;const rect=cv.getBoundingClientRect();const x=e.clientX-rect.left,y=e.clientY-rect.top;this.onTap(x,y);});
+      document.getElementById('newBtn').onclick=()=>this.restart();
+      document.getElementById('autoBtn').onclick=()=>this.toggleAuto();
+      document.getElementById('bannerBtn').onclick=()=>{this._hideBanner();this.restart();};
+    }
+    onTap(x,y){
+      const W=this.W,H=this.H;const M=Math.min(W,H)*0.10;const size=Math.min(W,H)-2*M;const cell=size/N;const bx=M,by=(H-size)/2;
+      const c=Math.floor((x-bx)/cell),r=Math.floor((y-by)/cell);
+      if(r>=0&&r<N&&c>=0&&c<N)this.toggle(r,c);
+    }
+    _hideBanner(){document.getElementById('banner').classList.remove('show');}
+  }
+  window.game=new Slant();
+  window.game._bind();
+})();
+</script>
+</body>
+</html>
