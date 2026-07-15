@@ -89,8 +89,8 @@
   ];
   function buildGrid(pieces){ const g=Array.from({length:ROWS},()=>new Array(COLS).fill(-1)); pieces.forEach((p,i)=>{ for(let dy=0;dy<p.h;dy++)for(let dx=0;dx<p.w;dx++) g[p.y+dy][p.x+dx]=i; }); return g; }
   function canMove(pieces,idx,dx,dy){ const p=pieces[idx]; const g=buildGrid(pieces); for(let yy=0;yy<p.h;yy++)for(let xx=0;xx<p.w;xx++){ const nx=p.x+dx+xx, ny=p.y+dy+yy; if(nx<0||nx>=COLS||ny<0||ny>=ROWS) return false; const occ=g[ny][nx]; if(occ!==-1&&occ!==idx) return false; } return true; }
-  function keyOf(pieces){ return pieces.map(p=>p.x+','+p.y).join(';'); }
-  function solve(){ const start=DEF.map(d=>({x:d.x,y:d.y,w:d.w,h:d.h})); const startKey=keyOf(start); const q=[start]; let head=0; const seen=new Set([startKey]); const parent=new Map(); parent.set(startKey,null); const DIRS=[[0,-1],[0,1],[-1,0],[1,0]];
+  function keyOf(pieces){ const groups={}; for(const p of pieces){ const k=p.w+'x'+p.h; (groups[k]=groups[k]||[]).push(p.y*COLS+p.x); } let s=''; const order=['1x1','1x2','2x1','2x2']; for(const t of order){ const arr=(groups[t]||[]).sort((a,b)=>a-b); for(const v of arr) s+=v+'_'; s+='|'; } return s; }
+  function solve(startPieces){ const start=(startPieces||DEF).map(d=>({x:d.x,y:d.y,w:d.w,h:d.h})); const startKey=keyOf(start); const q=[start]; let head=0; const seen=new Set([startKey]); const parent=new Map(); parent.set(startKey,null); const DIRS=[[0,-1],[0,1],[-1,0],[1,0]];
     while(head<q.length){ const cur=q[head++]; if(cur[0].x===1&&cur[0].y===3){ const path=[]; let k=keyOf(cur); while(parent.get(k)){ const node=parent.get(k); path.push(node.move); k=node.prev; } path.reverse(); return path; }
       const g=buildGrid(cur);
       for(let i=0;i<cur.length;i++){ const p=cur[i];
@@ -111,8 +111,9 @@
     doMove(idx,dx,dy){ if(this.over) return false; if(!canMove(this.pieces,idx,dx,dy)) return false; this.pieces[idx].x+=dx; this.pieces[idx].y+=dy; this.moves++; this.updateUI(); if(this.pieces[0].x===1&&this.pieces[0].y===3) this.win(); return true; }
     win(){ this.over=true; this.stopAuto(); if(this.best===0||this.moves<this.best){ this.best=this.moves; localStorage.setItem('bestKlotski',this.best); } document.getElementById('win-msg').textContent='Solved in '+this.moves+' moves'; document.getElementById('overlay-win').classList.add('active'); }
     chooseAuto(){ if(this.over) return;
-      // Pick a random valid move (a proper solver is intentionally NOT wired in:
-      // the BFS over this piece set blows up to 300k+ states and would OOM)
+      // Follow the precomputed shortest solution (BFS with canonical state dedup) when available
+      if(this._path && this._pi < this._path.length){ const mv=this._path[this._pi++]; this.doMove(mv[0],mv[1],mv[2]); return; }
+      // fallback: random valid move (only if no solution was found)
       const idx=Math.floor(Math.random()*this.pieces.length);
       const dirs=[[0,-1],[0,1],[-1,0],[1,0]];
       for(const [dx,dy] of dirs){ if(canMove(this.pieces,idx,dx,dy)){ this.doMove(idx,dx,dy); return; } }
@@ -122,11 +123,11 @@
       }
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI exploring…'; }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI solving…'; this._path=solve(this.pieces); this._pi=0; }
     stopAuto(){ this.autoPlay=false; this._path=null; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     tick(ts){ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.render(); requestAnimationFrame(this._tick); }
     update(dt){ const k=1-Math.pow(0.0008,dt); for(let i=0;i<this.pieces.length;i++){ this.disp[i].x=lerp(this.disp[i].x,this.pieces[i].x,k); this.disp[i].y=lerp(this.disp[i].y,this.pieces[i].y,k); }
-      if(this.autoPlay&&!this.over){ this.autoAccum+=dt; if(this.autoAccum>=0.5){ this.autoAccum=0; this.chooseAuto(); } }
+      if(this.autoPlay&&!this.over){ this.autoAccum+=dt; if(this.autoAccum>=0.35){ this.autoAccum=0; this.chooseAuto(); } }
     }
     bindInput(){ const wrap=document.getElementById('board-wrap');
       // Drag-to-slide: grab a piece and drag; it follows your finger cell-by-cell
