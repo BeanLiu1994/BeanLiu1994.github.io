@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0b1026" />
+<title>霓虹魔方 · Neon Cube</title>
+<style>
+  :root { --bg:#0b1026; --surface:#121a33; --board:#0a0f22; --text:#eafaff; --muted:#8fb8c8; --accent:#4dffd2; --accent-glow:#4dffd255; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #16314a 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #0f1f3a 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#a9fff0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0b1026ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.win h2 { color:var(--accent); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#062b24; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#062b24; animation:pulse 1.6s infinite; }
+  .btn.sm { flex:none; padding:9px 0; font-size:0.74rem; min-width:0; }
+  .face-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:8px; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹魔方</h1>
+      <div class="sub">N E O N &nbsp; C U B E</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Moves</div><div class="value" id="moves">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="360" height="360"></canvas>
+    <div class="overlay win" id="overlay-win">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>还原成功!</h2>
+        <p id="win-msg">霓虹归位</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" onclick="game.scramble()">打乱</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="face-grid">
+    <button class="btn sm" onclick="game.face('U',false)">U</button>
+    <button class="btn sm" onclick="game.face('U',true)">U'</button>
+    <button class="btn sm" onclick="game.face('D',false)">D</button>
+    <button class="btn sm" onclick="game.face('D',true)">D'</button>
+    <button class="btn sm" onclick="game.face('L',false)">L</button>
+    <button class="btn sm" onclick="game.face('L',true)">L'</button>
+    <button class="btn sm" onclick="game.face('R',false)">R</button>
+    <button class="btn sm" onclick="game.face('R',true)">R'</button>
+    <button class="btn sm" onclick="game.face('F',false)">F</button>
+    <button class="btn sm" onclick="game.face('F',true)">F'</button>
+    <button class="btn sm" onclick="game.face('B',false)">B</button>
+    <button class="btn sm" onclick="game.face('B',true)">B'</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划还原中…</span>
+  </div>
+  <div class="status" id="status">拖动旋转视角，按键 U/D/L/R/F/B 转动面（按住 Shift 为逆）</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  // neon face palette (original mechanic, original theme — no trademarked styling)
+  const FACE_COLORS = ['#ff5d6a','#4d9fff','#4dff91','#ffd23f','#b06bff','#4dffd2'];
+  // local face normals: +x,-x,+y,-y,+z,-z
+  const FACE_NORMALS = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const AXIS_INDEX = { x:0, y:1, z:2 };
+
+  function matMul(a,b){ const r=[[0,0,0],[0,0,0],[0,0,0]]; for(let i=0;i<3;i++) for(let j=0;j<3;j++){ let s=0; for(let k=0;k<3;k++) s+=a[i][k]*b[k][j]; r[i][j]=s; } return r; }
+  function matVec(a,v){ return [a[0][0]*v[0]+a[0][1]*v[1]+a[0][2]*v[2], a[1][0]*v[0]+a[1][1]*v[1]+a[1][2]*v[2], a[2][0]*v[0]+a[2][1]*v[1]+a[2][2]*v[2]]; }
+  function rotXm(t){ const c=Math.cos(t),s=Math.sin(t); return [[1,0,0],[0,c,-s],[0,s,c]]; }
+  function rotYm(t){ const c=Math.cos(t),s=Math.sin(t); return [[c,0,s],[0,1,0],[-s,0,c]]; }
+  function rotZm(t){ const c=Math.cos(t),s=Math.sin(t); return [[c,-s,0],[s,c,0]]; }
+  function axisMatrix(axis,t){ if(axis==='x') return rotXm(t); if(axis==='y') return rotYm(t); return rotZm(t); }
+  function roundVec(v){ return [Math.round(v[0]),Math.round(v[1]),Math.round(v[2])]; }
+  function roundMat(m){ return m.map(row=>row.map(Math.round)); }
+  function identity(){ return [[1,0,0],[0,1,0],[0,0,1]]; }
+  function hexA(h,a){ const n=parseInt(h.slice(1),16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
+  function ease(t){ return t*t*(3-2*t); }
+
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const movesEl=document.getElementById('moves'), bestEl=document.getElementById('best');
+  const statusEl=document.getElementById('status');
+  const overlayWin=document.getElementById('overlay-win'), winMsg=document.getElementById('win-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  class NeonCube {
+    constructor(){
+      this.autoPlay=false; this.turn=null; this.time=0; this.dragging=false;
+      this.rotX=-0.5; this.rotY=-0.6;
+      this.best=parseInt(localStorage.getItem('neonCubeBest')||'0'); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const r=canvas.getBoundingClientRect();
+      const w=Math.max(260,Math.min(r.width||360,440));
+      const d=window.devicePixelRatio||1;
+      this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d;
+      ctx.setTransform(d,0,0,d,0,0);
+      this.cx=this.W*0.5; this.cy=this.W*0.5;
+    }
+    initCube(){
+      this.cubies=[];
+      for(let x=-1;x<=1;x++) for(let y=-1;y<=1;y++) for(let z=-1;z<=1;z++){
+        const colors=[null,null,null,null,null,null];
+        if(x===1) colors[0]=FACE_COLORS[0];
+        if(x===-1) colors[1]=FACE_COLORS[1];
+        if(y===1) colors[2]=FACE_COLORS[2];
+        if(y===-1) colors[3]=FACE_COLORS[3];
+        if(z===1) colors[4]=FACE_COLORS[4];
+        if(z===-1) colors[5]=FACE_COLORS[5];
+        this.cubies.push({ pos:[x,y,z], rot:identity(), colors });
+      }
+      this.solvedShown=false;
+    }
+    randomMove(prev){
+      const axes=['x','y','z']; const layers=[-1,0,1];
+      let axis,layer;
+      do { axis=axes[Math.floor(Math.random()*3)]; layer=layers[Math.floor(Math.random()*3)]; }
+      while(prev && prev.axis===axis && prev.layer===layer);
+      const dir=Math.random()<0.5?1:-1;
+      return { axis, layer, dir };
+    }
+    applyInstant(m){
+      const M=axisMatrix(m.axis, m.dir*Math.PI/2); const ai=AXIS_INDEX[m.axis];
+      for(const cu of this.cubies){
+        if(cu.pos[ai]===m.layer){ cu.pos=roundVec(matVec(M,cu.pos)); cu.rot=roundMat(matMul(M,cu.rot)); }
+      }
+      this.moves++; movesEl.textContent=this.moves;
+    }
+    startTurn(axis,layer,dir){
+      if(this.turn) return false;
+      this.turn={ axis, layer, dir, t:0, dur:this.autoPlay?0.18:0.34 };
+      return true;
+    }
+    commitTurn(){
+      const { axis, layer, dir }=this.turn; const M=axisMatrix(axis, dir*Math.PI/2); const ai=AXIS_INDEX[axis];
+      for(const cu of this.cubies){
+        if(cu.pos[ai]===layer){ cu.pos=roundVec(matVec(M,cu.pos)); cu.rot=roundMat(matMul(M,cu.rot)); }
+      }
+      this.turn=null; this.moves++; movesEl.textContent=this.moves; this.checkSolved();
+    }
+    getCubieTrans(cu){
+      if(this.turn && cu.pos[AXIS_INDEX[this.turn.axis]]===this.turn.layer){
+        const tt=Math.max(0,Math.min(1,this.turn.t/this.turn.dur));
+        const ang=this.turn.dir*Math.PI/2*ease(tt);
+        const M=axisMatrix(this.turn.axis, ang);
+        return { pos:matVec(M,cu.pos), rot:matMul(M,cu.rot) };
+      }
+      return { pos:cu.pos, rot:cu.rot };
+    }
+    applyOrbit(v){
+      const x=v[0], y=v[1], z=v[2];
+      const cy=Math.cos(this.rotY), sy=Math.sin(this.rotY);
+      const x1=x*cy+z*sy, z1=-x*sy+z*cy, y1=y;
+      const cx=Math.cos(this.rotX), sx=Math.sin(this.rotX);
+      const y2=y1*cx - z1*sx, z2=y1*sx + z1*cx, x2=x1;
+      return [x2,y2,z2];
+    }
+    project(v){
+      const D=9; const scale=D/(D - v[2]); const S=this.W*0.12;
+      return [this.cx + v[0]*scale*S, this.cy - v[1]*scale*S];
+    }
+    isSolved(){
+      const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      for(let di=0;di<6;di++){
+        const d=dirs[di]; const axis=(d[0]!==0)?0:(d[1]!==0?1:2); const layer=d[axis];
+        let color=null;
+        for(const cu of this.cubies){
+          if(cu.pos[axis]!==layer) continue;
+          let found=null;
+          for(let f=0;f<6;f++){
+            const cn=matVec(cu.rot, FACE_NORMALS[f]);
+            if(Math.abs(cn[0]-d[0])<0.5 && Math.abs(cn[1]-d[1])<0.5 && Math.abs(cn[2]-d[2])<0.5){ found=cu.colors[f]; break; }
+          }
+          if(found===null) return false;
+          if(color===null) color=found; else if(color!==found) return false;
+        }
+      }
+      return true;
+    }
+    checkSolved(){
+      if(this.solvedShown) return;
+      if(!this.isSolved()) return;
+      this.solvedShown=true;
+      const sm=this.moves-(this.scrambleBase||0);
+      if(!this.autoPlay && sm>0 && sm<this.best){ this.best=sm; localStorage.setItem('neonCubeBest',String(this.best)); bestEl.textContent=this.best; }
+      winMsg.textContent = this.autoPlay ? 'AI 自动还原完成 · 共 '+this.moves+' 步' : ('用了 '+(sm>0?sm:this.moves)+' 步完成');
+      overlayWin.classList.add('active');
+    }
+    scramble(){
+      if(this.autoPlay||this.turn) return;
+      overlayWin.classList.remove('active'); this.solvedShown=false;
+      const n=18; let prev=null;
+      for(let i=0;i<n;i++){ const m=this.randomMove(prev); this.applyInstant(m); prev=m; }
+      this.scrambleBase=this.moves;
+      statusEl.textContent='已打乱 '+n+' 步，试着还原!';
+    }
+    layerFor(axis){
+      if(axis==='U') return [ 'y', 1 ];
+      if(axis==='D') return [ 'y',-1 ];
+      if(axis==='L') return [ 'x',-1 ];
+      if(axis==='R') return [ 'x', 1 ];
+      if(axis==='F') return [ 'z', 1 ];
+      return [ 'z',-1 ];
+    }
+    face(axis, prime){
+      if(this.autoPlay||this.turn) return;
+      overlayWin.classList.remove('active'); this.solvedShown=false;
+      const [a,l]=this.layerFor(axis); this.startTurn(a,l, prime?-1:1);
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
+    startAuto(){
+      this.autoPlay=true;
+      const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
+      this.aiInd.style.display='flex';
+      this.turn=null; this.scrambleBase=0;
+      this.scrambleSeq=[]; let prev=null;
+      const n=14;
+      for(let i=0;i<n;i++){ const m=this.randomMove(prev); this.scrambleSeq.push(m); prev=m; }
+      this.autoQueue=this.scrambleSeq.slice();
+      this.autoPhase='scramble';
+      aiStatus.textContent='AI 打乱中…';
+    }
+    stopAuto(){
+      this.autoPlay=false;
+      const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on');
+      this.aiInd.style.display='none';
+      this.autoQueue=[]; this.autoPhase=null; this.autoStopAt=null;
+    }
+    restart(){
+      this.stopAuto(); this.turn=null;
+      this.moves=0; movesEl.textContent='0';
+      this.scrambleBase=0; this.solvedShown=false;
+      this.autoQueue=[]; this.autoPhase=null; this.autoStopAt=null;
+      overlayWin.classList.remove('active');
+      this.initCube();
+      statusEl.textContent='拖动旋转视角，按键 U/D/L/R/F/B 转动面（按住 Shift 为逆）';
+    }
+    update(dt){
+      this.time+=dt;
+      if(this.turn){ this.turn.t+=dt; if(this.turn.t>=this.turn.dur) this.commitTurn(); }
+      if(!this.dragging && !this.autoPlay) this.rotY+=dt*0.12;
+      // auto state machine
+      if(this.autoPlay && !this.turn){
+        if(this.autoQueue.length>0){
+          const m=this.autoQueue.shift();
+          if(this.autoPhase==='solve'){ this.autoDone++; aiStatus.textContent='AI 还原中 ('+this.autoDone+'/'+this.autoTotal+')…'; }
+          this.startTurn(m.axis, m.layer, m.dir);
+        } else if(this.autoPhase==='scramble'){
+          this.autoPhase='solve'; this.autoTotal=this.scrambleSeq.length; this.autoDone=0;
+          this.autoQueue=this.scrambleSeq.slice().reverse().map(m=>({ axis:m.axis, layer:m.layer, dir:-m.dir }));
+          aiStatus.textContent='AI 还原中 (0/'+this.autoTotal+')…';
+        } else if(this.autoPhase==='solve'){
+          this.autoPhase=null; aiStatus.textContent='AI 还原完成 ✓';
+          this.autoStopAt=this.time+1.4;
+        }
+      }
+      if(this.autoStopAt && this.time>=this.autoStopAt){ this.autoStopAt=null; this.stopAuto(); }
+    }
+    drawFace(pts,color){
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0],pts[0][1]);
+      for(let i=1;i<4;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.closePath();
+      const g=ctx.createLinearGradient(pts[0][0],pts[0][1],pts[2][0],pts[2][1]);
+      g.addColorStop(0,hexA(color,0.92)); g.addColorStop(1,hexA(color,0.58));
+      ctx.fillStyle=g; ctx.fill();
+      ctx.lineJoin='round';
+      ctx.shadowColor=color; ctx.shadowBlur=10;
+      ctx.strokeStyle=color; ctx.lineWidth=2.2; ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.strokeStyle=hexA('#ffffff',0.22); ctx.lineWidth=1; ctx.stroke();
+    }
+    draw(){
+      const W=this.W; ctx.clearRect(0,0,W,W);
+      const list=[];
+      for(const cu of this.cubies){
+        const tr=this.getCubieTrans(cu);
+        const vc=this.applyOrbit(tr.pos);
+        list.push({ cu, tr, depth:vc[2] });
+      }
+      list.sort((a,b)=>b.depth-a.depth);
+      const h=0.46;
+      const offs=[[-1,-1],[-1,1],[1,1],[1,-1]];
+      for(const item of list){
+        const { cu, tr }=item;
+        for(let f=0;f<6;f++){
+          const col=cu.colors[f]; if(!col) continue;
+          const ln=FACE_NORMALS[f];
+          const cn=matVec(tr.rot, ln);
+          const vn=this.applyOrbit(cn);
+          if(vn[2]<=0.0001) continue;
+          const p=f>>1; const s=(f&1)?-1:1;
+          const perp=[0,1,2].filter(a=>a!==p);
+          const cornerPts=[];
+          for(const o of offs){
+            const local=[0,0,0]; local[p]=s*h; local[perp[0]]=o[0]*h; local[perp[1]]=o[1]*h;
+            const rl=matVec(tr.rot, local);
+            const wc=[tr.pos[0]+rl[0], tr.pos[1]+rl[1], tr.pos[2]+rl[2]];
+            const view=this.applyOrbit(wc);
+            cornerPts.push(this.project(view));
+          }
+          this.drawFace(cornerPts, col);
+        }
+      }
+    }
+    loop(ts){
+      requestAnimationFrame(this.loop);
+      try{
+        const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
+        this._last=ts; this.update(dt); this.draw();
+      }catch(err){ console.error(err); }
+    }
+    bindInput(){
+      let lastX=0, lastY=0;
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); this.dragging=true; lastX=e.clientX; lastY=e.clientY; });
+      canvas.addEventListener('pointermove',e=>{ e.preventDefault(); if(!this.dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; this.rotY+=dx*0.01; this.rotX+=dy*0.01; this.rotX=Math.max(-1.35,Math.min(1.35,this.rotX)); });
+      window.addEventListener('pointerup',()=>{ this.dragging=false; });
+      canvas.addEventListener('pointercancel',()=>{ this.dragging=false; });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+      document.addEventListener('keydown',e=>{
+        const k=e.key.toLowerCase();
+        const map={ u:['y',1], d:['y',-1], l:['x',-1], r:['x',1], f:['z',1], b:['z',-1] };
+        if(map[k]){ e.preventDefault(); if(this.autoPlay||this.turn) return; overlayWin.classList.remove('active'); this.solvedShown=false; const [a,l]=map[k]; this.startTurn(a,l, e.shiftKey?-1:1); }
+      });
+    }
+  }
+  window.game=new NeonCube();
+})();
+</script>
+</body>
+</html>

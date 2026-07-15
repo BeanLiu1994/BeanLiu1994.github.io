@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#140a2e" />
+<title>霓虹漩涡 · Neon Vortex</title>
+<style>
+  :root { --bg:#140a2e; --surface:#1c1140; --board:#0f0926; --text:#efeaff; --muted:#9b8fd6; --accent:#b06bff; --accent-glow:#b06bff55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #2a1a55 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#e0b3ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .score-card.lives .value { color:var(--red); font-size:0.95rem; letter-spacing:1px; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0f0926ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#140a2e; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#140a2e; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹漩涡</h1>
+      <div class="sub">N E O N · V O R T E X</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+      <div class="score-card lives"><div class="label">Lives</div><div class="value" id="lives">♥♥♥</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="360" height="360"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>漩涡崩塌!</h2>
+        <p id="lose-msg">防线被突破了</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 待机…</span>
+  </div>
+  <div class="status" id="status">← → / A D 旋转炮塔 · 空格 / 点击 发射 · 别让尖刺触及外环</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=16;
+  const PAL=['#ff5d6a','#4dff91','#4d9fff','#ffd23f','#b06bff','#ff8a3d','#3dffd2'];
+  const TAU=Math.PI*2;
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), livesEl=document.getElementById('lives');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  class Game {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('vortexBest')||'0'); bestEl.textContent=this.best;
+      this.step=TAU/N;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||360,440)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.cx=w/2; this.cy=w/2; this.R=w*0.44; this.FAR=w*0.16; }
+    laneAngle(l){ return l*this.step - Math.PI/2; }
+    nearestLane(angle){ let a=((angle+Math.PI/2)%TAU); if(a<0)a+=TAU; return ((Math.round(a/this.step)%N)+N)%N; }
+    angDiff(a,b){ let d=(b-a)%TAU; if(d>Math.PI)d-=TAU; if(d<-Math.PI)d+=TAU; return d; }
+    lanePoint(lane,p){ const a=this.laneAngle(lane); const r=this.FAR+p*(this.R-this.FAR); return {x:this.cx+r*Math.cos(a), y:this.cy+r*Math.sin(a)}; }
+    playerPoint(){ const r=this.R; return {x:this.cx+r*Math.cos(this.angle), y:this.cy+r*Math.sin(this.angle)}; }
+    laneDanger(lane){ for(const e of this.enemies) if(e.lane===lane && e.p>0.8) return true; return false; }
+    spawnWave(){
+      this.wave=1+Math.floor(this.score/150);
+      this.spawnInterval=Math.max(0.32, 1.1 - this.wave*0.07);
+      let count=1 + (this.wave>3?1:0) + (Math.random()<0.3?1:0);
+      for(let i=0;i<count && this.enemies.length<42;i++){
+        const lane=Math.floor(Math.random()*N);
+        const speed=0.12 + this.wave*0.012 + Math.random()*0.05;
+        this.enemies.push({lane, p:0, speed, color:PAL[Math.floor(Math.random()*PAL.length)]});
+      }
+    }
+    fireBolt(lane){ this.bolts.push({lane, p:1, speed:2.8}); }
+    fire(){ if(this.over) return; this.fireBolt(this.nearestLane(this.angle)); }
+    rotate(dir){ this.targetLane=((this.targetLane+dir)%N+N)%N; }
+    killEnemy(en){
+      const i=this.enemies.indexOf(en); if(i<0) return; this.enemies.splice(i,1);
+      if(this.time - this.lastKill < 1.1) this.combo++; else this.combo=1;
+      this.lastKill=this.time;
+      this.score += 10*this.combo;
+      if(!this.enemies.some(e=>e.lane===en.lane)) this.score += 50; // 清道奖励
+      const pt=this.lanePoint(en.lane, en.p);
+      this.flashes.push({x:pt.x, y:pt.y, color:en.color, life:1});
+      this.updateHud();
+      if(this.combo>1) statusEl.textContent='连击 ×'+this.combo+'!';
+    }
+    loseLife(){ this.lives--; this.rimFlash=1; this.updateHud(); statusEl.textContent='防线被突破! 剩余 ♥ '+Math.max(0,this.lives); if(this.lives<=0) this.gameOver(); }
+    autoStep(dt){
+      let best=null, bestP=-1;
+      for(const e of this.enemies){ if(e.p>bestP){ bestP=e.p; best=e.lane; } }
+      if(best===null){ this.autoTargetLane=null; aiStatus.textContent='AI 待机…'; return; }
+      this.autoTargetLane=best; this.targetLane=best;
+      const target=this.laneAngle(best); const diff=Math.abs(this.angDiff(this.angle,target));
+      if(diff>0.05){ aiStatus.textContent='AI 锁定中…'; this.autoFireCD=0.12; }
+      else { aiStatus.textContent='AI 开火…'; this.autoFireCD-=dt; if(this.autoFireCD<=0){ this.fireBolt(this.nearestLane(this.angle)); this.autoFireCD=0.22; } }
+    }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('vortexBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1300); }
+    update(dt){
+      if(this.over) return; this.time+=dt;
+      this.spawnTimer-=dt; if(this.spawnTimer<=0){ this.spawnWave(); this.spawnTimer=this.spawnInterval; }
+      if(!this.dragging){ const target=this.laneAngle(this.targetLane); const diff=this.angDiff(this.angle,target); this.angle += diff*(1-Math.exp(-14*dt)); }
+      for(let i=this.enemies.length-1;i>=0;i--){ const e=this.enemies[i]; e.p += e.speed*dt; if(e.p>=1){ this.enemies.splice(i,1); this.loseLife(); if(this.over) return; } }
+      for(let i=this.bolts.length-1;i>=0;i--){ const b=this.bolts[i]; b.p -= b.speed*dt; let cand=null, candP=-1; for(const e of this.enemies){ if(e.lane===b.lane && e.p>candP){ candP=e.p; cand=e; } } if(cand && b.p <= candP+0.04){ this.killEnemy(cand); this.bolts.splice(i,1); } else if(b.p<=0){ this.bolts.splice(i,1); } }
+      if(this.autoPlay) this.autoStep(dt);
+      for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.2; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
+      if(this.rimFlash>0) this.rimFlash=Math.max(0,this.rimFlash-dt*2);
+      if(this.time - this.lastKill > 1.1 && this.combo>0) this.combo=0;
+    }
+    spike(x,y,size,color,rot){
+      ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
+      ctx.shadowColor=color; ctx.shadowBlur=12; ctx.fillStyle=color; ctx.beginPath();
+      const pts=5; for(let i=0;i<pts*2;i++){ const rr=(i%2)?size*0.42:size; const ang=i*Math.PI/pts - Math.PI/2; const px=Math.cos(ang)*rr, py=Math.sin(ang)*rr; i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+      ctx.closePath(); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffffcc'; ctx.beginPath(); ctx.arc(0,0,size*0.26,0,7); ctx.fill(); ctx.restore();
+    }
+    draw(){
+      const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
+      // tunnel rings
+      const rings=10;
+      for(let i=1;i<=rings;i++){ const r=this.FAR+(this.R-this.FAR)*i/rings; ctx.strokeStyle='rgba(176,107,255,'+(0.05+0.04*Math.sin(this.time*0.6+i*0.5))+')'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(this.cx,this.cy,r,0,TAU); ctx.stroke(); }
+      // lanes
+      for(let l=0;l<N;l++){ const a=this.laneAngle(l); const x1=this.cx+this.FAR*Math.cos(a), y1=this.cy+this.FAR*Math.sin(a); const x2=this.cx+this.R*Math.cos(a), y2=this.cy+this.R*Math.sin(a);
+        if(this.autoPlay && this.autoTargetLane===l){ ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=14; ctx.strokeStyle='#b06bff'; ctx.lineWidth=3; ctx.globalAlpha=0.8+0.2*Math.sin(this.time*8); ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore(); }
+        else if(this.laneDanger(l)){ ctx.strokeStyle='rgba(255,93,106,0.55)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+        else { ctx.strokeStyle='rgba(176,107,255,0.12)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+      }
+      // far well
+      ctx.fillStyle='rgba(8,4,20,0.9)'; ctx.beginPath(); ctx.arc(this.cx,this.cy,this.FAR,0,TAU); ctx.fill();
+      ctx.strokeStyle='rgba(176,107,255,0.3)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(this.cx,this.cy,this.FAR,0,TAU); ctx.stroke();
+      // rim
+      ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=18; ctx.strokeStyle=(this.rimFlash>0)?'#ff5d6a':'#b06bff'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(this.cx,this.cy,this.R,0,TAU); ctx.stroke(); ctx.restore();
+      // auto target marker
+      if(this.autoPlay && this.autoTargetLane!==null){ let cand=null,cp=-1; for(const e of this.enemies){ if(e.lane===this.autoTargetLane && e.p>cp){ cp=e.p; cand=e; } } if(cand){ const pt=this.lanePoint(cand.lane,cand.p); ctx.save(); ctx.strokeStyle='#ffffff'; ctx.globalAlpha=0.6+0.4*Math.sin(this.time*10); ctx.lineWidth=2; ctx.beginPath(); ctx.arc(pt.x,pt.y,this.candR=10+6*Math.sin(this.time*10),0,TAU); ctx.stroke(); ctx.restore(); } }
+      // enemies
+      for(const e of this.enemies){ const pt=this.lanePoint(e.lane,e.p); const size=5+e.p*9; this.spike(pt.x,pt.y,size,e.color,this.time*2+e.lane); }
+      // bolts
+      for(const b of this.bolts){ const a=this.laneAngle(b.lane); const pr0=Math.max(0,b.p); const r0=this.FAR+pr0*(this.R-this.FAR); const r1=this.FAR+Math.min(1,b.p+0.16)*(this.R-this.FAR); ctx.save(); ctx.shadowColor='#b06bff'; ctx.shadowBlur=14; ctx.strokeStyle='#ffffff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(this.cx+r1*Math.cos(a),this.cy+r1*Math.sin(a)); ctx.lineTo(this.cx+r0*Math.cos(a),this.cy+r0*Math.sin(a)); ctx.stroke(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(this.cx+r0*Math.cos(a),this.cy+r0*Math.sin(a),3,0,TAU); ctx.fill(); ctx.restore(); }
+      // player turret
+      const p=this.playerPoint(); const dir=this.angle+Math.PI;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(dir); ctx.shadowColor='#b06bff'; ctx.shadowBlur=16; ctx.fillStyle='#b06bff'; ctx.beginPath(); ctx.moveTo(13,0); ctx.lineTo(-9,8); ctx.lineTo(-9,-8); ctx.closePath(); ctx.fill(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(0,0,3,0,TAU); ctx.fill(); ctx.restore();
+      // flashes
+      for(const fl of this.flashes){ ctx.save(); ctx.globalAlpha=Math.max(0,fl.life); ctx.strokeStyle=fl.color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(fl.x,fl.y,(1.4-fl.life)*22+6,0,TAU); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    updateHud(){ scoreEl.textContent=this.score; if(this.score>this.best){ this.best=this.score; localStorage.setItem('vortexBest',String(this.best)); bestEl.textContent=this.best; } livesEl.textContent=(this.lives>0?'♥'.repeat(this.lives):'—'); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTargetLane=null; this.autoFireCD=0.1; aiStatus.textContent='AI 待机…'; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
+    bindInput(){
+      let dragging=false, lastAng=0, startX=0, startY=0;
+      const centerAngle=(e)=>{ const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)-this.W/2, y=(e.clientY-r.top)-this.H/2; return Math.atan2(y,x); };
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; dragging=true; lastAng=centerAngle(e); startX=e.clientX; startY=e.clientY; });
+      canvas.addEventListener('pointermove',e=>{ if(!dragging||this.autoPlay||this.over) return; const a=centerAngle(e); let d=a-lastAng; if(d>Math.PI)d-=TAU; if(d<-Math.PI)d+=TAU; this.angle+=d; this.targetLane=this.nearestLane(this.angle); lastAng=a; });
+      canvas.addEventListener('pointerup',e=>{ if(!dragging) return; dragging=false; if(this.over||this.autoPlay) return; const dist=Math.hypot(e.clientX-startX,e.clientY-startY); if(dist<8) this.fire(); });
+      canvas.addEventListener('pointercancel',()=>{ dragging=false; });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+      window.addEventListener('keydown',e=>{ if(this.autoPlay) return; if(this.over){ if(e.code==='Space'||e.code==='Enter'){ this.restart(); e.preventDefault(); } return; } switch(e.code){ case 'ArrowLeft': case 'KeyA': this.rotate(-1); break; case 'ArrowRight': case 'KeyD': this.rotate(1); break; case 'Space': case 'ArrowUp': case 'KeyW': e.preventDefault(); this.fire(); break; } });
+    }
+    restart(){ this.stopAuto(); this.over=false; this.score=0; this.lives=3; this.combo=0; this.lastKill=-10; this.enemies=[]; this.bolts=[]; this.flashes=[]; this.autoTargetLane=null; this.rimFlash=0; this.angle=this.laneAngle(0); this.targetLane=0; this.spawnTimer=0.8; this.spawnInterval=1.1; this.wave=1; this.autoFireCD=0; overlayLose.classList.remove('active'); this.updateHud(); statusEl.textContent='← → / A D 旋转炮塔 · 空格 / 点击 发射 · 别让尖刺触及外环'; }
+  }
+  window.game=new Game();
+})();
+</script>
+</body>
+</html>

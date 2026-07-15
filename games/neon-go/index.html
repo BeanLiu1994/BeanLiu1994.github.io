@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a16" />
+<title>霓虹围棋 · Neon Go</title>
+<style>
+  :root { --bg:#0a0a16; --surface:#121026; --board:#0c0a1e; --text:#efeaff; --muted:#9b8fd6; --accent:#4d9fff; --accent-glow:#4d9fff55; --gold:#ffd700; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #1a2150 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #14103a 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#9fd0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:58px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a0a16ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0a0a16; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a0a16; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹围棋</h1>
+      <div class="sub">N E O N &nbsp; G O</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">黑提子</div><div class="value" id="cap-black">0</div></div>
+      <div class="score-card best"><div class="label">白提子</div><div class="value" id="cap-white">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="360" height="360"></canvas>
+    <div class="overlay" id="overlay-end">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2 id="result-title">对局结束</h2>
+        <p id="result-msg">终局计分</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 落子规划…</span>
+  </div>
+  <div class="status" id="status">点击交叉点落子，黑先白后，提掉无气的对方棋子</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const N=9;
+  const NB=[[1,0],[-1,0],[0,1],[0,-1]];
+  const KOMI=6.5;
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const capBlackEl=document.getElementById('cap-black'), capWhiteEl=document.getElementById('cap-white');
+  const statusEl=document.getElementById('status');
+  const overlayEnd=document.getElementById('overlay-end'), resultTitle=document.getElementById('result-title'), resultMsg=document.getElementById('result-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  // ---- Go rules helpers (operate on a board matrix of 0/1/2) ----
+  function groupAndLibs(board, r, c){
+    const color=board[r][c];
+    const stack=[[r,c]]; const seen=new Set([r+','+c]); const stones=[]; const libs=new Set();
+    while(stack.length){
+      const [cr,cc]=stack.pop(); stones.push([cr,cc]);
+      for(const [dr,dc] of NB){ const nr=cr+dr,nc=cc+dc;
+        if(nr<0||nr>=N||nc<0||nc>=N) continue;
+        const v=board[nr][nc];
+        if(v===0) libs.add(nr+','+nc);
+        else if(v===color){ const k=nr+','+nc; if(!seen.has(k)){ seen.add(k); stack.push([nr,nc]); } }
+      }
+    }
+    return {stones, libs, color};
+  }
+  function placeAndCapture(board, r, c, color){
+    board[r][c]=color;
+    const opp = color===1?2:1;
+    const captured=[];
+    const checked=new Set();
+    for(const [dr,dc] of NB){ const nr=r+dr,nc=c+dc;
+      if(nr<0||nr>=N||nc<0||nc>=N) continue;
+      if(board[nr][nc]===opp){ const k=nr+','+nc; if(checked.has(k)) continue;
+        const g=groupAndLibs(board,nr,nc);
+        for(const s of g.stones) checked.add(s[0]+','+s[1]);
+        if(g.libs.size===0){ for(const s of g.stones){ board[s[0]][s[1]]=0; captured.push(s); } }
+      }
+    }
+    return captured;
+  }
+  function legalMove(board, r, c, color){
+    if(board[r][c]!==0) return null;
+    const b=board.map(row=>row.slice());
+    const captured=placeAndCapture(b, r, c, color);
+    const g=groupAndLibs(b, r, c);
+    if(g.libs.size===0 && captured.length===0) return null; // suicide
+    return {board:b, captured};
+  }
+  function isOwnEye(board, r, c, color){
+    for(const [dr,dc] of NB){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=N||nc<0||nc>=N) continue; if(board[nr][nc]!==color) return false; }
+    const diag=[[1,1],[1,-1],[-1,1],[-1,-1]];
+    let onBoard=0, own=0;
+    for(const [dr,dc] of diag){ const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<N&&nc>=0&&nc<N){ onBoard++; if(board[nr][nc]===color) own++; }
+    }
+    return own===onBoard;
+  }
+
+  class Go {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0; this.passes=0;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||360,440)); const d=window.devicePixelRatio||1; this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); this.mg=this.W*0.06; this.step=(this.W-2*this.mg)/(N-1); }
+    emptyGrid(){ return Array.from({length:N},()=>new Array(N).fill(0)); }
+    ease(t){ t=Math.max(0,Math.min(1,t)); return 1-Math.pow(1-t,3); }
+
+    // ---- AI heuristic: prefers captures, then contact / 3rd-4th line, avoids self-atari & own eyes ----
+    aiMove(color){
+      let best=null, bestScore=-1e9;
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        if(this.board[r][c]!==0) continue;
+        if(isOwnEye(this.board,r,c,color)) continue;
+        const res=legalMove(this.board,r,c,color);
+        if(!res) continue;
+        const caps=res.captured.length;
+        let sc=caps*100;
+        const g=groupAndLibs(res.board,r,c);
+        if(g.libs.size<=1 && caps===0) sc-=40;
+        let adj=0; for(const [dr,dc] of NB){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=N||nc<0||nc>=N) continue; if(this.board[nr][nc]!==0) adj++; }
+        sc+=adj*8;
+        const dist=Math.min(r,N-1-r, c, N-1-c);
+        if(dist===2||dist===3) sc+=15;
+        sc+=Math.random()*3;
+        if(sc>bestScore){ bestScore=sc; best={r,c,caps}; }
+      }
+      if(best && bestScore>=5) return best;
+      return null;
+    }
+    hasRealMove(color){
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        if(this.board[r][c]!==0) continue;
+        if(isOwnEye(this.board,r,c,color)) continue;
+        if(legalMove(this.board,r,c,color)) return true;
+      }
+      return false;
+    }
+    computeTerritory(){
+      const visited=new Set(); let blackTerr=0, whiteTerr=0;
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        if(this.board[r][c]!==0) continue; const k=r+','+c; if(visited.has(k)) continue;
+        const q=[[r,c]]; visited.add(k); const region=[[r,c]]; const border=new Set();
+        while(q.length){ const [cr,cc]=q.pop();
+          for(const [dr,dc] of NB){ const nr=cr+dr,nc=cc+dc;
+            if(nr<0||nr>=N||nc<0||nc>=N) continue;
+            const v=this.board[nr][nc];
+            if(v===0){ const k2=nr+','+nc; if(!visited.has(k2)){ visited.add(k2); q.push([nr,nc]); region.push([nr,nc]); } }
+            else border.add(v);
+          }
+        }
+        if(border.size===1){ if(border.has(1)) blackTerr+=region.length; else whiteTerr+=region.length; }
+      }
+      return {blackTerr, whiteTerr};
+    }
+
+    applyMove(r,c,color,isAuto){
+      const res=legalMove(this.board,r,c,color);
+      if(!res) return false;
+      this.board=res.board;
+      if(color===1) this.captured[1]+=res.captured.length; else this.captured[2]+=res.captured.length;
+      for(const s of res.captured) this.fading.push({r:s[0],c:s[1],color:color===1?2:1,life:1});
+      this.placeAnim={r,c,color,t:0};
+      this.lastMove={r,c};
+      this.updateScore();
+      this.current = color===1?2:1;
+      this.passes=0;
+      this.autoTarget = isAuto?{r,c}:null;
+      this.updateStatus();
+      return true;
+    }
+    pass(color){
+      this.passes++;
+      this.current = color===1?2:1;
+      this.lastMove=null;
+      this.updateStatus();
+      if(this.passes>=2) this.endGame();
+    }
+    ensureMove(){
+      let guard=0;
+      while(!this.over && !this.hasRealMove(this.current) && guard<4){ this.pass(this.current); guard++; }
+    }
+
+    autoStep(){
+      const color=this.current;
+      aiStatus.textContent='AI 落子规划…';
+      const mv=this.aiMove(color);
+      if(!mv){ aiStatus.textContent='AI 停一手…'; this.pass(color); this.autoCD=0.5; return; }
+      if(mv.caps>0) aiStatus.textContent='AI 提子…';
+      this.autoTarget={r:mv.r,c:mv.c};
+      this.applyMove(mv.r,mv.c,color,true);
+      this.autoCD=0.55;
+    }
+
+    endGame(){
+      this.over=true;
+      const terr=this.computeTerritory();
+      let black=0, white=0;
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(this.board[r][c]===1) black++; else if(this.board[r][c]===2) white++; }
+      black+=terr.blackTerr; white+=terr.whiteTerr+KOMI;
+      let title;
+      if(black>white){ title='黑棋胜!'; resultTitle.style.color='#4d9fff'; }
+      else if(white>black){ title='白棋胜!'; resultTitle.style.color='#ff8ab0'; }
+      else { title='和棋'; resultTitle.style.color='#efeaff'; }
+      resultTitle.textContent=title;
+      resultMsg.textContent='黑 '+black.toFixed(1)+'  ·  白 '+white.toFixed(1)+'（含贴目6.5）';
+      overlayEnd.classList.add('active');
+      if(this.autoPlay){ const wasAuto=true; setTimeout(()=>{ if(wasAuto){ this.restart(); this.startAuto(); } },1900); }
+    }
+
+    update(dt){
+      if(this.over) return;
+      this.time+=dt;
+      if(this.placeAnim){ this.placeAnim.t+=dt*5; if(this.placeAnim.t>=1) this.placeAnim=null; }
+      for(let i=this.fading.length-1;i>=0;i--){ this.fading[i].life-=dt*3; if(this.fading[i].life<=0) this.fading.splice(i,1); }
+      if(this.autoPlay && this.autoCD<=0 && !this.placeAnim && this.fading.length===0){ this.autoStep(); }
+      if(this.autoCD>0) this.autoCD-=dt;
+    }
+
+    bindInput(){
+      const cellAt=(e)=>{ const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(this.W/rect.width), y=(e.clientY-rect.top)*(this.H/rect.height); const c=Math.round((x-this.mg)/this.step), r=Math.round((y-this.mg)/this.step); if(r<0||r>=N||c<0||c>=N) return null; const ix=this.mg+c*this.step, iy=this.mg+r*this.step; if(Math.hypot(x-ix,y-iy)>this.step*0.6) return null; return {r,c}; };
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const cl=cellAt(e); if(!cl) return;
+        if(this.board[cl.r][cl.c]!==0){ statusEl.textContent='该交叉点已有棋子'; return; }
+        if(isOwnEye(this.board,cl.r,cl.c,this.current)){ statusEl.textContent='不可填入己方眼位'; return; }
+        const res=legalMove(this.board,cl.r,cl.c,this.current);
+        if(!res){ statusEl.textContent='此处不能落子（违规/自杀）'; return; }
+        this.applyMove(cl.r,cl.c,this.current,false);
+        this.ensureMove();
+      });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+
+    stone(x,y,color,alpha,r){
+      ctx.save(); ctx.globalAlpha=alpha;
+      ctx.shadowColor = color===1 ? '#1b3a6b' : '#9fd0ff'; ctx.shadowBlur=14;
+      const g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);
+      if(color===1){ g.addColorStop(0,'#2a2d40'); g.addColorStop(1,'#0a0b14'); }
+      else { g.addColorStop(0,'#ffffff'); g.addColorStop(1,'#cdd6f5'); }
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.strokeStyle= color===1 ? '#4d9fff66' : '#ffffff66'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke();
+      ctx.fillStyle='#ffffff55'; ctx.beginPath(); ctx.arc(x-r*0.3,y-r*0.3,r*0.22,0,7); ctx.fill();
+      ctx.restore();
+    }
+
+    draw(){
+      const W=this.W, mg=this.mg, step=this.step;
+      ctx.clearRect(0,0,W,W);
+      // grid lines
+      ctx.strokeStyle='#ffffff22'; ctx.lineWidth=1; ctx.beginPath();
+      for(let i=0;i<N;i++){ const p=mg+i*step; ctx.moveTo(mg,p); ctx.lineTo(mg+(N-1)*step,p); ctx.moveTo(p,mg); ctx.lineTo(p,mg+(N-1)*step); }
+      ctx.stroke();
+      // star points
+      ctx.fillStyle='#ffffff44';
+      for(const [r,c] of [[2,2],[2,6],[6,2],[6,6],[4,4]]){ ctx.beginPath(); ctx.arc(mg+c*step,mg+r*step,step*0.08,0,7); ctx.fill(); }
+      // stones
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(this.board[r][c]!==0){ if(this.placeAnim && this.placeAnim.r===r && this.placeAnim.c===c) continue; this.stone(mg+c*step,mg+r*step,this.board[r][c],1,step*0.46); } }
+      // placement anim
+      if(this.placeAnim){ const s=this.placeAnim; this.stone(mg+s.c*step,mg+s.r*step,s.color,1,step*0.46*this.ease(s.t)); }
+      // fading captures
+      for(const f of this.fading){ this.stone(mg+f.c*step,mg+f.r*step,f.color,Math.max(0,f.life),step*0.46); }
+      // last move marker
+      if(this.lastMove && !(this.placeAnim && this.placeAnim.r===this.lastMove.r && this.placeAnim.c===this.lastMove.c)){ ctx.save(); ctx.strokeStyle='#ffd700'; ctx.lineWidth=2; ctx.globalAlpha=0.8; ctx.beginPath(); ctx.arc(mg+this.lastMove.c*step,mg+this.lastMove.r*step,step*0.18,0,7); ctx.stroke(); ctx.restore(); }
+      // auto target highlight
+      if(this.autoPlay && this.autoTarget){ const t=this.autoTarget; ctx.save(); ctx.strokeStyle='#4d9fff'; ctx.lineWidth=3; ctx.globalAlpha=0.5+0.4*Math.sin(this.time*6); ctx.beginPath(); ctx.arc(mg+t.c*step,mg+t.r*step,step*0.5,0,7); ctx.stroke(); ctx.restore(); }
+    }
+
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; this.autoCD=0.3; this.updateStatus(); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; this.autoTarget=null; this.updateStatus(); }
+
+    updateScore(){ capBlackEl.textContent=this.captured[1]; capWhiteEl.textContent=this.captured[2]; }
+    updateStatus(){ if(this.over) return; const cur=this.current===1?'黑方':'白方'; statusEl.textContent = this.autoPlay ? ('自动对弈中 · '+cur+' 思考…') : (cur+' 落子'); }
+
+    restart(){ this.stopAuto(); this.over=false; this.passes=0; this.current=1; this.captured={1:0,2:0}; this.board=this.emptyGrid(); this.placeAnim=null; this.fading=[]; this.lastMove=null; this.autoTarget=null; this.autoCD=0; overlayEnd.classList.remove('active'); this.updateScore(); this.updateStatus(); }
+  }
+  window.game=new Go();
+})();
+</script>
+</body>
+</html>

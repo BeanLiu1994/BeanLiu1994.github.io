@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0e0a24" />
+<title>霓虹圈地 · Neon Qix</title>
+<style>
+  :root { --bg:#0e0a24; --surface:#16103a; --board:#100b2c; --text:#efeaff; --muted:#9b8fd6; --accent:#ff4dd2; --accent-glow:#ff4dd255; --gold:#ffd700; --red:#ff5d6a; --cyan:#3df5ff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #281a55 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#ffb3ec); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:52px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .score-card.lives .value { color:var(--red); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0e0a24ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .overlay.win h2 { color:var(--accent); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0e0a24; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0e0a24; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹圈地</h1>
+      <div class="sub">N E O N &nbsp; Q I X</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card lives"><div class="label">Lives</div><div class="value" id="lives">3</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="360" height="360"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>生命耗尽!</h2>
+        <p id="lose-msg">Qix 抓住了你</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+    <div class="overlay win" id="overlay-win">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>圈地成功!</h2>
+        <p id="win-msg">霓虹之地归你所有</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划移动中…</span>
+  </div>
+  <div class="status" id="status">拖动从边界画入场地，避开 Qix 与 Sparx，圈地达 75% 即胜</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const G=40;                 // grid resolution
+  const QIX_R=0.40;           // qix radius (in cells)
+  const QIX_V=6.0;            // qix speed (cells / sec)
+  const STEP_INT=0.03;        // marker step interval (sec)
+  const SPARX_STEP=0.08;      // sparx step interval (sec)
+  const MARGIN=2.5;           // auto keeps this distance from qix
+  const NB=[[1,0],[-1,0],[0,1],[0,-1]];
+
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score');
+  const bestEl=document.getElementById('best');
+  const livesEl=document.getElementById('lives');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose');
+  const loseMsg=document.getElementById('lose-msg');
+  const overlayWin=document.getElementById('overlay-win');
+  const winMsg=document.getElementById('win-msg');
+  const aiInd=document.getElementById('ai-indicator');
+  const aiStatus=document.getElementById('ai-status');
+
+  class Game {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.time=0;
+      this.best=parseInt(localStorage.getItem('neonQixBest')||'0',10); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.buildPerim();
+      this.bindInput();
+      this.reset();
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(260,Math.min(r.width||360,440)); const d=window.devicePixelRatio||1; this.W=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0); }
+    buildPerim(){
+      this.perim=[]; this.perimIndex=new Map(); let i=0;
+      for(let c=0;c<G;c++){ this.perim.push([0,c]); this.perimIndex.set(c,i++); }
+      for(let r=1;r<G;r++){ this.perim.push([r,G-1]); this.perimIndex.set(r*G+(G-1),i++); }
+      for(let c=G-2;c>=0;c--){ this.perim.push([G-1,c]); this.perimIndex.set((G-1)*G+c,i++); }
+      for(let r=G-2;r>=1;r--){ this.perim.push([r,0]); this.perimIndex.set(r*G,i++); }
+      this.L=i;
+    }
+    reset(){
+      this.over=false; this.score=0; this.bonus=0; this.lives=3; this.time=0;
+      this.claimed=Array.from({length:G},()=>new Array(G).fill(0));
+      this.trail=[]; this.trailSet=new Set(); this.autoPath=null; this.plannedPath=null;
+      this.recentClaim=[]; this.flash=0; this.anchorGrace=0; this._losing=false;
+      this.stepCD=0; this.autoCD=0.3; this.sparxTimer=0;
+      this.pointer={cx:0,cy:0}; this.pointerDown=false;
+      overlayLose.classList.remove('active'); overlayWin.classList.remove('active');
+      this.initQix(); this.newAnchor();
+      this.updateScore(); this.updateLives();
+      statusEl.textContent='拖动从边界画入场地，避开 Qix 与 Sparx，圈地达 75% 即胜';
+    }
+    initQix(){ const a=Math.random()*Math.PI*2; this.qx=G/2+(Math.random()-0.5)*6; this.qy=G/2+(Math.random()-0.5)*6; this.qvx=Math.cos(a)*QIX_V; this.qvy=Math.sin(a)*QIX_V; this.qzig=0; }
+    newAnchor(){
+      const cand=[];
+      for(let i=0;i<this.perim.length;i++){ const [r,c]=this.perim[i]; let adj=false;
+        for(const [dr,dc] of NB){ const nr=r+dr,nc=c+dc; if(nr>=1&&nr<=G-2&&nc>=1&&nc<=G-2&&this.claimed[nr][nc]===0){ adj=true; break; } }
+        if(adj) cand.push(i);
+      }
+      let i = cand.length? cand[Math.floor(Math.random()*cand.length)] : Math.floor(Math.random()*this.perim.length);
+      const [r,c]=this.perim[i]; this.anchorR=r; this.anchorC=c;
+      this.sparx1Idx=(i+1)%this.L; this.sparx2Idx=(i-1+this.L)%this.L;
+      this.sparxTimer=0; this.anchorGrace=0.35; this.trail=[]; this.trailSet=new Set(); this.autoPath=null; this.plannedPath=null;
+    }
+    get head(){ return this.trail.length? this.trail[this.trail.length-1] : {r:this.anchorR,c:this.anchorC}; }
+    isWall(px,py){ const r=Math.floor(px), c=Math.floor(py); if(r<0||r>=G||c<0||c>=G) return true; if(r===0||r===G-1||c===0||c===G-1) return true; if(this.claimed[r][c]===1) return true; if(this.trailSet.has(r*G+c)) return true; return false; }
+    claimedPct(){ let n=0; for(let r=1;r<G-1;r++) for(let c=1;c<G-1;c++) if(this.claimed[r][c]) n++; return n/((G-2)*(G-2))*100; }
+    updateScore(){ this.score=Math.floor(this.claimedPct())+this.bonus; scoreEl.textContent=this.score; }
+    updateLives(){ livesEl.textContent=this.lives; }
+
+    tryStep(dr,dc){
+      const cur=this.head; const nr=cur.r+dr, nc=cur.c+dc;
+      if(nr<0||nr>=G||nc<0||nc>=G) return null;
+      const isPerim=(nr===0||nr===G-1||nc===0||nc===G-1);
+      const k=nr*G+nc;
+      if(this.trailSet.has(k)){
+        if(this.trail.length>=2){ const p=this.trail[this.trail.length-2]; if(p.r===nr&&p.c===nc){ this.trail.pop(); this.trailSet.delete(k); return 'back'; } }
+        return null;
+      }
+      if(this.claimed[nr][nc]===1) return null;
+      if(isPerim){
+        if(this.trail.length===0){ this.anchorR=nr; this.anchorC=nc; return 'move'; }
+        this.finalize(nr,nc); return 'close';
+      }
+      this.trail.push({r:nr,c:nc}); this.trailSet.add(k); return 'draw';
+    }
+
+    finalize(closeR,closeC){
+      const trailCells=this.trail.slice();
+      const visited=Array.from({length:G},()=>new Array(G).fill(false));
+      const qc=Math.floor(this.qx), qr=Math.floor(this.qy);
+      const comps=[];
+      for(let r=1;r<G-1;r++) for(let c=1;c<G-1;c++){
+        if(this.claimed[r][c]===1||visited[r][c]) continue;
+        const stack=[[r,c]]; visited[r][c]=true; const comp=[];
+        while(stack.length){ const [cr,cc]=stack.pop(); comp.push([cr,cc]);
+          for(const [dr,dc] of NB){ const nr=cr+dr,nc=cc+dc; if(nr<1||nr>G-2||nc<1||nc>G-2) continue; if(visited[nr][nc]||this.claimed[nr][nc]===1||this.trailSet.has(nr*G+nc)) continue; visited[nr][nc]=true; stack.push([nr,nc]); }
+        }
+        comps.push(comp);
+      }
+      const claim=[];
+      for(const comp of comps){ let has=false; for(const [cr,cc] of comp){ if(cr===qr&&cc===qc){ has=true; break; } } if(!has){ for(const [cr,cc] of comp) claim.push([cr,cc]); } }
+      let added=0;
+      for(const [r,c] of claim){ if(this.claimed[r][c]!==1){ this.claimed[r][c]=1; added++; } }
+      for(const t of trailCells){ if(this.claimed[t.r][t.c]!==1){ this.claimed[t.r][t.c]=1; added++; } }
+      this.bonus+=added;
+      this.recentClaim=claim.map(([r,c])=>({r,c,t:0})).concat(trailCells.map(t=>({r:t.r,c:t.c,t:0})));
+      this.trail=[]; this.trailSet=new Set(); this.autoPath=null; this.plannedPath=null;
+      this.updateScore();
+      if(this.claimedPct()>=75){ this.gameOver(true); return; }
+      this.newAnchor();
+      this.pointerDown=false;
+    }
+
+    loseLife(){
+      if(this._losing||this.over) return; this._losing=true;
+      this.lives--; this.updateLives(); this.flash=0.45;
+      this.trail=[]; this.trailSet=new Set(); this.autoPath=null; this.plannedPath=null;
+      if(this.lives<=0){ this.gameOver(false); }
+      else { this.newAnchor(); }
+      setTimeout(()=>{ this._losing=false; },60);
+    }
+
+    gameOver(win){
+      if(this.over) return; this.over=true;
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('neonQixBest',String(this.best)); bestEl.textContent=this.best; }
+      if(win){ overlayWin.classList.add('active'); winMsg.textContent='圈地 '+Math.floor(this.claimedPct())+'% · 得分 '+this.score; statusEl.textContent='自动循环演示中…'; }
+      else { overlayLose.classList.add('active'); loseMsg.textContent='剩余生命 0 · 得分 '+this.score; }
+      if(this.autoPlay){ setTimeout(()=>{ if(this.autoPlay && this.over) this.reset(); },1600); }
+    }
+
+    stepQix(dt){
+      const r=QIX_R; let nx=this.qx+this.qvx*dt, ny=this.qy+this.qvy*dt;
+      if(this.isWall(nx+r,this.qy)||this.isWall(nx-r,this.qy)){ this.qvx=-this.qvx; nx=this.qx; }
+      if(this.isWall(this.qx,ny+r)||this.isWall(this.qx,ny-r)){ this.qvy=-this.qvy; ny=this.qy; }
+      this.qx=nx; this.qy=ny;
+      if(this.qx<r){ this.qx=r; this.qvx=Math.abs(this.qvx); } if(this.qx>G-1-r){ this.qx=G-1-r; this.qvx=-Math.abs(this.qvx); }
+      if(this.qy<r){ this.qy=r; this.qvy=Math.abs(this.qvy); } if(this.qy>G-1-r){ this.qy=G-1-r; this.qvy=-Math.abs(this.qvy); }
+      this.qzig+=dt; if(this.qzig>0.45){ this.qzig=0; const a=Math.atan2(this.qvy,this.qvx)+(Math.random()-0.5)*0.7; const s=Math.hypot(this.qvx,this.qvy); this.qvx=Math.cos(a)*s; this.qvy=Math.sin(a)*s; }
+    }
+
+    stepSparx(dt){ this.sparxTimer+=dt; while(this.sparxTimer>=SPARX_STEP){ this.sparxTimer-=SPARX_STEP; this.sparx1Idx=(this.sparx1Idx+1)%this.L; this.sparx2Idx=(this.sparx2Idx-1+this.L)%this.L; } }
+
+    checkCollisions(){
+      if(this.trail.length===0) return; // idle on the border is safe; hazard only while drawing
+      const aIdx=this.perimIndex.get(this.anchorR*G+this.anchorC);
+      const head=this.head; const hPerim=(head.r===0||head.r===G-1||head.c===0||head.c===G-1);
+      const hIdx=hPerim? this.perimIndex.get(head.r*G+head.c) : -1;
+      for(const s of [this.sparx1Idx,this.sparx2Idx]){
+        if(s===aIdx && this.anchorGrace<=0){ this.loseLife(); return; }
+        if(hIdx>=0 && s===hIdx){ this.loseLife(); return; }
+      }
+      const hx=head.c+0.5, hy=head.r+0.5; if(Math.hypot(this.qx-hx,this.qy-hy) < QIX_R+0.4){ this.loseLife(); return; }
+    }
+
+    update(dt){
+      if(this.over) return;
+      this.time+=dt;
+      if(this.anchorGrace>0) this.anchorGrace-=dt;
+      this.stepSparx(dt);
+      this.stepQix(dt);
+      this.checkCollisions(); if(this.over) return;
+      if(this.autoPlay) this.autoUpdate(dt);
+      else if(this.pointerDown) this.humanStep(dt);
+      for(let i=this.recentClaim.length-1;i>=0;i--){ this.recentClaim[i].t+=dt; if(this.recentClaim[i].t>0.6) this.recentClaim.splice(i,1); }
+      if(this.flash>0) this.flash-=dt;
+    }
+
+    humanStep(dt){
+      this.stepCD-=dt; if(this.stepCD>0) return;
+      const h=this.head; const hx=h.c+0.5, hy=h.r+0.5;
+      const dx=this.pointer.cx-hx, dy=this.pointer.cy-hy;
+      if(Math.abs(dx)<0.25&&Math.abs(dy)<0.25) return;
+      let dir; if(Math.abs(dx)>=Math.abs(dy)) dir=[0,Math.sign(dx)]; else dir=[Math.sign(dy),0];
+      let res=this.tryStep(dir[0],dir[1]);
+      if(res===null){ const od = Math.abs(dx)>=Math.abs(dy)? [Math.sign(dy),0]:[0,Math.sign(dx)]; if(od[0]!==0||od[1]!==0) this.tryStep(od[0],od[1]); }
+      if(res!==null) this.stepCD=STEP_INT;
+    }
+
+    autoUpdate(dt){
+      if(this.trail.length===0 && !this.autoPath){ this.autoPlan(); if(!this.autoPath) this.autoCD=0.2; return; }
+      if(this.autoPath && this.autoPath.length>0){
+        this.autoCD-=dt; if(this.autoCD<=0){
+          const next=this.autoPath[0]; const cur=this.head; const dr=Math.sign(next.r-cur.r), dc=Math.sign(next.c-cur.c);
+          const res=this.tryStep(dr,dc);
+          if(res===null){ this.autoPath=null; this.autoCD=0.2; return; }
+          if(res==='close'){ this.autoPath=null; } else this.autoPath.shift();
+          this.autoCD=STEP_INT;
+        }
+      }
+    }
+
+    autoPlan(){
+      aiStatus.textContent='AI 规划移动中…';
+      const qx=this.qx, qy=this.qy;
+      const cands=[];
+      const pushV=(cx,top)=>{ cands.push({axis:'v',col:cx,anchor:[top?0:G-1,cx],close:[top?G-1:0,cx]}); };
+      const pushH=(cy,left)=>{ cands.push({axis:'h',col:cy,anchor:[cy,left?0:G-1],close:[cy,left?G-1:0]}); };
+      const cxR=Math.ceil(qx+MARGIN); if(cxR<=G-3 && (G-2)-cxR>=1){ pushV(cxR,true); pushV(cxR,false); }
+      const cxL=Math.floor(qx-MARGIN); if(cxL>=2 && cxL-1>=1){ pushV(cxL,true); pushV(cxL,false); }
+      const cyB=Math.ceil(qy+MARGIN); if(cyB<=G-3 && (G-2)-cyB>=1){ pushH(cyB,true); pushH(cyB,false); }
+      const cyT=Math.floor(qy-MARGIN); if(cyT>=2 && cyT-1>=1){ pushH(cyT,true); pushH(cyT,false); }
+      let best=null;
+      for(const cd of cands){
+        const qpos=cd.axis==='v'?qx:qy;
+        cd.rw=(qpos<cd.col)?((G-2)-cd.col):(cd.col-1);
+        cd.path=this.buildAutoPath(cd);
+        if(!cd.path) continue;
+        const aIdx=this.perimIndex.get(cd.anchor[0]*G+cd.anchor[1]);
+        const cIdx=this.perimIndex.get(cd.close[0]*G+cd.close[1]);
+        const dist=(a)=>{ const d1=Math.abs(this.sparx1Idx-a), d2=Math.abs(this.sparx2Idx-a); return Math.min(d1,this.L-d1,d2,this.L-d2); };
+        const ds=Math.min(dist(aIdx),dist(cIdx));
+        cd.score=cd.rw*10 + ds*0.15;
+        if(!best||cd.score>best.score) best=cd;
+      }
+      if(!best){ this.autoPath=null; aiStatus.textContent='AI 规避 Qix…'; return; }
+      this.anchorR=best.anchor[0]; this.anchorC=best.anchor[1];
+      this.autoPath=best.path; this.plannedPath=best.path;
+      aiStatus.textContent='AI 圈地中…';
+    }
+
+    buildAutoPath(cd){
+      const path=[];
+      if(cd.axis==='v'){ const cx=cd.col; const top=cd.anchor[0]===0; const start=top?1:G-2, end=top?G-2:1, step=top?1:-1;
+        for(let r=start; r!==end+step; r+=step){ if(this.claimed[r][cx]===1) return null; path.push({r,c:cx}); }
+        path.push({r:cd.close[0],c:cx});
+      } else { const cy=cd.col; const left=cd.anchor[1]===0; const start=left?1:G-2, end=left?G-2:1, step=left?1:-1;
+        for(let c=start; c!==end+step; c+=step){ if(this.claimed[cy][c]===1) return null; path.push({r:cy,c}); }
+        path.push({r:cy,c:cd.close[1]});
+      }
+      return path;
+    }
+
+    bindInput(){
+      const pt=(e)=>{ const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); const T=this.W/G; return {cx:x/T, cy:y/T}; };
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; this.pointerDown=true; this.pointer=pt(e); });
+      canvas.addEventListener('pointermove',e=>{ if(this.pointerDown) this.pointer=pt(e); });
+      const up=()=>{ this.pointerDown=false; };
+      canvas.addEventListener('pointerup',up); canvas.addEventListener('pointercancel',up); window.addEventListener('pointerup',up);
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+
+    draw(){
+      const T=this.W/G; const W=this.W;
+      ctx.clearRect(0,0,W,W);
+      // claimed fill
+      ctx.save();
+      for(let r=1;r<G-1;r++) for(let c=1;c<G-1;c++) if(this.claimed[r][c]){ ctx.fillStyle='rgba(255,77,210,0.10)'; ctx.fillRect(c*T,r*T,T,T); }
+      // frontier glow
+      ctx.strokeStyle='rgba(255,77,210,0.9)'; ctx.lineWidth=2; ctx.shadowColor='#ff4dd2'; ctx.shadowBlur=6; ctx.beginPath();
+      for(let r=1;r<G-1;r++) for(let c=1;c<G-1;c++){ if(!this.claimed[r][c]) continue;
+        if(c+1<G-1 && !this.claimed[r][c+1]){ ctx.moveTo((c+1)*T,r*T); ctx.lineTo((c+1)*T,(r+1)*T); }
+        if(c-1>=1 && !this.claimed[r][c-1]){ ctx.moveTo(c*T,r*T); ctx.lineTo(c*T,(r+1)*T); }
+        if(r+1<G-1 && !this.claimed[r+1][c]){ ctx.moveTo(c*T,(r+1)*T); ctx.lineTo((c+1)*T,(r+1)*T); }
+        if(r-1>=1 && !this.claimed[r-1][c]){ ctx.moveTo(c*T,r*T); ctx.lineTo((c+1)*T,r*T); }
+      }
+      ctx.stroke(); ctx.restore();
+      // recent claim brighten
+      ctx.save(); ctx.fillStyle='rgba(255,77,210,0.35)';
+      for(const rc of this.recentClaim){ ctx.globalAlpha=Math.max(0,1-rc.t/0.6); ctx.fillRect(rc.c*T,rc.r*T,T,T); }
+      ctx.restore();
+      // planned path (auto)
+      if(this.autoPlay && this.plannedPath && this.plannedPath.length){ ctx.save(); ctx.setLineDash([6,7]); ctx.strokeStyle='rgba(255,77,210,0.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo((this.anchorC+0.5)*T,(this.anchorR+0.5)*T); for(const p of this.plannedPath) ctx.lineTo((p.c+0.5)*T,(p.r+0.5)*T); ctx.stroke(); ctx.restore(); }
+      // trail
+      if(this.trail.length>0){ ctx.save(); ctx.strokeStyle='#ff4dd2'; ctx.lineWidth=T*0.5; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.shadowColor='#ff4dd2'; ctx.shadowBlur=14; ctx.beginPath(); ctx.moveTo((this.anchorC+0.5)*T,(this.anchorR+0.5)*T); for(const t of this.trail) ctx.lineTo((t.c+0.5)*T,(t.r+0.5)*T); ctx.stroke(); const h=this.head; ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc((h.c+0.5)*T,(h.r+0.5)*T,T*0.28,0,7); ctx.fill(); ctx.restore(); }
+      // anchor ring
+      ctx.save(); ctx.strokeStyle='#ff4dd2'; ctx.lineWidth=2; ctx.globalAlpha=0.5+0.4*Math.sin(this.time*5); ctx.beginPath(); ctx.arc((this.anchorC+0.5)*T,(this.anchorR+0.5)*T,T*0.42,0,7); ctx.stroke(); ctx.restore();
+      // sparx
+      for(const s of [this.sparx1Idx,this.sparx2Idx]){ const [r,c]=this.perim[s]; const x=(c+0.5)*T,y=(r+0.5)*T; ctx.save(); ctx.translate(x,y); ctx.fillStyle='#ff5d6a'; ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=10; ctx.beginPath(); ctx.moveTo(0,-T*0.32); ctx.lineTo(T*0.3,T*0.26); ctx.lineTo(-T*0.3,T*0.26); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      // qix
+      const qxp=(this.qx+0.5)*T, qyp=(this.qy+0.5)*T; ctx.save(); ctx.translate(qxp,qyp); ctx.rotate(this.time*2.2); ctx.strokeStyle='#3df5ff'; ctx.fillStyle='rgba(61,245,255,0.22)'; ctx.shadowColor='#3df5ff'; ctx.shadowBlur=16; ctx.lineWidth=2; const R=T*0.5, rr=T*0.2; ctx.beginPath(); for(let i=0;i<8;i++){ const ang=Math.PI/4*i, rad=i%2?rr:R; const px=Math.cos(ang)*rad, py=Math.sin(ang)*rad; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+      // flash
+      if(this.flash>0){ ctx.save(); ctx.globalAlpha=Math.min(0.5,this.flash); ctx.fillStyle='#ff5d6a'; ctx.fillRect(0,0,W,W); ctx.restore(); }
+    }
+
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.reset(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoPath=null; this.autoCD=0.3; statusEl.textContent='自动游玩中 · 霓虹圈地'; if(!this.over) this.autoPlan(); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; if(!this.over) statusEl.textContent='拖动从边界画入场地，避开 Qix 与 Sparx，圈地达 75% 即胜'; }
+    restart(){ this.stopAuto(); this.reset(); }
+  }
+  window.game=new Game();
+})();
+</script>
+</body>
+</html>

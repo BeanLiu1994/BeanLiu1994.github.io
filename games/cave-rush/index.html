@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#160a2e" />
+<title>钻岩探险 · Cave Rush</title>
+<style>
+  :root { --bg:#160a2e; --surface:#1c1138; --board:#0d0820; --text:#f3eeff; --muted:#a99fd6; --accent:#ff9a3d; --accent-glow:#ff9a3d55; --gold:#ffd23f; --red:#ff5d6a; --cyan:#46e8ff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #2e1b55 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #1c1140 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:480px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#ffd9a8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.52rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.0rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .score-card.diamond .value { color:var(--cyan); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:14px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0d0820ee; backdrop-filter:blur(4px); border-radius:14px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .overlay.lose h2 { color:var(--red); }
+  .overlay.win h2 { color:var(--gold); }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#160a2e; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#160a2e; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>钻岩探险</h1>
+      <div class="sub">C A V E &nbsp; R U S H</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card diamond"><div class="label">钻石</div><div class="value" id="diamonds">0/8</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="game" width="360" height="360"></canvas>
+    <div class="overlay lose" id="overlay-lose">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>被埋了!</h2>
+        <p id="lose-msg">落石碾压了你</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+    <div class="overlay win" id="overlay-win">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2>撤离成功!</h2>
+        <p id="win-msg">你逃出了洞穴</p>
+        <button class="btn primary" onclick="game.restart()">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 规划移动中…</span>
+  </div>
+  <div class="status" id="status">方向键 / WASD / 滑动 移动挖矿，集齐钻石从发光出口撤离</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=15, ROWS=11;
+  const EMPTY=0, DIRT=1, WALL=2, BOULDER=3, DIAMOND=4, PLAYER=5, EXIT=6, EXIT_OPEN=7;
+  const REQUIRED=8;
+  const STEP=0.11;
+  const DIRS=[[0,-1],[0,1],[-1,0],[1,0]];
+
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best'), diamondEl=document.getElementById('diamonds');
+  const statusEl=document.getElementById('status');
+  const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
+  const overlayWin=document.getElementById('overlay-win'), winMsg=document.getElementById('win-msg');
+  const btnAuto=document.getElementById('btn-auto');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  const COLORS={ board:'#0d0820', empty:'#0a0720', dirt:'#3a2817', dirtDot:'#5a3d22', wall:'#3c4252', wallTop:'#5b6378', wallBot:'#262a36', boulder1:'#ffc27a', boulder2:'#b85a16', diamond:'#46e8ff', player:'#7dffb0', exitClosed:'#7a2a3a', exitOpen:'#9dff7d', accent:'#ff9a3d', red:'#ff5d6a', cyan:'#46e8ff' };
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+
+  class Cave {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.won=false; this.dead=false; this.time=0; this._last=0;
+      this.best=parseInt(localStorage.getItem('caveRushBest')||'0',10); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.newGame(false);
+      this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const rect=canvas.getBoundingClientRect();
+      const W=Math.max(260,Math.min((rect.width||360),440));
+      const T=W/COLS;
+      const H=T*ROWS;
+      const d=window.devicePixelRatio||1;
+      this.W=W; this.H=H; this.T=T;
+      canvas.width=Math.round(W*d); canvas.height=Math.round(H*d);
+      canvas.style.height=H+'px';
+      ctx.setTransform(d,0,0,d,0,0);
+    }
+    mk(t){ return {t:t, id:this.nextId++}; }
+    inb(r,c){ return r>=0&&r<ROWS&&c>=0&&c<COLS; }
+    type(r,c){ if(!this.inb(r,c)) return WALL; const o=this.grid[r][c]; return o?o.t:EMPTY; }
+    buildPrevPos(){ const m={}; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ const o=this.grid[r][c]; if(o) m[o.id]={r:r,c:c}; } return m; }
+    genLevel(){
+      this.nextId=1;
+      const g=[];
+      for(let r=0;r<ROWS;r++){ const row=[]; for(let c=0;c<COLS;c++){ const t=(r===0||c===0||r===ROWS-1||c===COLS-1)?WALL:DIRT; row.push(this.mk(t)); } g.push(row); }
+      this.grid=g;
+      for(let r=1;r<ROWS-1;r++) for(let c=1;c<COLS-1;c++){ const x=Math.random(); if(x<0.09) g[r][c]=this.mk(BOULDER); else if(x<0.22) g[r][c]=null; }
+      // player start (bottom-left interior), keep surroundings free of boulders
+      const pr=ROWS-2, pc=1;
+      for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const rr=pr+dr, cc=pc+dc; if(this.inb(rr,cc)&&rr>0&&rr<ROWS-1&&cc>0&&cc<COLS-1){ if(g[rr][cc] && g[rr][cc].t===BOULDER) g[rr][cc]=this.mk(DIRT); } }
+      g[pr][pc]=this.mk(PLAYER); this.pr=pr; this.pc=pc; this.pid=g[pr][pc].id;
+      // exit (top-right interior)
+      const er=1, ec=COLS-2;
+      g[er][ec]=this.mk(EXIT); this.exitPos={r:er,c:ec}; this.exitOpen=false;
+      // diamonds
+      const cells=[]; for(let r=1;r<ROWS-1;r++) for(let c=1;c<COLS-1;c++){ const o=g[r][c]; if((!o||o.t===DIRT||o.t===EMPTY)&&!(r===pr&&c===pc)&&!(r===er&&c===ec)) cells.push([r,c]); }
+      shuffle(cells);
+      const need=this.required+3;
+      for(let i=0;i<Math.min(need,cells.length);i++){ const cc=cells[i]; g[cc[0]][cc[1]]=this.mk(DIAMOND); }
+    }
+    updateExit(){
+      if(!this.exitOpen && this.diamonds>=this.required){ this.exitOpen=true; this.grid[this.exitPos.r][this.exitPos.c]={t:EXIT_OPEN,id:this.nextId++}; statusEl.textContent='出口已开启！从发光的出口撤离'; }
+    }
+    stepPlayer(nr,nc){ this.grid[this.pr][this.pc]=null; this.grid[nr][nc]={t:PLAYER,id:this.pid}; this.pr=nr; this.pc=nc; }
+    tryPlayerMove(dr,dc){
+      const nr=this.pr+dr, nc=this.pc+dc;
+      if(!this.inb(nr,nc)) return false;
+      const t=this.type(nr,nc);
+      if(t===WALL) return false;
+      if(t===EMPTY||t===DIRT){ this.stepPlayer(nr,nc); return true; }
+      if(t===DIAMOND){ this.diamonds++; this.score+=10; this.stepPlayer(nr,nc); this.updateHud(); return true; }
+      if(t===EXIT_OPEN){ this.stepPlayer(nr,nc); this.won=true; return true; }
+      if(t===BOULDER){ const br=nr+dr, bc=nc+dc; if(this.inb(br,bc)&&this.type(br,bc)===EMPTY){ const o=this.grid[nr][nc]; this.grid[br][bc]={t:BOULDER,id:o.id}; this.grid[nr][nc]=null; this.stepPlayer(nr,nc); return true; } return false; }
+      return false;
+    }
+    applyGravity(){
+      for(let r=ROWS-2;r>=0;r--){
+        for(let c=0;c<COLS;c++){
+          const o=this.grid[r][c];
+          if(!o || (o.t!==BOULDER && o.t!==DIAMOND)) continue;
+          const below=this.grid[r+1][c];
+          if(!below){ this.grid[r+1][c]={t:o.t,id:o.id}; this.grid[r][c]=null; }
+          else if(below.t===PLAYER){ this.dead=true; this.grid[r+1][c]={t:o.t,id:o.id}; this.grid[r][c]=null; }
+        }
+      }
+    }
+    bfs(sr,sc,isGoal,allowPush,avoidDanger){
+      const startK=sr+','+sc;
+      const q=[{r:sr,c:sc}]; const prev={}; const seen=new Set([startK]);
+      while(q.length){
+        const cur=q.shift();
+        if(isGoal(cur.r,cur.c)){
+          if(cur.r===sr&&cur.c===sc) return {path:[{r:sr,c:sc}],dir:null};
+          const path=[]; let k=cur.r+','+cur.c;
+          while(k!==undefined){ const p=k.split(',').map(Number); path.unshift({r:p[0],c:p[1]}); k=prev[k]; }
+          const dir=path.length>1?[path[1].r-sr,path[1].c-sc]:null;
+          return {path,dir};
+        }
+        for(const [dr,dc] of DIRS){
+          const nr=cur.r+dr, nc=cur.c+dc;
+          if(!this.inb(nr,nc)) continue;
+          const ty=this.type(nr,nc);
+          let ok=false;
+          if(ty===EMPTY||ty===DIRT||ty===DIAMOND||ty===EXIT_OPEN) ok=true;
+          else if(ty===BOULDER&&allowPush){ const br=nr+dr, bc=nc+dc; if(this.inb(br,bc)&&this.type(br,bc)===EMPTY) ok=true; }
+          if(!ok) continue;
+          if(avoidDanger && this.dangerous(nr,nc)) continue;
+          const k=nr+','+nc; if(seen.has(k)) continue; seen.add(k); prev[k]=cur.r+','+cur.c; q.push({r:nr,c:nc});
+        }
+      }
+      return null;
+    }
+    dangerous(r,c){
+      for(let k=r-1;k>=0;k--){
+        const t=this.type(k,c);
+        if(t===WALL) return false;
+        if(t===BOULDER||t===DIAMOND){
+          let fr=k;
+          while(fr+1<ROWS && this.type(fr+1,c)===EMPTY) fr++;
+          if(fr>=r-1) return true;
+          return false;
+        }
+      }
+      return false;
+    }
+    aiPlan(){
+      if(this.diamonds>=this.required){
+        this.aiTarget=this.exitPos;
+        const res=this.bfs(this.pr,this.pc,(r,c)=>this.type(r,c)===EXIT_OPEN,true,true) || this.bfs(this.pr,this.pc,(r,c)=>this.type(r,c)===EXIT_OPEN,true,false);
+        if(res&&res.dir){
+          const n=res.path[1];
+          if(this.dangerous(n.r,n.c)){ this.pendingDir=null; aiStatus.textContent='AI 等待落石…'; }
+          else { this.pendingDir=res.dir; aiStatus.textContent='AI 撤离中…'; }
+        } else { this.pendingDir=null; this.aiTarget=null; }
+        return;
+      }
+      const ds=[]; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.type(r,c)===DIAMOND) ds.push({r,c});
+      if(ds.length===0){ this.aiTarget=null; this.pendingDir=null; return; }
+      let best=null,bestLen=1e9,bestT=null,bestSafe=false;
+      for(const d of ds){
+        let res=this.bfs(this.pr,this.pc,(r,c)=>r===d.r&&c===d.c,true,true);
+        const safe = !!res;
+        if(!res) res=this.bfs(this.pr,this.pc,(r,c)=>r===d.r&&c===d.c,true,false);
+        if(!res) continue;
+        const n=res.path[1]; const firstDanger = n?this.dangerous(n.r,n.c):false;
+        if(safe && !firstDanger){ if(res.path.length<bestLen){ bestLen=res.path.length; best=res; bestT=d; bestSafe=true; } }
+        else if(!bestSafe && res.path.length<bestLen){ bestLen=res.path.length; best=res; bestT=d; }
+      }
+      if(best&&best.dir){
+        const n=best.path[1]; const ty=this.type(n.r,n.c);
+        if(this.dangerous(n.r,n.c)){ this.pendingDir=null; aiStatus.textContent='AI 等待落石…'; }
+        else { this.aiTarget=bestT; this.pendingDir=best.dir; aiStatus.textContent = ty===DIRT?'AI 挖通中…':(ty===BOULDER?'AI 推石中…':'AI 寻钻中…'); }
+      } else { this.aiTarget=null; this.pendingDir=null; }
+    }
+    doStep(){
+      this.prevPos=this.buildPrevPos();
+      if(this.dead||this.won) return;
+      if(this.autoPlay) this.aiPlan();
+      let dir=this.pendingDir||this.heldDir(); this.pendingDir=null;
+      if(dir) this.tryPlayerMove(dir[0],dir[1]);
+      if(!this.won&&!this.dead) this.applyGravity();
+      if(this.dead){ this.gameOver(false); return; }
+      if(this.won){ this.gameOver(true); return; }
+      this.updateExit();
+      if(this.autoPlay){
+        const moved=(this.pr!==this._lpr||this.pc!==this._lpc);
+        if(this.diamonds>this.lastDiamonds||moved){ this.lastDiamonds=this.diamonds; this.sinceProgress=0; }
+        else { this.sinceProgress++; if(this.sinceProgress>40) this.gameOver(false); }
+        this._lpr=this.pr; this._lpc=this.pc;
+      }
+    }
+    heldDir(){ return this.held.length?this.held[this.held.length-1]:null; }
+    update(dt){
+      if(this.over) return;
+      this.time+=dt;
+      this.stepAcc+=dt;
+      let steps=0;
+      while(this.stepAcc>=STEP && steps<4){ this.stepAcc-=STEP; this.doStep(); steps++; if(this.over) break; }
+      this.stepT=Math.min(1,this.stepAcc/STEP);
+    }
+    gameOver(win){
+      if(this.over) return;
+      this.over=true; this.won=win;
+      if(win) this.score+=100;
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('caveRushBest',String(this.best)); bestEl.textContent=this.best; }
+      scoreEl.textContent=this.score;
+      if(win){ winMsg.textContent='撤离成功！得分 '+this.score; overlayWin.classList.add('active'); }
+      else { loseMsg.textContent=this.dead?'落石把你碾成了饼！':'被困在洞穴里了！'; overlayLose.classList.add('active'); }
+      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.autoRestart(); },1500);
+    }
+    updateHud(){
+      scoreEl.textContent=this.score; bestEl.textContent=this.best;
+      diamondEl.textContent=this.diamonds+'/'+this.required;
+      if(this.autoPlay) statusEl.textContent='自动游玩中…';
+      else statusEl.textContent='方向键 / WASD / 滑动 移动挖矿，集齐钻石从发光出口撤离';
+    }
+    newGame(keepAuto){
+      this.over=false; this.won=false; this.dead=false;
+      this.score=0; this.diamonds=0; this.required=REQUIRED;
+      this.pendingDir=null; this.held=[]; this.stepAcc=0; this.stepT=0;
+      this.prevPos={}; this.aiTarget=null; this.autoCD=0.3;
+      this.sinceProgress=0; this.lastDiamonds=0; this._lpr=-1; this._lpc=-1;
+      this.genLevel();
+      overlayWin.classList.remove('active'); overlayLose.classList.remove('active');
+      this.updateHud();
+      if(!keepAuto) this.stopAuto();
+      else { aiInd.style.display='flex'; btnAuto.textContent='自动: 开'; btnAuto.classList.add('auto-on'); }
+    }
+    restart(){ this.newGame(false); }
+    autoRestart(){ this.newGame(true); }
+    startAuto(){ this.autoPlay=true; btnAuto.textContent='自动: 开'; btnAuto.classList.add('auto-on'); aiInd.style.display='flex'; this.aiTarget=null; this.autoCD=0.3; }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='自动: 关'; btnAuto.classList.remove('auto-on'); aiInd.style.display='none'; }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.autoRestart(); this.startAuto(); } }
+    bindInput(){
+      const cellAt=(e)=>{ const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(this.W/rect.width), y=(e.clientY-rect.top)*(this.H/rect.height); const c=Math.floor(x/this.T), r=Math.floor(y/this.T); if(!this.inb(r,c)) return null; return {r,c}; };
+      let sx=0,sy=0;
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; sx=e.clientX; sy=e.clientY; });
+      canvas.addEventListener('pointerup',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const dx=e.clientX-sx, dy=e.clientY-sy; const adx=Math.abs(dx), ady=Math.abs(dy);
+        if(adx<14 && ady<14){ const cl=cellAt(e); if(!cl) return; const dr=Math.sign(cl.r-this.pr), dc=Math.sign(cl.c-this.pc); if(adx>=ady) this.pendingDir=[0,dc||0]; else this.pendingDir=[dr||0,0]; }
+        else { if(adx>=ady) this.pendingDir=[0, dx>0?1:-1]; else this.pendingDir=[dy>0?1:-1,0]; }
+      });
+      const KEYS={ArrowUp:[-1,0],w:[-1,0],W:[-1,0],ArrowDown:[1,0],s:[1,0],S:[1,0],ArrowLeft:[0,-1],a:[0,-1],A:[0,-1],ArrowRight:[0,1],d:[0,1],D:[0,1]};
+      window.addEventListener('keydown',e=>{ const k=KEYS[e.key]; if(!k) return; e.preventDefault(); if(this.over||this.autoPlay) return; this.held.push(k); this.pendingDir=k; });
+      window.addEventListener('keyup',e=>{ const k=KEYS[e.key]; if(!k) return; const i=this.held.indexOf(k); if(i>=0) this.held.splice(i,1); });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    drawDirt(x,y,T){
+      ctx.fillStyle=COLORS.dirt; this.rr(x+1,y+1,T-2,T-2,4); ctx.fill();
+      ctx.fillStyle=COLORS.dirtDot;
+      const seed=((x*13+y*7)|0);
+      for(let i=0;i<3;i++){ const rx=((seed*(i+3))%100)/100, ry=((seed*(i+5))%97)/97; const px=x+4+rx*(T-8), py=y+4+ry*(T-8); ctx.beginPath(); ctx.arc(px,py,1.3,0,7); ctx.fill(); }
+    }
+    drawWall(x,y,T){
+      ctx.fillStyle=COLORS.wall; ctx.fillRect(x,y,T,T);
+      const h=Math.max(2,T*0.16);
+      ctx.fillStyle=COLORS.wallTop; ctx.fillRect(x,y,T,h);
+      ctx.fillStyle=COLORS.wallBot; ctx.fillRect(x,y+T-h,T,h);
+    }
+    drawExitClosed(x,y,T){
+      ctx.fillStyle=COLORS.empty; ctx.fillRect(x,y,T,T);
+      ctx.fillStyle=COLORS.exitClosed; this.rr(x+T*0.2,y+T*0.2,T*0.6,T*0.6,4); ctx.fill();
+      const cx=x+T/2, cy=y+T/2;
+      ctx.strokeStyle='#ffb3c0'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(cx,cy-T*0.04,T*0.1,Math.PI,0); ctx.stroke();
+      ctx.fillStyle='#ffd0d8'; this.rr(cx-T*0.12,cy-T*0.02,T*0.24,T*0.2,2); ctx.fill();
+    }
+    drawTerrain(r,c,T){
+      const x=c*T, y=r*T; const o=this.grid[r][c];
+      if(!o){ ctx.fillStyle=COLORS.empty; ctx.fillRect(x,y,T,T); ctx.strokeStyle='#ffffff06'; ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,T-1,T-1); return; }
+      switch(o.t){
+        case DIRT: this.drawDirt(x,y,T); break;
+        case WALL: this.drawWall(x,y,T); break;
+        case EXIT: this.drawExitClosed(x,y,T); break;
+        default: ctx.fillStyle=COLORS.empty; ctx.fillRect(x,y,T,T);
+      }
+    }
+    drawObject(o,x,y,T){
+      const cx=x+T/2, cy=y+T/2;
+      if(o.t===BOULDER){
+        const g=ctx.createRadialGradient(cx-T*0.12,cy-T*0.12,T*0.05,cx,cy,T*0.42);
+        g.addColorStop(0,COLORS.boulder1); g.addColorStop(1,COLORS.boulder2);
+        ctx.save(); ctx.shadowColor=COLORS.accent; ctx.shadowBlur=10; ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,T*0.4,0,7); ctx.fill(); ctx.restore();
+        ctx.fillStyle='#ffffff55'; ctx.beginPath(); ctx.arc(cx-T*0.13,cy-T*0.13,T*0.1,0,7); ctx.fill();
+      } else if(o.t===DIAMOND){
+        ctx.save(); ctx.shadowColor=COLORS.diamond; ctx.shadowBlur=12; ctx.fillStyle=COLORS.diamond;
+        const s=T*0.34; ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx+s*0.8,cy); ctx.lineTo(cx,cy+s); ctx.lineTo(cx-s*0.8,cy); ctx.closePath(); ctx.fill(); ctx.restore();
+        ctx.strokeStyle='#ffffff88'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx,cy-s); ctx.lineTo(cx,cy+s); ctx.moveTo(cx-s*0.8,cy); ctx.lineTo(cx+s*0.8,cy); ctx.stroke();
+      } else if(o.t===PLAYER){
+        ctx.save(); ctx.shadowColor=COLORS.player; ctx.shadowBlur=12; ctx.fillStyle=COLORS.player; this.rr(cx-T*0.32,cy-T*0.32,T*0.64,T*0.64,6); ctx.fill(); ctx.restore();
+        ctx.fillStyle='#0b2a1c'; ctx.beginPath(); ctx.arc(cx-T*0.12,cy-T*0.04,T*0.07,0,7); ctx.arc(cx+T*0.12,cy-T*0.04,T*0.07,0,7); ctx.fill();
+      } else if(o.t===EXIT_OPEN){
+        const pulse=0.5+0.5*Math.sin(this.time*5);
+        ctx.save(); ctx.shadowColor=COLORS.exitOpen; ctx.shadowBlur=14; ctx.strokeStyle=COLORS.exitOpen; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(cx,cy,T*0.36*(0.8+0.2*pulse),0,7); ctx.stroke();
+        ctx.globalAlpha=0.5; ctx.fillStyle=COLORS.exitOpen; ctx.beginPath(); ctx.arc(cx,cy,T*0.22*(0.8+0.2*pulse),0,7); ctx.fill(); ctx.restore();
+      }
+    }
+    draw(){
+      const T=this.T, st=this.stepT;
+      ctx.clearRect(0,0,this.W,this.H);
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) this.drawTerrain(r,c,T);
+      if(this.autoPlay){ for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(this.dangerous(r,c)){ ctx.fillStyle='#ff3b3b18'; ctx.fillRect(c*T,r*T,T,T); } } }
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const o=this.grid[r][c]; if(!o) continue;
+        if(o.t===BOULDER||o.t===DIAMOND||o.t===PLAYER||o.t===EXIT_OPEN){
+          const pp=this.prevPos[o.id]; let ox=0,oy=0;
+          if(pp && (pp.r!==r||pp.c!==c)){ ox=(pp.c-c)*(1-st); oy=(pp.r-r)*(1-st); }
+          this.drawObject(o,(c+ox)*T,(r+oy)*T,T);
+        }
+      }
+      if(this.autoPlay && this.aiTarget){ const r=this.aiTarget.r, c=this.aiTarget.c; ctx.save(); ctx.strokeStyle=COLORS.accent; ctx.lineWidth=3; ctx.globalAlpha=0.5+0.4*Math.sin(this.time*6); this.rr(c*T+3,r*T+3,T-6,T-6,6); ctx.stroke(); ctx.restore(); }
+    }
+    loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
+  }
+  window.game=new Cave();
+})();
+</script>
+</body>
+</html>
