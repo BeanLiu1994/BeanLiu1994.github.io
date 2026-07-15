@@ -93,9 +93,8 @@
     box(p){ return (p.type==='b'||p.type==='v')?2:1; }   // 高度
     wide(p){ return (p.type==='b'||p.type==='h')?2:1; }  // 宽度
     dirs(p){
-      if(p.type==='v') return [[1,0],[-1,0]];
-      if(p.type==='h') return [[0,1],[0,-1]];
-      return [[1,0],[-1,0],[0,1],[0,-1]]; // b, s 可四向
+      // 真·华容道：所有棋子均可四向滑动（不旋转），曹操(2x2)亦如此
+      return [[1,0],[-1,0],[0,1],[0,-1]];
     }
     occ(list, exceptId){
       const g=Array.from({length:ROWS},()=>Array(COLS).fill(-1));
@@ -159,38 +158,83 @@
       }
       return {path:null,capped:false};
     }
+    bfsPath(start, isGoal){
+      // 通用 BFS：从 start 出发找首个满足 isGoal 的局面，返回「移动序列」
+      // （每步均为合法单步滑动）。找不到则返回 null。用于一次性求出「出口→顶行」路径。
+      const key=ls=>ls.map(p=>p.id+':'+p.type+':'+p.r+':'+p.c).join('|');
+      if(isGoal(start)) return [];
+      const q=[start.map(p=>({...p}))]; let head=0; const seen=new Set([key(q[0])]);
+      const parent=new Map(); parent.set(key(q[0]),{prev:null,move:null});
+      while(head<q.length){
+        const cur=q[head++]; const g=this.occ(cur,-1);
+        for(let ci=0; ci<cur.length; ci++){
+          const c=cur[ci]; const ds=this.dirs(c);
+          for(let di=0; di<ds.length; di++){
+            const dr=ds[di][0], dc=ds[di][1];
+            const nr=c.r+dr, nc=c.c+dc, h=this.box(c), w=this.wide(c); let ok=true;
+            for(let i=0;i<h;i++) for(let j=0;j<w;j++){ const r=nr+i, ccol=nc+j;
+              if(r<0||r>=ROWS||ccol<0||ccol>=COLS||(g[r][ccol]!==-1&&g[r][ccol]!==c.id)){ ok=false; break; } }
+            if(!ok) continue;
+            const nx=cur.map(x=>x.id===c.id?{...x,r:nr,c:nc}:{...x});
+            const kk=key(nx);
+            if(isGoal(nx)){
+              const path=[{id:c.id,dr,dc}]; let pk=key(cur);
+              while(parent.get(pk) && parent.get(pk).prev!==null){ const node=parent.get(pk); path.push(node.move); pk=node.prev; }
+              path.reverse(); return path;
+            }
+            if(!seen.has(kk)){ seen.add(kk); parent.set(kk,{prev:key(cur),move:{id:c.id,dr,dc}}); q.push(nx); }
+          }
+        }
+        if(seen.size>300000) return null;
+      }
+      return null;
+    }
     genPuzzle(){
-      // 从“曹操已在出口”的已解状态出发，随机挪动若干步打乱；
-      // 由于每一步都可逆，逆向序列必为从当前局面回到出口（曹操脱困）的解法——由构造保证一定可解。
+      // 目标：曹操(2x2)开局在顶行(r0,c1)，离底部出口(r3,c1)很远，绝不会「挪一格就赢」。
+      // 做法：从「曹操已在出口(底中)」的合法终局出发，BFS 一次性求出「出口→顶行」的升顶路径并缓存；
+      // 每局复用该路径把曹操升到顶行，再随机挪动其余棋子做变化（不动曹操，守住顶行）。
+      // 逆向(变化)+逆向(升顶) 即「当前局面→顶行→出口」的解法，由构造保证一定可解。
+      const EXIT_R=ROWS-2, EXIT_C=1;
       const solved=[
         {id:'cao', type:'b', r:3, c:1, name:'曹操', color:'#ff5d6a'},
-        {id:'guan',type:'v', r:0, c:0, name:'关羽', color:PAL[0]},
-        {id:'zhang',type:'v', r:0, c:3, name:'张飞', color:PAL[1]},
-        {id:'zhao',type:'v', r:2, c:0, name:'赵云', color:PAL[2]},
-        {id:'ma',  type:'v', r:2, c:3, name:'马超', color:PAL[3]},
-        {id:'huang',type:'h',r:0, c:1, name:'黄忠', color:PAL[4]},
-        {id:'b1', type:'s', r:2, c:1, name:'兵', color:PAL[5]},
-        {id:'b2', type:'s', r:2, c:2, name:'兵', color:PAL[5]},
+        {id:'guan',type:'h', r:0, c:1, name:'关羽', color:PAL[0]},
+        {id:'zhang',type:'v', r:0, c:0, name:'张飞', color:PAL[1]},
+        {id:'zhao',type:'v', r:0, c:3, name:'赵云', color:PAL[2]},
+        {id:'ma',  type:'v', r:2, c:0, name:'马超', color:PAL[3]},
+        {id:'huang',type:'v', r:2, c:3, name:'黄忠', color:PAL[4]},
+        {id:'b1', type:'s', r:1, c:1, name:'兵', color:PAL[5]},
+        {id:'b2', type:'s', r:1, c:2, name:'兵', color:PAL[5]},
+        {id:'b3', type:'s', r:4, c:0, name:'兵', color:PAL[5]},
+        {id:'b4', type:'s', r:4, c:3, name:'兵', color:PAL[5]},
       ];
-      let chosen=null, chosenSol=null, attempts=0;
-      while(!chosen && attempts<3000){
-        attempts++;
-        const cur=solved.map(p=>({...p}));
-        const K=70+((Math.random()*80)|0);
-        const scramble=[]; let lastId=null, lastDr=0, lastDc=0;
-        for(let k=0;k<K;k++){
-          const p=cur[(Math.random()*cur.length)|0];
-          const [dr,dc]=this.dirs(p)[(Math.random()*this.dirs(p).length)|0];
-          if(p.id===lastId && dr===-lastDr && dc===-lastDc) continue; // 不立刻撤销上一步
-          if(this.canStep(cur,p,dr,dc)){ p.r+=dr; p.c+=dc; scramble.push({id:p.id,dr,dc}); lastId=p.id; lastDr=dr; lastDc=dc; }
-        }
-        if(this.isWin(cur)) continue;        // 打乱后不能已经通关
-        if(scramble.length<15) continue;   // 至少要像样地打乱过
-        // 逆向序列即为从当前局面回到已解（曹操出口）的解法
-        chosen=cur;
-        chosenSol=scramble.slice().reverse().map(m=>({id:m.id, dr:-m.dr, dc:-m.dc}));
+      if(!this._ascend){
+        // 一次性：从终局 BFS 到「曹操到顶行」的局面，得到升顶路径
+        this._ascend = this.bfsPath(solved.map(p=>({...p})), ls=>ls.find(p=>p.type==='b').r===0) || [];
       }
-      // chosen 必然存在：从已解状态出发的合法打乱逆向必可解
+      const caoOneMoveWin=(ls)=>{ const cao=ls.find(p=>p.type==='b'); for(const [dr,dc] of this.dirs(cao)){ if(this.canStep(ls,cao,dr,dc)){ const t=ls.map(p=>p.id===cao.id?{...p,r:cao.r+dr,c:cao.c+dc}:{...p}); if(this.isWin(t)) return true; } } return false; };
+      const ascend=this._ascend;
+      let chosen=null, chosenSol=null, outer=0;
+      while(!chosen && outer<50){
+        outer++;
+        const cur=solved.map(p=>({...p}));
+        // ① 复用缓存的升顶路径 → 曹操到顶行
+        for(const m of ascend){ const p=cur.find(x=>x.id===m.id); p.r+=m.dr; p.c+=m.dc; }
+        // ② 只随机挪动其余棋子做变化（绝不动曹操，守住顶行）
+        const extra=[];
+        const K=30+((Math.random()*40)|0);
+        for(let k=0;k<K;k++){
+          const others=cur.filter(p=>p.type!=='b');
+          const p=others[(Math.random()*others.length)|0];
+          const d=this.dirs(p)[(Math.random()*4)|0];
+          if(this.canStep(cur,p,d[0],d[1])){ p.r+=d[0]; p.c+=d[1]; extra.push({id:p.id,dr:d[0],dc:d[1]}); }
+        }
+        if(caoOneMoveWin(cur)) continue; // 安全阀：极端情况下曹操仍不能一步就赢
+        chosen=cur;
+        // 解法：逆向(变化) 回到顶行局面，再逆向(升顶) 回到出口
+        chosenSol=extra.slice().reverse().map(m=>({id:m.id, dr:-m.dr, dc:-m.dc}))
+                   .concat(ascend.slice().reverse().map(m=>({id:m.id, dr:-m.dr, dc:-m.dc})));
+      }
+      if(!chosen){ chosen=solved.map(p=>({...p})); chosenSol=ascend.slice().reverse(); }
       this.pieces=chosen.map(p=>({...p, dr:p.r, dc:p.c}));
       this.solution=chosenSol;
     }
@@ -251,10 +295,14 @@
     rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){
-      // 从当前局面实时求解，保证手动改动后仍能自动通关
-      const res=this.solve(this.pieces,200000);
-      if(!res||res.capped||!res.path){ this.flashStatus('当前局面无解'); return; }
-      this.solution=res.path; this.solIdx=0; this.cool=8; this.autoPlay=true;
+      // 优先使用生成时已算好并验证过的解法（曹操从开局到出口，由构造保证可解），
+      // 仅当玩家手动改动过棋盘（moves>0）才实时 BFS 重新求解——避免每次开自动都跑全量 BFS。
+      if(!(this.moves===0 && this.solution && this.solution.length)){
+        const res=this.solve(this.pieces,200000);
+        if(!res||res.capped||!res.path){ this.flashStatus('当前局面无解'); return; }
+        this.solution=res.path;
+      }
+      this.solIdx=0; this.cool=8; this.autoPlay=true;
       const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
       document.getElementById('ai-indicator').style.display='flex';
       document.getElementById('ai-status').textContent='AI 求解中…（'+this.solution.length+' 步）';
@@ -265,19 +313,13 @@
       const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
       canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); const rc=this.cellAt(e); const p=this.pieceAt(rc); if(!p) return; this.drag={p, start:pos(e), baseR:p.r, baseC:p.c}; });
       canvas.addEventListener('pointermove',(e)=>{ if(!this.drag||this.autoPlay||this.over) return; const d=pos(e); const p=this.drag.p;
+        // 所有棋子均可四向滑动（真实华容道规则）：按拖拽主方向在单一轴线上移动并夹紧到可行步数
+        const ddx=(d.x-this.drag.start.x)/CS, ddy=(d.y-this.drag.start.y)/CS;
         let dr=0, dc=0;
-        if(p.type==='v'){ dr=Math.round((d.y-this.drag.start.y)/CS); }
-        else if(p.type==='h'){ dc=Math.round((d.x-this.drag.start.x)/CS); }
-        else { // b / s : 取主方向
-          const ddx=(d.x-this.drag.start.x)/CS, ddy=(d.y-this.drag.start.y)/CS;
-          if(Math.abs(ddx)>Math.abs(ddy)) dc=Math.round(ddx); else dr=Math.round(ddy);
-        }
-        // 夹紧到可行步数
+        if(Math.abs(ddy)>=Math.abs(ddx)){ dr=Math.round(ddy); } else { dc=Math.round(ddx); }
         if(dr<0){ dr=Math.max(-this.freeSteps(this.pieces,p,-1,0), dr); } else if(dr>0){ dr=Math.min(this.freeSteps(this.pieces,p,1,0), dr); }
         if(dc<0){ dc=Math.max(-this.freeSteps(this.pieces,p,0,-1), dc); } else if(dc>0){ dc=Math.min(this.freeSteps(this.pieces,p,0,1), dc); }
-        if(p.type==='v'){ p.r=this.drag.baseR+dr; }
-        else if(p.type==='h'){ p.c=this.drag.baseC+dc; }
-        else { p.r=this.drag.baseR+dr; p.c=this.drag.baseC+dc; }
+        p.r=this.drag.baseR+dr; p.c=this.drag.baseC+dc;
       });
       canvas.addEventListener('pointerup',()=>{ if(!this.drag) return; const p=this.drag.p;
         const moved = (p.r!==this.drag.baseR)||(p.c!==this.drag.baseC);
