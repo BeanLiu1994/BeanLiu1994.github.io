@@ -93,12 +93,12 @@
     }
     loadBest(){ try{ return parseInt(localStorage.getItem('bounce_best')||'1')||1; }catch(e){ return 1; } }
     saveBest(v){ try{ localStorage.setItem('bounce_best', String(v)); }catch(e){} }
-    loadLevel(i){ const L=LEVELS[i]; this.coins=L.coins.map(c=>({x:c[0],y:c[1],got:false})); this.hazards=L.hazards.map(h=>({x:h[0],y:h[1]})); this.ball={x:L.start.x,y:L.start.y,vx:SPEED,vy:0,r:BR}; this.lvl=i; }
+    loadLevel(i){ const L=LEVELS[i]; this.coins=L.coins.map(c=>({x:c[0],y:c[1],got:false})); this.hazards=L.hazards.map(h=>({x:h[0],y:h[1]})); this.ball={x:L.start.x,y:L.start.y,vx:SPEED*0.82,vy:SPEED*0.57,r:BR}; this.lvl=i; }
     restart(){
       this.stopAuto(); this.over=false; this.win=false; this.coinsGot=0; this.lives=3; this.invuln=0; this.steer=null;
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');
-      this.loadLevel(0); this.updateUI();
+      this.loadLevel(0); this.updateUI(); this.updateModeUI();
     }
     updateUI(){ document.getElementById('score-co').textContent=this.coinsGot; document.getElementById('score-lives').textContent=this.lives; document.getElementById('best-stat').textContent='Best: Lvl '+this.best; document.getElementById('lvl-stat').textContent='Level '+(this.lvl+1); }
     nearestCoin(){ let best=null,bd=1e9; for(const c of this.coins){ if(c.got) continue; const d=Math.hypot(c.x-this.ball.x,c.y-this.ball.y); if(d<bd){bd=d;best=c;} } return best; }
@@ -106,19 +106,31 @@
       if(this.over) return;
       if(this.invuln>0) this.invuln--;
       const b=this.ball;
-      // target
-      let tx,ty;
-      if(this.autoPlay || !this.steer){ const c=this.nearestCoin(); if(c){ tx=c.x; ty=c.y; } else { tx=W/2; ty=H/2; } }
-      else { tx=this.steer.x; ty=this.steer.y; }
-      // avoidance
-      let ax=0, ay=0;
-      for(const h of this.hazards){ const dx=b.x-h.x, dy=b.y-h.y, d=Math.hypot(dx,dy)||1; if(d<90){ const f=(90-d)/90; ax+=dx/d*f; ay+=dy/d*f; } }
-      let dirx=tx-b.x, diry=ty-b.y; const dl=Math.hypot(dirx,diry)||1; dirx/=dl; diry/=dl;
-      dirx+=ax*1.6; diry+=ay*1.6; const dl2=Math.hypot(dirx,diry)||1; dirx/=dl2; diry/=dl2;
-      // steer current velocity
-      let cvx=b.vx, cvy=b.vy; const cl=Math.hypot(cvx,cvy)||1; cvx/=cl; cvy/=cl;
-      let nx=cvx+(dirx-cvx)*STEER, ny=cvy+(diry-cvy)*STEER; const nl=Math.hypot(nx,ny)||1; nx/=nl; ny/=nl;
-      b.vx=nx*SPEED; b.vy=ny*SPEED;
+      // 目标方向与转向：手动/自动两种模式行为不同
+      let tx=null, ty=null, autoAvoid=false;
+      if(this.autoPlay){
+        // 自动模式：AI 自动锁定最近的金币
+        const c=this.nearestCoin();
+        if(c){ tx=c.x; ty=c.y; } else { tx=W/2; ty=H/2; }
+        autoAvoid=true;            // 自动模式额外自动躲避障碍
+      } else if(this.steer){
+        // 手动模式且正在拖动：朝手指/鼠标位置引导
+        tx=this.steer.x; ty=this.steer.y;
+      }
+      // 仅在有目标时（自动巡航 / 手动引导）才调整速度方向；
+      // 手动模式且未拖动时，小球保持当前速度自由反弹，完全由玩家接管。
+      if(tx!==null){
+        let ax=0, ay=0;
+        if(autoAvoid){
+          for(const h of this.hazards){ const dx=b.x-h.x, dy=b.y-h.y, d=Math.hypot(dx,dy)||1; if(d<90){ const f=(90-d)/90; ax+=dx/d*f; ay+=dy/d*f; } }
+        }
+        let dirx=tx-b.x, diry=ty-b.y; const dl=Math.hypot(dirx,diry)||1; dirx/=dl; diry/=dl;
+        dirx+=ax*1.6; diry+=ay*1.6; const dl2=Math.hypot(dirx,diry)||1; dirx/=dl2; diry/=dl2;
+        // steer current velocity
+        let cvx=b.vx, cvy=b.vy; const cl=Math.hypot(cvx,cvy)||1; cvx/=cl; cvy/=cl;
+        let nx=cvx+(dirx-cvx)*STEER, ny=cvy+(diry-cvy)*STEER; const nl=Math.hypot(nx,ny)||1; nx/=nl; ny/=nl;
+        b.vx=nx*SPEED; b.vy=ny*SPEED;
+      }
       b.x+=b.vx*dt; b.y+=b.vy*dt;
       // walls
       if(b.x<M+b.r){ b.x=M+b.r; b.vx=Math.abs(b.vx); }
@@ -156,9 +168,25 @@
       const inv=this.invuln>0 && (this.invuln%10<5);
       if(!inv){ ctx.shadowColor='#54e08a'; ctx.shadowBlur=14; ctx.fillStyle=this.invuln>0?'#ffd24d':'#54e08a'; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,this.ball.r,0,7); ctx.fill(); ctx.shadowBlur=0; }
     }
-    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI navigating...'; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    toggleAuto(){ if(this.autoPlay){ this.stopAuto(); } else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; this.steer=null; this.updateModeUI(); }
+    stopAuto(){ this.autoPlay=false; this.updateModeUI(); }
+    updateModeUI(){
+      const b=document.getElementById('btn-auto');
+      const ind=document.getElementById('ai-indicator');
+      const dot=ind.querySelector('.ai-dot');
+      const st=document.getElementById('ai-status');
+      if(this.autoPlay){
+        b.textContent='Auto: ON'; b.classList.add('auto-on');
+        ind.style.display='flex'; dot.style.display='';
+        const remain=this.coins?this.coins.filter(c=>!c.got).length:0;
+        st.textContent='AI 自动巡航：自动吃币 + 躲障碍（剩 '+remain+' 币）';
+      } else {
+        b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+        ind.style.display='flex'; dot.style.display='none';
+        st.textContent='手动模式：按住并拖动屏幕来引导小球';
+      }
+    }
     bind(){
       const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
       canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); this.steer=pos(e); });
