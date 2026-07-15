@@ -136,7 +136,8 @@
       const ghostStarts=[[COLS-2,ROWS-2],[COLS-2,1],[1,ROWS-2]].slice(0,nG);
       const pStart=[1,1];
       this.dot[pStart[1]][pStart[0]]=false;
-      this.player={ c:pStart[0], r:pStart[1], x:pStart[0]+0.5, y:pStart[1]+0.5, dir:{dc:1,dr:0}, ndir:{dc:1,dr:0}, tc:pStart[0], tr:pStart[1], speed:7.0 };
+      this.player={ c:pStart[0], r:pStart[1], x:pStart[0]+0.5, y:pStart[1]+0.5, dir:{dc:1,dr:0}, ndir:{dc:1,dr:0}, tc:pStart[0], tr:pStart[1], speed:7.0, lastC:pStart[0], lastR:pStart[1] };
+      this.fleeing=false; // 逃跑状态（带迟滞，避免在安全阈值处反复横跳）
       this.ghosts=ghostStarts.map((g,i)=>{
         this.dot[g[1]][g[0]]=false;
         const vdirs=DIRS.filter(d=>!this.wall[g[1]+d.dr][g[0]+d.dc]);
@@ -211,14 +212,17 @@
       }
       return {c:bc, r:br};
     }
-    reachableCount(c,r){
+    reachableCount(c,r,blocked){
       // 从 (c,r) 出发可达的格子数（BFS，限上限），用于评估该处是否「开阔」——
       // 开阔处逃生机大，死胡同易被困。躲避时优先选可达空间大的方向。
+      // blocked(c,r)：把幽灵所在格视为墙，这样「被幽灵封口的死胡同」可达空间会很小，
+      // 从而被明确识别为陷阱、避免钻进去反复徘徊。
       const key=(cc,rr)=>rr*COLS+cc; const seen=new Set([key(c,r)]); const q=[[c,r]]; let head=0, cnt=0;
       while(head<q.length && cnt<361){
         const [cc,cr]=q[head++]; cnt++;
         for(const d of DIRS){ const nc=cc+d.dc, nr=cr+d.dr;
           if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
+          if(blocked && blocked(nc,nr)) continue;
           const k=key(nc,nr); if(seen.has(k)) continue; seen.add(k); q.push([nc,nr]); }
       }
       return cnt;
@@ -256,15 +260,18 @@
       if(!v.length){ this.player.ndir=null; this.autoTarget=null; return; }
       const threat=this.ghostThreatMap();
       const cur=threat[p.r][p.c];
-      const SAFE=8; // 玩家自身需离幽灵 ≥8 格才算「真安全」，才去吃豆
-      // 真安全 → 朝最近光点稳步推进
-      if(cur>=SAFE){
+      // 迟滞：安全时才吃豆、危险时才逃；进入/退出用不同阈值，避免在单一阈值附近反复横跳（钻进死胡同来回徘徊的主因之一）
+      const ENTER_FLEE=8, EXIT_FLEE=11;
+      if(this.fleeing){ if(cur>=EXIT_FLEE) this.fleeing=false; }
+      else { if(cur<ENTER_FLEE) this.fleeing=true; }
+      // 安全 → 朝最近光点稳步推进（BFS 会绕开幽灵，路径确定、不抖动）
+      if(!this.fleeing){
         const dot=this.bfsStep(p.c,p.r);
         if(dot){ this.player.ndir={dc:dot.c-p.c, dr:dot.r-p.r}; this.autoTarget={c:dot.c,r:dot.r}; aiStatus.textContent='AI 寻找光点中…'; return; }
       }
       // 否则逃（占主导）：每步都选「离最近幽灵最远」的邻格（maximin），绝不朝幽灵走；
-      // 用「可达空间」做 tiebreak 避免钻进死胡同被堵死。比「规划到全局最远格」更稳——
-      // 后者最短路径可能先朝幽灵方向绕，被会移动的幽灵截住。
+      // 用「幽灵感知的可达空间」做权重，明确识别并避开被封口的死胡同；
+      // 对「刚离开的格」施加轻微回头惩罚，打破两格之间的来回震荡。
       const blocked=this.ghostBlocked();
       let step=null;
       const cands=[];
@@ -272,12 +279,16 @@
         const nc=p.c+d.dc, nr=p.r+d.dr;
         if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
         if(blocked(nc,nr)) continue; // 绝不踩幽灵当前所在格
-        cands.push({d, nc, nr, space:this.reachableCount(nc,nr), flee:this.fleeScore(nc,nr)});
+        cands.push({d, nc, nr, space:this.reachableCount(nc,nr,blocked), flee:this.fleeScore(nc,nr),
+          isBack:(nc===this.player.lastC && nr===this.player.lastR)});
       }
       if(cands.length){
-        // 评分：1 步极小化极大（甩开幽灵夹击）为主，叠加可达空间（防死胡同）。
-        const W=0.15+(8-cur)*0.05;
-        for(const c of cands) c.score=c.flee + c.space*W;
+        // 评分：1 步极小化极大（甩开幽灵夹击）为主，叠加幽灵感知可达空间（防死胡同）。
+        const W=0.25+(ENTER_FLEE-Math.min(cur,ENTER_FLEE))*0.06;
+        // 回头惩罚：只要还有别的非回头选择，就压低回头分，避免在两格间来回抖；
+        // 若回头是唯一出路（真死胡同），惩罚不至于阻止其逃离。
+        const hasFwd=cands.some(c=>!c.isBack);
+        for(const c of cands){ c.score=c.flee + c.space*W - (c.isBack&&hasFwd?4:0); }
         cands.sort((a,b)=> b.score-a.score);
         const b=cands[0]; step={c:b.nc, r:b.nr};
       }
@@ -293,6 +304,7 @@
         const v=this.validDirs(this.player.c,this.player.r,this.player.dir);
         if(v.length) this.player.dir=v[0]; else { this.player.tc=this.player.c; this.player.tr=this.player.r; return; }
       }
+      this.player.lastC=this.player.c; this.player.lastR=this.player.r; // 记录刚离开的格，供回头惩罚使用
       this.player.tc=this.player.c+this.player.dir.dc; this.player.tr=this.player.r+this.player.dir.dr;
       if(this.dot[this.player.r][this.player.c]){ this.dot[this.player.r][this.player.c]=false; this.dotsLeft--; this.score=(this.score||0)+10; scoreEl.textContent=this.score; if(this.dotsLeft<=0) this.nextLevel(); }
     }
