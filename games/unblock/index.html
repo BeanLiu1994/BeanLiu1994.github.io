@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <meta name="theme-color" content="#0a0a1a" />
-<title>霓虹华容道 · Unblock</title>
+<title>霓虹华容道 · Klotski</title>
 <style>
   :root { --bg:#0a0a1a; --surface:#12122a; --board:#0b1024; --text:#e0e0f0; --muted:#8888aa;
     --accent:#4dd0ff; --accent-glow:#4dd0ff66; --danger:#ff5d6a; --gold:#ffd700; }
@@ -52,88 +52,107 @@
 <body>
 <div class="container">
   <div class="header">
-    <div class="title-block"><h1>霓虹华容道</h1><div class="sub">U N B L O C K &nbsp; T H E &nbsp; C A R</div></div>
+    <div class="title-block"><h1>霓虹华容道</h1><div class="sub">K L O T S K I &nbsp;·&nbsp; 横刀立马</div></div>
     <div class="score-panel">
-      <div class="score-card mv"><div class="label">Moves</div><div class="value" id="score-mv">0</div></div>
-      <div class="score-card"><div class="label">Best</div><div class="value" id="score-best">--</div></div>
+      <div class="score-card mv"><div class="label">步数</div><div class="value" id="score-mv">0</div></div>
+      <div class="score-card"><div class="label">最佳</div><div class="value" id="score-best">--</div></div>
     </div>
   </div>
   <div class="board-wrap" id="board-wrap">
-    <canvas id="cv" width="420" height="420"></canvas>
-    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Unblocked!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">New Puzzle</button></div></div>
+    <canvas id="cv" width="400" height="500"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">曹操脱困！</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">再来一局</button></div></div>
   </div>
   <div class="controls">
-    <button class="btn primary" onclick="game.restart()">New Puzzle</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+    <button class="btn primary" onclick="game.restart()">新棋盘</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI solving...</span></div>
-  <div class="stats-bar"><span>Slide cars · get the red car out →</span></div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 求解中…</span></div>
+  <div class="stats-bar"><span>移动棋子 · 让曹操(红)从底部出口逃出</span></div>
 </div>
 <script>
 (function(){
   'use strict';
-  const N=6, W=420, H=420, CS=W/N;
+  const COLS=4, ROWS=5, W=400, H=500, CS=W/COLS;
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
-  const PAL=['#4dd0ff','#54e08a','#ffd24d','#b06bff','#ff8c1a','#2ad6c8','#ff5db1','#7ad0ff','#9b59ff'];
-  const REDROW=2;
+  const PAL=['#4dd0ff','#54e08a','#ffd24d','#b06bff','#ff8c1a','#2ad6c8','#ff5db1','#7ad0ff'];
+  const EXIT_C=1; // 曹操出口占据 cols 1-2
 
-  class Unblock {
+  // 经典华容道棋子：曹操(2x2) 必须从底部中间出口逃出
+  // 类型: b=2x2(曹操)  v=竖2x1  h=横1x2  s=1x1(兵)
+  class Klotski {
     constructor(){
       this.autoPlay=false; this.last=0; this.raf=null; this.over=false;
-      this.moves=0; this.best=this.loadBest(); this.cool=0; this.solIdx=0;
+      this.moves=0; this.best=this.loadBest(); this.cool=0; this.solution=[]; this.solIdx=0;
       this.drag=null;
       this.loop=this.loop.bind(this);
       this.bind(); this.restart();
       this.last=performance.now(); this.raf=requestAnimationFrame(this.loop);
     }
-    loadBest(){ try{ return localStorage.getItem('unblock_best')||'--'; }catch(e){ return '--'; } }
-    saveBest(v){ try{ localStorage.setItem('unblock_best', v); }catch(e){} }
-    occ(exceptId){
-      const g=Array.from({length:N},()=>Array(N).fill(-1));
-      for(const c of this.cars){ if(c.id===exceptId) continue;
-        for(let i=0;i<c.l;i++){ const r=c.o==='h'?c.r:c.r+i, cc=c.o==='h'?c.c+i:c.c; if(r>=0&&r<N&&cc>=0&&cc<N) g[r][cc]=c.id; } }
+    loadBest(){ try{ return localStorage.getItem('klotski_best')||'--'; }catch(e){ return '--'; } }
+    saveBest(v){ try{ localStorage.setItem('klotski_best', v); }catch(e){} }
+    box(p){ return (p.type==='b'||p.type==='v')?2:1; }   // 高度
+    wide(p){ return (p.type==='b'||p.type==='h')?2:1; }  // 宽度
+    dirs(p){
+      if(p.type==='v') return [[1,0],[-1,0]];
+      if(p.type==='h') return [[0,1],[0,-1]];
+      return [[1,0],[-1,0],[0,1],[0,-1]]; // b, s 可四向
+    }
+    occ(list, exceptId){
+      const g=Array.from({length:ROWS},()=>Array(COLS).fill(-1));
+      for(const p of list){ if(p.id===exceptId) continue;
+        const h=this.box(p), w=this.wide(p);
+        for(let i=0;i<h;i++) for(let j=0;j<w;j++){ const r=p.r+i, c=p.c+j; if(r>=0&&r<ROWS&&c>=0&&c<COLS) g[r][c]=p.id; }
+      }
       return g;
     }
-    cellFree(r,c,exceptId,g){ return r>=0&&r<N&&c>=0&&c<N && (g[r][c]===-1 || g[r][c]===exceptId); }
-    canStep(car,dir,g){
-      g=g||this.occ(car.id);
-      if(car.o==='h'){ const c = dir>0 ? car.c+car.l : car.c-1; return this.cellFree(car.r,c,car.id,g); }
-      else { const r = dir>0 ? car.r+car.l : car.r-1; return this.cellFree(r,car.c,car.id,g); }
+    canStep(list, p, dr, dc){
+      const h=this.box(p), w=this.wide(p);
+      const nr=p.r+dr, nc=p.c+dc;
+      const g=this.occ(list, p.id);
+      for(let i=0;i<h;i++) for(let j=0;j<w;j++){
+        const r=nr+i, c=nc+j;
+        if(r<0||r>=ROWS||c<0||c>=COLS) return false;
+        if(g[r][c]!==-1 && g[r][c]!==p.id) return false;
+      }
+      return true;
     }
-    stepCar(car,dir){ if(car.o==='h') car.c+=dir; else car.r+=dir; }
-    redExit(){ return this.cars[0].c === N - this.cars[0].l; }
-    // Count consecutive free cells a car can move in `dir` without overlapping.
-    freeSteps(car,dir){
-      const g=this.occ(car.id); let n=0;
-      if(car.o==='h'){
-        if(dir>0){ let c=car.c+car.l; while(c<N && g[car.r][c]===-1){ n++; c++; } }
-        else { let c=car.c-1; while(c>=0 && g[car.r][c]===-1){ n++; c--; } }
-      } else {
-        if(dir>0){ let r=car.r+car.l; while(r<N && g[r][car.c]===-1){ n++; r++; } }
-        else { let r=car.r-1; while(r>=0 && g[r][car.c]===-1){ n++; r--; } }
+    freeSteps(list, p, dr, dc){
+      const g=this.occ(list, p.id); let n=0;
+      let nr=p.r, nc=p.c;
+      while(true){ nr+=dr; nc+=dc; const h=this.box(p), w=this.wide(p); let ok=true;
+        for(let i=0;i<h;i++) for(let j=0;j<w;j++){ const r=nr+i, c=nc+j;
+          if(r<0||r>=ROWS||c<0||c>=COLS){ ok=false; break; }
+          if(g[r][c]!==-1 && g[r][c]!==p.id){ ok=false; break; } }
+        if(!ok) break; n++;
       }
       return n;
     }
-    // BFS solver: returns {path:[{id,dir}...], capped:bool}. path is minimal move list to win.
-    solve(cars0, cap=200000){
-      const key=cs=>cs.map(c=>c.id+':'+c.o+':'+c.l+':'+c.r+':'+c.c).join('|');
-      const start=cars0.map(c=>({...c}));
-      if(start[0].c===N-start[0].l) return {path:[],capped:false};
+    isWin(list){ const cao=list.find(function(p){ return p.type==='b'; }); return cao.r===(ROWS-2) && cao.c===EXIT_C; }
+    solve(list0, cap=200000){
+      const self=this;
+      const key=function(ls){ return ls.map(function(p){ return p.id+':'+p.type+':'+p.r+':'+p.c; }).join('|'); };
+      const start=list0.map(function(p){ return Object.assign({},p); });
+      if(this.isWin(start)) return {path:[],capped:false};
       const q=[start]; let head=0; const seen=new Set([key(start)]);
       const parent=new Map(); parent.set(key(start),{prev:null,move:null});
-      while(head<q.length){ const cur=q[head++]; const g=this.occFor(cur,-1);
-        for(let i=0;i<cur.length;i++){ const c=cur[i];
-          for(const dir of [1,-1]){ const nc={...c};
-            if(c.o==='h'){ nc.c+=dir; if(nc.c<0||nc.c+nc.l>N) continue; }
-            else { nc.r+=dir; if(nc.r<0||nc.r+nc.l>N) continue; }
-            let ok=true; for(let k=0;k<nc.l;k++){ const r=nc.o==='h'?nc.r:nc.r+k, cc=nc.o==='h'?nc.c+k:nc.c; if(g[r][cc]!==-1&&g[r][cc]!==c.id){ ok=false; break; } }
+      while(head<q.length){
+        const cur=q[head++]; const g=this.occ(cur,-1);
+        for(let ci=0; ci<cur.length; ci++){
+          const c=cur[ci]; const ds=this.dirs(c);
+          for(let di=0; di<ds.length; di++){
+            const dr=ds[di][0], dc=ds[di][1];
+            const nr=c.r+dr, nc=c.c+dc; const h=this.box(c), w=this.wide(c); let ok=true;
+            for(let i=0;i<h;i++) for(let j=0;j<w;j++){ const r=nr+i, ccol=nc+j;
+              if(r<0||r>=ROWS||ccol<0||ccol>=COLS||(g[r][ccol]!==-1&&g[r][ccol]!==c.id)){ ok=false; break; } }
             if(!ok) continue;
-            const nx=cur.map(x=>x.id===c.id?nc:{...x});
+            const nx=cur.map(function(x){ return x.id===c.id ? Object.assign({},x,{r:nr,c:nc}) : Object.assign({},x); });
             const kk=key(nx);
-            if(nx[0].c===N-nx[0].l){ const path=[{id:c.id,dir}]; let pk=key(cur);
-              while(parent.get(pk)&&parent.get(pk).prev!==null){ const node=parent.get(pk); path.push(node.move); pk=node.prev; }
-              path.reverse(); return {path,capped:false}; }
-            if(!seen.has(kk)){ seen.add(kk); parent.set(kk,{prev:key(cur),move:{id:c.id,dir}}); q.push(nx); }
+            if(this.isWin(nx)){
+              const path=[{id:c.id,dr:dr,dc:dc}]; let pk=key(cur);
+              while(parent.get(pk) && parent.get(pk).prev!==null){ const node=parent.get(pk); path.push(node.move); pk=node.prev; }
+              path.reverse(); return {path:path,capped:false};
+            }
+            if(!seen.has(kk)){ seen.add(kk); parent.set(kk,{prev:key(cur),move:{id:c.id,dr:dr,dc:dc}}); q.push(nx); }
           }
         }
         if(seen.size>cap) return {path:null,capped:true};
@@ -141,75 +160,59 @@
       return {path:null,capped:false};
     }
     genPuzzle(){
-      const THRESHOLD=12; // require this many moves (or a "hard"/capped search) to accept
-      const more=[{o:'h',l:2},{o:'v',l:3},{o:'h',l:2},{o:'v',l:2},{o:'h',l:3},{o:'v',l:2},{o:'h',l:2},{o:'v',l:3}];
-      let best=null, bestMin=0, bestScramble=null;
-      for(let attempt=0; attempt<140; attempt++){
-        const cars=[{id:0,o:'h',l:2,r:REDROW,c:N-2,dr:REDROW,dc:N-2,color:'#ff5d6a'}];
-        const g=Array.from({length:N},()=>Array(N).fill(-1)); g[REDROW][N-2]=0; g[REDROW][N-1]=0;
-        let ok=true;
-        for(let mi=0; mi<more.length; mi++){
-          const sp=more[mi]; let placed=false;
-          for(let t=0;t<60;t++){
-            const r=(Math.random()*N)|0, c=(Math.random()*N)|0;
-            let free=true;
-            for(let i=0;i<sp.l;i++){ const rr=sp.o==='h'?r:r+i, cc=sp.o==='h'?c+i:c; if(rr<0||rr>=N||cc<0||cc>=N||g[rr][cc]!==-1){ free=false; break; } }
-            if(!free) continue;
-            for(let i=0;i<sp.l;i++){ const rr=sp.o==='h'?r:r+i, cc=sp.o==='h'?c+i:c; g[rr][cc]=mi+1; }
-            cars.push({id:mi+1,o:sp.o,l:sp.l,r,c,dr:r,dc:c,color:PAL[mi%PAL.length]}); placed=true; break;
-          }
-          if(!placed){ ok=false; break; }
+      // 从“曹操已在出口”的已解状态出发，随机挪动若干步打乱；
+      // 由于每一步都可逆，逆向序列必为从当前局面回到出口（曹操脱困）的解法——由构造保证一定可解。
+      const solved=[
+        {id:'cao', type:'b', r:3, c:1, name:'曹操', color:'#ff5d6a'},
+        {id:'guan',type:'v', r:0, c:0, name:'关羽', color:PAL[0]},
+        {id:'zhang',type:'v', r:0, c:3, name:'张飞', color:PAL[1]},
+        {id:'zhao',type:'v', r:2, c:0, name:'赵云', color:PAL[2]},
+        {id:'ma',  type:'v', r:2, c:3, name:'马超', color:PAL[3]},
+        {id:'huang',type:'h',r:0, c:1, name:'黄忠', color:PAL[4]},
+        {id:'b1', type:'s', r:2, c:1, name:'兵', color:PAL[5]},
+        {id:'b2', type:'s', r:2, c:2, name:'兵', color:PAL[5]},
+      ];
+      let chosen=null, chosenSol=null, attempts=0;
+      while(!chosen && attempts<3000){
+        attempts++;
+        const cur=solved.map(p=>({...p}));
+        const K=70+((Math.random()*80)|0);
+        const scramble=[]; let lastId=null, lastDr=0, lastDc=0;
+        for(let k=0;k<K;k++){
+          const p=cur[(Math.random()*cur.length)|0];
+          const [dr,dc]=this.dirs(p)[(Math.random()*this.dirs(p).length)|0];
+          if(p.id===lastId && dr===-lastDr && dc===-lastDc) continue; // 不立刻撤销上一步
+          if(this.canStep(cur,p,dr,dc)){ p.r+=dr; p.c+=dc; scramble.push({id:p.id,dr,dc}); lastId=p.id; lastDr=dr; lastDc=dc; }
         }
-        if(!ok) continue;
-        // deep scramble from solved with random valid moves (guarantees solvable)
-        const scramble=[]; let lastId=-1, lastDir=0;
-        const K=60+((Math.random()*80)|0);
-        for(let k=0;k<K;k++){ const idx=(Math.random()*cars.length)|0; const car=cars[idx]; const dir=Math.random()<.5?1:-1;
-          if(car.id===lastId && dir===-lastDir) continue; // avoid immediately undoing the last move
-          const gg=this.occFor(cars,car.id); if(this.canStepOn(cars,car,dir,gg)){ this.stepCarOn(cars,car,dir); scramble.push({id:car.id,dir}); lastId=car.id; lastDir=dir; } }
-        if(this.redExit.call({cars})) continue; // red already at exit
-        const res=this.solve(cars,40000);
-        let mm, hard=false;
-        if(res&&res.capped){ mm=999; hard=true; }
-        else if(res&&res.path){ mm=res.path.length; }
-        else continue; // unsolvable (shouldn't happen)
-        if(mm>bestMin){ bestMin=mm; best=cars; bestScramble=scramble; if(hard||mm>=THRESHOLD) break; }
+        if(this.isWin(cur)) continue;        // 打乱后不能已经通关
+        if(scramble.length<15) continue;   // 至少要像样地打乱过
+        // 逆向序列即为从当前局面回到已解（曹操出口）的解法
+        chosen=cur;
+        chosenSol=scramble.slice().reverse().map(m=>({id:m.id, dr:-m.dr, dc:-m.dc}));
       }
-      if(best){ this.cars=best;
-        this.solution=(this.solve(best,400000).path)||bestScramble.slice().reverse().map(m=>({id:m.id,dir:-m.dir}));
-      }
-      else {
-        this.cars=[{id:0,o:'h',l:2,r:2,c:1,dr:2,dc:1,color:'#ff5d6a'},
-          {id:1,o:'v',l:3,r:0,c:0,dr:0,dc:0,color:PAL[0]},{id:2,o:'h',l:2,r:0,c:3,dr:0,dc:3,color:PAL[1]},
-          {id:3,o:'v',l:2,r:0,c:5,dr:0,dc:5,color:PAL[2]},{id:4,o:'v',l:3,r:1,c:2,dr:1,dc:2,color:PAL[3]},
-          {id:5,o:'h',l:2,r:3,c:0,dr:3,dc:0,color:PAL[4]},{id:6,o:'v',l:2,r:3,c:4,dr:3,dc:4,color:PAL[5]},
-          {id:7,o:'h',l:2,r:4,c:1,dr:4,dc:1,color:PAL[6]},{id:8,o:'v',l:2,r:4,c:3,dr:4,dc:3,color:PAL[7]}];
-        this.solution=(this.solve(this.cars,400000).path)||[{id:4,dir:1},{id:6,dir:-1},{id:7,dir:1},{id:0,dir:1},{id:0,dir:1},{id:0,dir:1}];
-      }
+      // chosen 必然存在：从已解状态出发的合法打乱逆向必可解
+      this.pieces=chosen.map(p=>({...p, dr:p.r, dc:p.c}));
+      this.solution=chosenSol;
     }
-    occFor(cars,exceptId){ const g=Array.from({length:N},()=>Array(N).fill(-1)); for(const c of cars){ if(c.id===exceptId) continue; for(let i=0;i<c.l;i++){ const r=c.o==='h'?c.r:c.r+i, cc=c.o==='h'?c.c+i:c.c; if(r>=0&&r<N&&cc>=0&&cc<N) g[r][cc]=c.id; } } return g; }
-    canStepOn(cars,car,dir,g){ if(car.o==='h'){ const c=dir>0?car.c+car.l:car.c-1; return c>=0&&c<N&&g[car.r][c]===-1; } else { const r=dir>0?car.r+car.l:car.r-1; return r>=0&&r<N&&g[r][car.c]===-1; } }
-    stepCarOn(cars,car,dir){ if(car.o==='h') car.c+=dir; else car.r+=dir; }
     restart(){
       this.stopAuto(); this.over=false; this.moves=0; this.cool=0; this.solIdx=0; this.drag=null;
       document.getElementById('overlay-win').classList.remove('active');
       this.genPuzzle(); this.updateUI();
     }
     updateUI(){ document.getElementById('score-mv').textContent=this.moves; document.getElementById('score-best').textContent=this.best; }
-    doMove(id,dir){ const car=this.cars.find(c=>c.id===id); if(!car) return false; if(!this.canStep(car,dir)) return false; this.stepCar(car,dir); this.moves++; this.updateUI(); if(this.redExit()){ this.over=true; this.finish(); } return true; }
+    doMove(id,dr,dc){ const p=this.pieces.find(x=>x.id===id); if(!p) return false; if(!this.canStep(this.pieces,p,dr,dc)) return false; p.r+=dr; p.c+=dc; this.moves++; this.updateUI(); if(this.isWin(this.pieces)){ this.over=true; this.finish(); } return true; }
     step(dt){
       if(this.over) return;
-      // ease display positions
-      for(const c of this.cars){ c.dr+=(c.r-c.dr)*0.28; c.dc+=(c.c-c.dc)*0.28; }
+      for(const p of this.pieces){ p.dr+=(p.r-p.dr)*0.3; p.dc+=(p.c-p.dc)*0.3; }
       if(this.autoPlay){
         if(this.cool>0) this.cool--;
-        else if(this.solIdx<this.solution.length){ const m=this.solution[this.solIdx]; if(this.doMove(m.id,m.dir)) this.solIdx++; this.cool=10; }
+        else if(this.solIdx<this.solution.length){ const m=this.solution[this.solIdx]; if(this.doMove(m.id,m.dr,m.dc)) this.solIdx++; this.cool=8; }
         else if(!this.over){ this.over=true; this.finish(); }
       }
     }
     finish(){ if(this.autoPlay) this.stopAuto();
-      document.getElementById('win-title').textContent='Unblocked!';
-      document.getElementById('win-msg').textContent='Solved in '+this.moves+' moves';
+      document.getElementById('win-title').textContent='曹操脱困！';
+      document.getElementById('win-msg').textContent='用了 '+this.moves+' 步';
       if(this.best==='--' || this.moves<parseInt(this.best)) this.saveBest(String(this.moves));
       document.getElementById('overlay-win').classList.add('active');
     }
@@ -219,49 +222,72 @@
       this.raf=requestAnimationFrame(this.loop);
     }
     cellAt(e){ const r=canvas.getBoundingClientRect(); return {r:this.clampIdx(((e.clientY-r.top)/r.height*H/CS)|0), c:this.clampIdx(((e.clientX-r.left)/r.width*W/CS)|0)}; }
-    clampIdx(v){ return v<0?0:(v>=N?N-1:v); }
-    carAt(rc){ for(const c of this.cars){ for(let i=0;i<c.l;i++){ const r=c.o==='h'?c.r:c.r+i, cc=c.o==='h'?c.c+i:c.c; if(r===rc.r&&cc===rc.c) return c; } } return null; }
+    clampIdx(v){ return v<0?0:(v>=ROWS?ROWS-1:v); }
+    pieceAt(rc){ for(const p of this.pieces){ const h=this.box(p), w=this.wide(p); for(let i=0;i<h;i++) for(let j=0;j<w;j++){ if(p.r+i===rc.r && p.c+j===rc.c) return p; } } return null; }
     draw(){
       ctx.clearRect(0,0,W,H);
       ctx.fillStyle='#0b1024'; ctx.fillRect(0,0,W,H);
-      // grid
-      ctx.strokeStyle='#1a2240'; ctx.lineWidth=1; for(let i=0;i<=N;i++){ ctx.beginPath(); ctx.moveTo(i*CS,0); ctx.lineTo(i*CS,H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,i*CS); ctx.lineTo(W,i*CS); ctx.stroke(); }
-      // exit
-      ctx.fillStyle='#ff5d6a33'; ctx.fillRect((N-1)*CS+CS*0.4, REDROW*CS, CS*0.6, CS);
-      // cars
-      for(const c of this.cars){
-        const x=c.dc*CS+4, y=c.dr*CS+4, w=(c.o==='h'?c.l*CS:CS)-8, h=(c.o==='v'?c.l*CS:CS)-8;
-        ctx.shadowColor=c.color; ctx.shadowBlur=12; ctx.fillStyle=c.color; this.rr(x,y,w,h,8); ctx.fill(); ctx.shadowBlur=0;
-        ctx.fillStyle='#0a0a1a55'; this.rr(x+5,y+5,w-10,h-10,5); ctx.fill();
-        // direction nub
-        ctx.fillStyle='#ffffffcc';
-        if(c.o==='h'){ ctx.fillRect(x+w/2-2,y+6,4,h-12); } else { ctx.fillRect(x+6,y+h/2-2,w-12,4); }
+      // 出口高亮（底部中间两格）
+      ctx.fillStyle='#ffd70022';
+      ctx.fillRect(EXIT_C*CS, (ROWS-1)*CS, 2*CS, CS);
+      ctx.strokeStyle='#ffd70088'; ctx.lineWidth=2; ctx.setLineDash([6,5]);
+      ctx.strokeRect(EXIT_C*CS+3, (ROWS-1)*CS+3, 2*CS-6, CS-6); ctx.setLineDash([]);
+      // 网格
+      ctx.strokeStyle='#1a2240'; ctx.lineWidth=1;
+      for(let i=0;i<=COLS;i++){ ctx.beginPath(); ctx.moveTo(i*CS,0); ctx.lineTo(i*CS,H); ctx.stroke(); }
+      for(let i=0;i<=ROWS;i++){ ctx.beginPath(); ctx.moveTo(0,i*CS); ctx.lineTo(W,i*CS); ctx.stroke(); }
+      // 棋子
+      for(const p of this.pieces){
+        const h=this.box(p), w=this.wide(p);
+        const x=p.dc*CS+4, y=p.dr*CS+4, pw=w*CS-8, ph=h*CS-8;
+        ctx.shadowColor=p.color; ctx.shadowBlur=12; ctx.fillStyle=p.color; this.rr(x,y,pw,ph,8); ctx.fill(); ctx.shadowBlur=0;
+        ctx.fillStyle='#0a0a1a55'; this.rr(x+5,y+5,pw-10,ph-10,5); ctx.fill();
+        ctx.fillStyle='#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const fs = p.type==='b'?22:(p.type==='s'?15:17);
+        ctx.font='800 '+fs+'px "Segoe UI",system-ui,sans-serif';
+        ctx.fillText(p.name, x+pw/2, y+ph/2);
       }
     }
     rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI solving...'; this.solIdx=0; this.cool=8; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    startAuto(){
+      // 从当前局面实时求解，保证手动改动后仍能自动通关
+      const res=this.solve(this.pieces,200000);
+      if(!res||res.capped||!res.path){ this.flashStatus('当前局面无解'); return; }
+      this.solution=res.path; this.solIdx=0; this.cool=8; this.autoPlay=true;
+      const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
+      document.getElementById('ai-indicator').style.display='flex';
+      document.getElementById('ai-status').textContent='AI 求解中…（'+this.solution.length+' 步）';
+    }
+    flashStatus(t){ const el=document.getElementById('ai-status'); if(el) el.textContent=t; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bind(){
       const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; };
-      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); const rc=this.cellAt(e); const car=this.carAt(rc); if(!car) return; this.drag={car, start:pos(e), baseR:car.r, baseC:car.c}; });
-      canvas.addEventListener('pointermove',(e)=>{ if(!this.drag||this.autoPlay||this.over) return; const d=pos(e); const car=this.drag.car;
-        const delta = car.o==='h' ? (d.x - this.drag.start.x)/CS : (d.y - this.drag.start.y)/CS;
-        let shift=Math.round(delta);
-        // clamp to the actual number of consecutive free cells in each direction (no overlap)
-        const maxP=this.freeSteps(car,1), maxN=this.freeSteps(car,-1);
-        shift=Math.max(-maxN, Math.min(maxP, shift));
-        if(car.o==='h') car.c=this.drag.baseC+shift; else car.r=this.drag.baseR+shift;
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; canvas.setPointerCapture&&canvas.setPointerCapture(e.pointerId); const rc=this.cellAt(e); const p=this.pieceAt(rc); if(!p) return; this.drag={p, start:pos(e), baseR:p.r, baseC:p.c}; });
+      canvas.addEventListener('pointermove',(e)=>{ if(!this.drag||this.autoPlay||this.over) return; const d=pos(e); const p=this.drag.p;
+        let dr=0, dc=0;
+        if(p.type==='v'){ dr=Math.round((d.y-this.drag.start.y)/CS); }
+        else if(p.type==='h'){ dc=Math.round((d.x-this.drag.start.x)/CS); }
+        else { // b / s : 取主方向
+          const ddx=(d.x-this.drag.start.x)/CS, ddy=(d.y-this.drag.start.y)/CS;
+          if(Math.abs(ddx)>Math.abs(ddy)) dc=Math.round(ddx); else dr=Math.round(ddy);
+        }
+        // 夹紧到可行步数
+        if(dr<0){ dr=Math.max(-this.freeSteps(this.pieces,p,-1,0), dr); } else if(dr>0){ dr=Math.min(this.freeSteps(this.pieces,p,1,0), dr); }
+        if(dc<0){ dc=Math.max(-this.freeSteps(this.pieces,p,0,-1), dc); } else if(dc>0){ dc=Math.min(this.freeSteps(this.pieces,p,0,1), dc); }
+        if(p.type==='v'){ p.r=this.drag.baseR+dr; }
+        else if(p.type==='h'){ p.c=this.drag.baseC+dc; }
+        else { p.r=this.drag.baseR+dr; p.c=this.drag.baseC+dc; }
       });
-      canvas.addEventListener('pointerup',()=>{ if(!this.drag) return; const car=this.drag.car;
-        const moved = car.o==='h' ? car.c!==this.drag.baseC : car.r!==this.drag.baseR;
+      canvas.addEventListener('pointerup',()=>{ if(!this.drag) return; const p=this.drag.p;
+        const moved = (p.r!==this.drag.baseR)||(p.c!==this.drag.baseC);
         this.drag=null;
         if(moved){ this.moves++; this.updateUI(); }
-        if(this.redExit()){ this.over=true; this.finish(); }
+        if(this.isWin(this.pieces)){ this.over=true; this.finish(); }
       });
     }
   }
-  window.game=new Unblock();
+  window.game=new Klotski();
 })();
 </script>
 </body>

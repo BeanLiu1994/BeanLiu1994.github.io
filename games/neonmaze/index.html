@@ -92,6 +92,7 @@
   class Maze {
     constructor(){
       this.autoPlay=false; this.over=false; this.time=0; this.level=1;
+      this.AUTO_GHOSTS=2; this.AUTO_GSPEED=0.7; // 自动模式：幽灵数量/速度系数（手动均为 3 / 1.0）
       this.best=parseInt(localStorage.getItem('mazeBest')||'0'); bestEl.textContent=this.best;
       this.fit(); window.addEventListener('resize',()=>this.fit());
       this.bindInput();
@@ -114,29 +115,38 @@
       };
       carve(1,1);
       for(let r=1;r<ROWS-1;r++) for(let c=1;c<COLS-1;c++){
-        if(wall[r][c] && Math.random()<0.13){
+        if(wall[r][c] && Math.random()<0.55){
           if(r%2===1 && c%2===0 && !wall[r][c-1] && !wall[r][c+1]) wall[r][c]=false;
           else if(c%2===1 && r%2===0 && !wall[r-1][c] && !wall[r+1][c]) wall[r][c]=false;
         }
       }
       return wall;
     }
-    restart(){
-      this.stopAuto(); this.over=false; this.dotsLeft=0; this.score=0; scoreEl.textContent='0'; lvlEl.textContent=this.level;
+    restart(opts){
+      const auto = !!(opts&&opts.auto);
+      const keepLevel = !!(opts&&opts.keepLevel); // 过关时保留关卡，新游戏/自动开局/死亡重开则归 1
+      this.autoPlay=auto; this.over=false; this.dotsLeft=0; this.score=0; scoreEl.textContent='0';
+      if(!keepLevel) this.level=1;
+      lvlEl.textContent=this.level;
       this.wall=this.genMaze();
       this.dot=Array.from({length:ROWS},()=>new Array(COLS).fill(false));
       for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(!this.wall[r][c]) this.dot[r][c]=true;
-      const ghostStarts=[[COLS-2,ROWS-2],[COLS-2,1],[1,ROWS-2]];
+      // 自动模式只用 2 个幽灵（手动保留 3 个），更易稳过
+      const nG = auto ? this.AUTO_GHOSTS : 3;
+      const ghostStarts=[[COLS-2,ROWS-2],[COLS-2,1],[1,ROWS-2]].slice(0,nG);
       const pStart=[1,1];
       this.dot[pStart[1]][pStart[0]]=false;
-      this.player={ c:pStart[0], r:pStart[1], x:pStart[0]+0.5, y:pStart[1]+0.5, dir:{dc:1,dr:0}, ndir:{dc:1,dr:0}, tc:pStart[0], tr:pStart[1], speed:5.2 };
+      this.player={ c:pStart[0], r:pStart[1], x:pStart[0]+0.5, y:pStart[1]+0.5, dir:{dc:1,dr:0}, ndir:{dc:1,dr:0}, tc:pStart[0], tr:pStart[1], speed:7.0 };
       this.ghosts=ghostStarts.map((g,i)=>{
         this.dot[g[1]][g[0]]=false;
         const vdirs=DIRS.filter(d=>!this.wall[g[1]+d.dr][g[0]+d.dc]);
-        return { c:g[0], r:g[1], x:g[0]+0.5, y:g[1]+0.5, dir:vdirs[0]||{dc:1,dr:0}, tc:g[0], tr:g[1], speed:4.0+this.level*0.35, color:['#ff5d6a','#4d9fff','#b06bff','#4dff91'][i%4] };
+        // 手动模式幽灵随关卡加速；自动模式刻意压低且几乎不随关卡增长，保证玩家(速度7.0)始终更快、AI 能稳脱身
+        const gs = this.autoPlay ? (2.6+this.level*0.05) : (3.4+this.level*0.3);
+        return { c:g[0], r:g[1], x:g[0]+0.5, y:g[1]+0.5, dir:vdirs[0]||{dc:1,dr:0}, tc:g[0], tr:g[1], speed:gs, color:['#ff5d6a','#4d9fff','#b06bff','#4dff91'][i%4] };
       });
       this.dotsLeft=0; for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(this.dot[r][c]) this.dotsLeft++;
       this.autoTarget=null;
+      this.targetDot=null;
       overlayLose.classList.remove('active');
       statusEl.textContent='滑动或方向键移动，吃光所有光点即可过关';
     }
@@ -145,39 +155,135 @@
       const rev=v.filter(d=> !(d.dc===-cur.dc&&d.dr===-cur.dr));
       return rev.length?rev:v;
     }
-    bfsStep(c,r){
+    ghostBlocked(){
+      // 返回 (x,y)=>bool：该格是否被某个幽灵当前占据（躲避/寻路时视为障碍）
+      const s=new Set(this.ghosts.map(g=>g.r*COLS+g.c));
+      return (x,y)=>s.has(y*COLS+x);
+    }
+    bfsFirstStep(c,r,isGoal,blocked){
+      // BFS：返回「朝满足 isGoal 的格的第一步所在格 {c,r}」，找不到返回 null
+      // blocked(c,r) 可选：返回 true 则该格视为不可通行（躲避时绕开幽灵所在格，避免走进/穿过幽灵）
       const key=(cc,rr)=>rr*COLS+cc; const visited=new Set([key(c,r)]); const prev=new Map();
       let q=[[c,r]];
       while(q.length){
         const [cc,cr]=q.shift();
-        if(this.dot[cr][cc] && !(cc===c&&cr===r)){
+        if(!(cc===c&&cr===r) && isGoal(cc,cr)){
           let cur=key(cc,cr);
           while(prev.get(cur)!==undefined && prev.get(cur)!==key(c,r)) cur=prev.get(cur);
-          const pc=cur%COLS, pr=Math.floor(cur/COLS);
-          return {dc:pc-c, dr:pr-r};
+          return {c:cur%COLS, r:Math.floor(cur/COLS)};
         }
         for(const d of DIRS){ const nc=cc+d.dc, nr=cr+d.dr;
           if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
           const k=key(nc,nr); if(visited.has(k)) continue;
+          if(blocked && blocked(nc,nr)) continue;
           visited.add(k); prev.set(k,key(cc,cr)); q.push([nc,nr]);
         }
       }
       return null;
     }
+    bfsStep(c,r){ return this.bfsFirstStep(c,r,(x,y)=>this.dot[y][x], this.ghostBlocked()); }
+    ghostThreatMap(){
+      // 多源 BFS：threat[r][c] = 该格到最近幽灵的步数（幽灵所在格=0）
+      const INF=1e9;
+      const threat=Array.from({length:ROWS},()=>new Array(COLS).fill(INF));
+      const q=[]; let head=0;
+      for(const g of this.ghosts){ if(this.wall[g.r][g.c]) continue; threat[g.r][g.c]=0; q.push([g.c,g.r]); }
+      while(head<q.length){
+        const [c,r]=q[head++]; const d=threat[r][c];
+        for(const dd of DIRS){ const nc=c+dd.dc, nr=r+dd.dr;
+          if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
+          if(threat[nr][nc]>d+1){ threat[nr][nc]=d+1; q.push([nc,nr]); }
+        }
+      }
+      return threat;
+    }
+    safestCell(threat){
+      // 在所有「可达格」中找离幽灵最远（威胁值最大）的安全港
+      let bc=this.player.c, br=this.player.r, bv=threat[this.player.r][this.player.c];
+      const seen=new Set([this.player.r*COLS+this.player.c]);
+      const q=[[this.player.c,this.player.r]];
+      while(q.length){
+        const [c,r]=q.shift(); const tv=threat[r][c];
+        if(tv>bv){ bv=tv; bc=c; br=r; }
+        for(const d of DIRS){ const nc=c+d.dc, nr=r+d.dr;
+          if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
+          const k=nr*COLS+nc; if(seen.has(k)) continue; seen.add(k); q.push([nc,nr]); }
+      }
+      return {c:bc, r:br};
+    }
+    reachableCount(c,r){
+      // 从 (c,r) 出发可达的格子数（BFS，限上限），用于评估该处是否「开阔」——
+      // 开阔处逃生机大，死胡同易被困。躲避时优先选可达空间大的方向。
+      const key=(cc,rr)=>rr*COLS+cc; const seen=new Set([key(c,r)]); const q=[[c,r]]; let head=0, cnt=0;
+      while(head<q.length && cnt<361){
+        const [cc,cr]=q[head++]; cnt++;
+        for(const d of DIRS){ const nc=cc+d.dc, nr=cr+d.dr;
+          if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
+          const k=key(nc,nr); if(seen.has(k)) continue; seen.add(k); q.push([nc,nr]); }
+      }
+      return cnt;
+    }
+    fleeScore(nc,nr){
+      // 1 步极小化极大：假设每只幽灵朝 (nc,nr) 走一步（按游戏内的曼哈顿贪心），
+      // 求「玩家落在 (nc,nr) 后，离最近幽灵的迷宫距离」的最小值（最坏情况）。
+      // 用于躲避时挑出能同时甩开两只幽灵夹击的方向。
+      const gNew=this.ghosts.map(g=>{
+        let bc=g.c, br=g.r, bd=1e9;
+        for(const d of DIRS){ const gc=g.c+d.dc, gr=g.r+d.dr;
+          if(gc<0||gr<0||gc>=COLS||gr>=ROWS||this.wall[gr][gc]) continue;
+          const val=Math.abs(gc-nc)+Math.abs(gr-nr);
+          if(val<bd){ bd=val; bc=gc; br=gr; }
+        }
+        return {c:bc, r:br};
+      });
+      const key=(cc,rr)=>rr*COLS+cc;
+      const dist=Array.from({length:ROWS},()=>new Array(COLS).fill(1e9));
+      dist[nr][nc]=0; const q=[[nc,nr]]; let head=0;
+      while(head<q.length){
+        const [cc,cr]=q[head++]; const dd=dist[cr][cc];
+        for(const d of DIRS){ const ac=cc+d.dc, ar=cr+d.dr;
+          if(ac<0||ar<0||ac>=COLS||ar>=ROWS||this.wall[ar][ac]) continue;
+          if(dist[ar][ac]>dd+1){ dist[ar][ac]=dd+1; q.push([ac,ar]); }
+        }
+      }
+      let worst=1e9;
+      for(const gg of gNew){ if(gg.c===nc&&gg.r===nr) return 0; worst=Math.min(worst, dist[gg.r][gg.c]); }
+      return worst;
+    }
     autoDecide(){
-      let threat=null, td=1e9;
-      for(const g of this.ghosts){ const d=Math.abs(g.c-this.player.c)+Math.abs(g.r-this.player.r); if(d<td){td=d;threat=g;} }
-      if(td<=3){
-        const v=this.validDirs(this.player.c,this.player.r,this.player.dir);
-        let best=null,bv=-1e9;
-        for(const d of v){ const nc=this.player.c+d.dc, nr=this.player.r+d.dr; let md=1e9;
-          for(const g of this.ghosts) md=Math.min(md,Math.abs(g.c-nc)+Math.abs(g.r-nr));
-          if(md>bv){bv=md;best=d;} }
-        this.player.ndir=best; this.autoTarget=best?{c:this.player.c+best.dc,r:this.player.r+best.dr}:null;
-        aiStatus.textContent='AI 躲避幽灵中…';
-      } else {
-        const step=this.bfsStep(this.player.c,this.player.r);
-        if(step){ this.player.ndir=step; this.autoTarget={c:this.player.c+step.dc,r:this.player.r+step.dr}; aiStatus.textContent='AI 寻找光点中…'; }
+      const p=this.player;
+      const v=this.validDirs(p.c,p.r,p.dir);
+      if(!v.length){ this.player.ndir=null; this.autoTarget=null; return; }
+      const threat=this.ghostThreatMap();
+      const cur=threat[p.r][p.c];
+      const SAFE=8; // 玩家自身需离幽灵 ≥8 格才算「真安全」，才去吃豆
+      // 真安全 → 朝最近光点稳步推进
+      if(cur>=SAFE){
+        const dot=this.bfsStep(p.c,p.r);
+        if(dot){ this.player.ndir={dc:dot.c-p.c, dr:dot.r-p.r}; this.autoTarget={c:dot.c,r:dot.r}; aiStatus.textContent='AI 寻找光点中…'; return; }
+      }
+      // 否则逃（占主导）：每步都选「离最近幽灵最远」的邻格（maximin），绝不朝幽灵走；
+      // 用「可达空间」做 tiebreak 避免钻进死胡同被堵死。比「规划到全局最远格」更稳——
+      // 后者最短路径可能先朝幽灵方向绕，被会移动的幽灵截住。
+      const blocked=this.ghostBlocked();
+      let step=null;
+      const cands=[];
+      for(const d of DIRS){
+        const nc=p.c+d.dc, nr=p.r+d.dr;
+        if(nc<0||nr<0||nc>=COLS||nr>=ROWS||this.wall[nr][nc]) continue;
+        if(blocked(nc,nr)) continue; // 绝不踩幽灵当前所在格
+        cands.push({d, nc, nr, space:this.reachableCount(nc,nr), flee:this.fleeScore(nc,nr)});
+      }
+      if(cands.length){
+        // 评分：1 步极小化极大（甩开幽灵夹击）为主，叠加可达空间（防死胡同）。
+        const W=0.15+(8-cur)*0.05;
+        for(const c of cands) c.score=c.flee + c.space*W;
+        cands.sort((a,b)=> b.score-a.score);
+        const b=cands[0]; step={c:b.nc, r:b.nr};
+      }
+      if(step){
+        this.player.ndir={dc:step.c-p.c, dr:step.r-p.r};
+        this.autoTarget={c:step.c, r:step.r}; aiStatus.textContent='AI 躲避幽灵中…';
       }
     }
     onArrivePlayer(){
@@ -192,6 +298,10 @@
     }
     onArriveGhost(g){
       const v=this.validDirs(g.c,g.r,g.dir);
+      if(this.autoPlay && Math.random()<0.5){
+        // 自动模式下幽灵偶尔不贪婪，给玩家留出逃生机
+        const r=v[Math.floor(Math.random()*v.length)]; g.dir=r; g.tc=g.c+r.dc; g.tr=g.r+r.dr; return;
+      }
       let best=v[0], bv=1e9;
       for(const d of v){ const nc=g.c+d.dc, nr=g.r+d.dr; const val=Math.abs(nc-this.player.c)+Math.abs(nr-this.player.r); if(val<bv){bv=val;best=d;} }
       g.dir=best; g.tc=g.c+best.dc; g.tr=g.r+best.dr;
@@ -205,12 +315,13 @@
       this.level++; lvlEl.textContent=this.level; statusEl.textContent='第 '+this.level+' 关！迷宫重置，速度提升';
       this.player.score=this.score; this.restartKeepScore();
     }
-    restartKeepScore(){ const s=this.score; this.restart(); this.score=s; scoreEl.textContent=s; }
+    restartKeepScore(){ const s=this.score; this.restart({auto:this.autoPlay, keepLevel:true}); this.score=s; scoreEl.textContent=s; }
     update(dt){
       if(this.over) return; this.time+=dt;
       if(this.autoPlay) this.autoDecide();
       if(this.moveEnt(this.player,dt)) this.onArrivePlayer();
-      for(const g of this.ghosts){ if(this.moveEnt(g,dt)) this.onArriveGhost(g); }
+      const gdt=this.autoPlay?dt*this.AUTO_GSPEED:dt; // 自动模式幽灵放慢，保证玩家稳可逃脱
+      for(const g of this.ghosts){ if(this.moveEnt(g,gdt)) this.onArriveGhost(g); }
       for(const g of this.ghosts){ if(Math.hypot(g.x-this.player.x,g.y-this.player.y)<0.55){ this.caught(g); return; } }
     }
     caught(g){
@@ -218,7 +329,7 @@
       if(s>this.best){ this.best=s; localStorage.setItem('mazeBest',String(this.best)); bestEl.textContent=this.best; }
       loseMsg.textContent='本局得分 '+s+' · 幽灵从 '+Math.round(g.x)+','+Math.round(g.y)+' 抓住了你';
       overlayLose.classList.add('active');
-      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay){ this.restartKeepScore(); } },900);
+      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay){ this.restart({auto:true}); } },900);
     }
     bindInput(){
       const setDir=(dc,dr)=>{ if(this.over||this.autoPlay) return; this.player.ndir={dc,dr}; };
@@ -266,7 +377,7 @@
     }
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restartKeepScore(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; }
+    startAuto(){ this.restart({auto:true}); const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
   }
   window.game=new Maze();
