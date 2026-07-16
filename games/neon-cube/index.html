@@ -104,7 +104,7 @@
   function matVec(a,v){ return [a[0][0]*v[0]+a[0][1]*v[1]+a[0][2]*v[2], a[1][0]*v[0]+a[1][1]*v[1]+a[1][2]*v[2], a[2][0]*v[0]+a[2][1]*v[1]+a[2][2]*v[2]]; }
   function rotXm(t){ const c=Math.cos(t),s=Math.sin(t); return [[1,0,0],[0,c,-s],[0,s,c]]; }
   function rotYm(t){ const c=Math.cos(t),s=Math.sin(t); return [[c,0,s],[0,1,0],[-s,0,c]]; }
-  function rotZm(t){ const c=Math.cos(t),s=Math.sin(t); return [[c,-s,0],[s,c,0]]; }
+  function rotZm(t){ const c=Math.cos(t),s=Math.sin(t); return [[c,-s,0],[s,c,0],[0,0,1]]; }
   function axisMatrix(axis,t){ if(axis==='x') return rotXm(t); if(axis==='y') return rotYm(t); return rotZm(t); }
   function roundVec(v){ return [Math.round(v[0]),Math.round(v[1]),Math.round(v[2])]; }
   function roundMat(m){ return m.map(row=>row.map(Math.round)); }
@@ -249,7 +249,7 @@
     startAuto(){
       this.autoPlay=true;
       const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
-      this.aiInd.style.display='flex';
+      aiInd.style.display='flex';
       this.turn=null; this.scrambleBase=0;
       this.scrambleSeq=[]; let prev=null;
       const n=14;
@@ -261,7 +261,7 @@
     stopAuto(){
       this.autoPlay=false;
       const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on');
-      this.aiInd.style.display='none';
+      aiInd.style.display='none';
       this.autoQueue=[]; this.autoPhase=null; this.autoStopAt=null;
     }
     restart(){

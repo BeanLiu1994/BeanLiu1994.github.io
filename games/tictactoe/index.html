@@ -100,13 +100,14 @@
       this.cells=[];
       for(let i=0;i<9;i++){ const c=document.createElement('div'); c.className='cell'; g.appendChild(c); this.cells.push(c); }
     }
-    restart(){
-      this.stopAuto();
+    restart(keepAuto){
+      if(!keepAuto) this.stopAuto();
       this.board=Array(9).fill(null);
       this.current='X'; this.over=false; this.winner=null; this.moves=0;
       this.cells.forEach(c=>{ c.textContent=''; c.className='cell'; });
       document.getElementById('overlay-win').classList.remove('active');
       this.updateUI(); this.bindInput();
+      if(keepAuto && !this.over) this.autoTimer=setTimeout(()=>this.autoStep(), 600);
     }
     winnerOf(b){
       const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -142,12 +143,13 @@
       const w=this.winnerOf(this.board);
       if(w){
         this.over=true;
-        if(w.who==='draw'){ if(this.autoPlay){} const sc=this.draws+1; this.draws=sc; localStorage.setItem('bestTTT',this.draws);
+        if(w.who==='draw'){ const sc=this.draws+1; this.draws=sc; localStorage.setItem('bestTTT',this.draws);
           document.getElementById('win-title').textContent='Draw'; document.getElementById('win-msg').textContent='Perfect play — nobody wins'; }
         else { w.line.forEach(k=>this.cells[k].classList.add('win'));
           document.getElementById('win-title').textContent=w.who+' wins'; document.getElementById('win-msg').textContent=w.who==='X'?'You win!':(this.autoPlay?'AI vs AI over':'AI wins'); }
-        if(this.autoPlay) this.stopAuto();
-        document.getElementById('overlay-win').classList.add('active'); this.updateUI(); return;
+        document.getElementById('overlay-win').classList.add('active'); this.updateUI();
+        if(this.autoPlay) this.autoTimer=setTimeout(()=>this.restart(true), 1400);
+        return;
       }
       this.current=this.current==='X'?'O':'X';
       this.updateUI();
@@ -162,8 +164,8 @@
       document.getElementById('move-stat').textContent='Move: '+this.moves;
       if(this.autoPlay) document.getElementById('ai-status').textContent='AI: '+this.current+' to move';
     }
-    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); this.autoStep(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(), 600); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bindInput(){
       if(this._bound) return; this._bound=true;
