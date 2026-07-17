@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0b0f1a" />
+<title>霓虹祖玛 · Neon Zuma</title>
+<style>
+  :root{ --bg:#0b0f1a; --panel:#121a2e; --border:#243049; --text:#e8eefc; --muted:#8aa0c8; --accent:#ff9b6b; --ok:#34e89e; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; overflow:hidden; overscroll-behavior:none;
+    background:radial-gradient(1200px 800px at 50% 120%, #2a1530 0%, var(--bg) 60%);
+    color:var(--text); font-family:"Segoe UI",system-ui,-apple-system,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    touch-action:none; -webkit-user-select:none; user-select:none; }
+  #shell{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  canvas{ width:min(100vw,460px); height:auto; max-height:100vh; border-radius:18px;
+    box-shadow:0 0 0 1px var(--border), 0 18px 60px rgba(0,0,0,.55), 0 0 60px rgba(255,155,107,.12);
+    background:#0a0e18; touch-action:none; display:block; }
+  .auto-toggle{ position:fixed; top:max(10px,env(safe-area-inset-top)); right:12px; z-index:30;
+    padding:10px 14px; border-radius:999px; border:1px solid var(--border); background:rgba(18,26,46,.85);
+    color:var(--text); font-weight:700; font-size:14px; letter-spacing:.5px; backdrop-filter:blur(6px);
+    box-shadow:0 6px 20px rgba(0,0,0,.4); cursor:pointer; touch-action:none; }
+  .auto-toggle.on{ border-color:var(--ok); color:#06281c; background:linear-gradient(180deg,#5cf0b0,#2bd08a); box-shadow:0 0 22px rgba(52,232,158,.5); }
+  .overlay{ position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
+    background:rgba(6,9,18,.72); backdrop-filter:blur(4px); padding:18px; }
+  .overlay.hidden{ display:none; }
+  .panel{ width:min(92vw,420px); background:linear-gradient(180deg,#2a1630,#0d1426); border:1px solid var(--border);
+    border-radius:20px; padding:26px 22px; text-align:center; box-shadow:0 0 50px rgba(255,155,107,.16), inset 0 1px 0 rgba(255,255,255,.04); }
+  .panel h1{ margin:0 0 2px; font-size:28px; letter-spacing:2px; background:linear-gradient(90deg,#ff9b6b,#ffd23f,#34e89e); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .panel .sub{ margin:0 0 14px; color:var(--muted); letter-spacing:4px; font-size:12px; }
+  .panel .desc{ color:var(--muted); font-size:13px; line-height:1.7; margin:0 0 18px; }
+  .panel .desc b{ color:var(--text); }
+  .btn{ display:inline-block; margin:6px; padding:12px 26px; border-radius:999px; border:none; cursor:pointer; font-weight:800; font-size:16px; letter-spacing:1px; color:#3a1a06; background:linear-gradient(180deg,#ffd08a,#ff9b4a); box-shadow:0 8px 24px rgba(255,155,74,.45); }
+  .hint{ margin-top:16px; color:var(--muted); font-size:12px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div id="shell">
+  <canvas id="game-canvas" width="460" height="780"></canvas>
+  <button id="auto-toggle" class="auto-toggle" type="button">自动 关</button>
+  <div id="overlay" class="overlay">
+    <div class="panel">
+      <h1>霓虹祖玛</h1>
+      <p class="sub">N E O N · Z U M A</p>
+      <p class="desc">
+        中心炮台射出彩色珠，击中同色珠链使 <b>3 个及以上同色相连</b> 即可消除。<br/>
+        别让珠链抵达中心的洞口！逐关加长加速。<br/>
+        对准同色处发射，连续消除触发连击连锁。
+      </p>
+      <button id="btn-start" class="btn">开始游戏</button>
+      <div class="hint">⌨ 键盘：移动鼠标/方向键瞄准，空格 发射<br/>📱 触屏：点屏幕瞄准并发射</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const W=460,H=780;
+  const PCOL=["#ff5d76","#ffd23f","#34e89e","#4f9cff"];
+  const PGLW=["#ff97a8","#ffe27a","#74f0bf","#8fc2ff"];
+  const BD=30;
+  const FX=W/2, FY=H-120; // frog below the arch
+  const canvas=document.getElementById('game-canvas'); const ctx=canvas.getContext('2d');
+  const autoBtn=document.getElementById('auto-toggle'); const overlay=document.getElementById('overlay');
+
+  let PATH=[], SEG=[], SMAX=0;
+  function buildPath(){
+    // convex "rainbow" arch: frog sits below it so every ball has a clear line of fire
+    PATH=[]; const x0=34, x1=W-34, cx=W/2, topY=70, botY=H*0.6, N=520;
+    for(let i=0;i<=N;i++){ const t=i/N; const x=x0+(x1-x0)*t; const f=(x-cx)/((x1-x0)/2); const y=topY+(botY-topY)*f*f; PATH.push({x,y}); }
+    SEG=[0]; for(let i=1;i<PATH.length;i++){ const dx=PATH[i].x-PATH[i-1].x, dy=PATH[i].y-PATH[i-1].y; SEG.push(SEG[i-1]+Math.hypot(dx,dy)); }
+    SMAX=SEG[SEG.length-1];
+  }
+  function posAt(s){ if(s<=0) return {x:PATH[0].x,y:PATH[0].y}; if(s>=SMAX) s=SMAX;
+    let lo=0,hi=SEG.length-1; while(lo<hi){ const m=(lo+hi)>>1; if(SEG[m]<s) lo=m+1; else hi=m; }
+    const i=Math.max(1,lo); const a=PATH[i-1], b=PATH[i]; const segLen=(SEG[i]-SEG[i-1])||1; const f=(s-SEG[i-1])/segLen;
+    return {x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f}; }
+
+  const game={
+    running:false, autoPlay:false, over:false,
+    balls:[], flying:[], score:0, level:1, v:30, aim:0, cur:0, nxt:1,
+    shootCd:0, chainFlash:0, lastChain:0, clearFlash:0, fx:[],
+    start:start, startAuto:startAuto, toggleAuto:toggleAuto, restart:restart, shoot:shoot
+  };
+  window.game=game;
+  function randCol(){ return Math.floor(Math.random()*4); }
+  function angDiff(a,b){ let d=a-b; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return d; }
+  function rotateToward(cur,tgt,maxStep){ const d=angDiff(tgt,cur); if(Math.abs(d)<=maxStep) return tgt; return cur+Math.sign(d)*maxStep; }
+
+  function buildLevel(){
+    const n=Math.min(60, 22+game.level*6);
+    game.balls=[]; for(let i=0;i<n;i++){ game.balls.push({s:(i-(n-1))*BD, color:randCol()}); }
+    game.flying=[]; game.v=26+game.level*2.2;
+    game.cur=randCol(); game.nxt=randCol(); game.shootCd=0.3;
+    // remove any pre-existing 3-runs so the level starts stable
+    resolveMatches(true);
+    if(game.balls.length===0) buildLevel();
+  }
+  function repack(){ const n=game.balls.length; if(!n) return; for(let i=n-2;i>=0;i--) game.balls[i].s=game.balls[i+1].s-BD; }
+  function runIfInsert(C, idx){ const cols=game.balls.map(b=>b.color); cols.splice(idx,0,C);
+    let lo=idx, hi=idx; while(lo-1>=0&&cols[lo-1]===C) lo--; while(hi+1<cols.length&&cols[hi+1]===C) hi++; return hi-lo+1; }
+  function resolveMatches(silent){
+    let chain=0, guard=0;
+    while(guard++<200){
+      let i=0, hit=false;
+      while(i<game.balls.length){ let j=i; while(j<game.balls.length&&game.balls[j].color===game.balls[i].color) j++;
+        if(j-i>=3){ for(let k=i;k<j;k++){ if(!silent){ const p=posAt(game.balls[k].s); game.fx.push({x:p.x,y:p.y,col:game.balls[k].color,t:0.28}); } }
+          game.balls.splice(i,j-i); chain++; hit=true; break; } i=j; }
+      if(!hit) break; repack();
+    }
+    if(!silent && chain>0){ game.score += chain*100 + (chain-1)*60; game.chainFlash=0.6; game.lastChain=chain; }
+    if(game.balls.length===0 && !silent) levelClear();
+  }
+  function levelClear(){ game.level++; game.score+=200; if(game.level>99) game.level=99; game.clearFlash=0.9; buildLevel(); }
+
+  function shoot(){ if(game.over||!game.running) return;
+    const c=game.cur; game.cur=game.nxt; game.nxt=randCol();
+    const sp=560; game.flying.push({x:FX,y:FY,vx:Math.cos(game.aim)*sp,vy:Math.sin(game.aim)*sp,color:c});
+    game.shootCd=0.3;
+  }
+  // auto fires a homing shot that reliably lands next to its chosen target (bypasses line-of-fire occlusion)
+  function shootAuto(shot){ const c=shot.color; game.cur=c; game.nxt=randCol();
+    const ti=game.balls.indexOf(shot.ball); if(ti<0) return;
+    const p=posAt(game.balls[ti].s);
+    game.flying.push({x:FX,y:FY, target:shot.ball, color:c, homing:true, speed:660});
+    game.shootCd=0.22;
+  }
+  // strategy: prefer completing an existing adjacent pair (pop now); else build a pair next to any ball
+  function findShot(){ let best=null, bestS=-1;
+    for(let i=0;i<game.balls.length-1;i++){ if(game.balls[i].color===game.balls[i+1].color){
+      const s=game.balls[i].s; if(s>bestS){ bestS=s; best={idx:i,color:game.balls[i].color,ball:game.balls[i]}; } } }
+    if(best) return best;
+    if(game.balls.length) return {idx:0,color:game.balls[0].color,ball:game.balls[0]};
+    return null; }
+
+  // ---------- control ----------
+  function start(){ if(game.running) return; game.running=true; game.over=false; game.score=0; game.level=1;
+    game.fx=[]; game.chainFlash=0; game.clearFlash=0; buildPath(); buildLevel(); overlay.classList.add('hidden');
+    last=performance.now(); requestAnimationFrame(loop); }
+  function startAuto(){ game.autoPlay=true; autoBtn.classList.add('on'); autoBtn.textContent='自动 开';
+    if(!game.running){ game.running=true; game.over=false; game.score=0; game.level=1; buildPath(); buildLevel();
+      overlay.classList.add('hidden'); last=performance.now(); requestAnimationFrame(loop); } }
+  function toggleAuto(){ game.autoPlay=!game.autoPlay; autoBtn.classList.toggle('on',game.autoPlay);
+    autoBtn.textContent=game.autoPlay?'自动 开':'自动 关'; if(game.autoPlay&&!game.running) startAuto(); }
+  function restart(){ if(game.running){ game.over=false; game.score=0; game.level=1; game.fx=[]; buildLevel(); } }
+
+  // ---------- update ----------
+  function update(dt){
+    if(game.over){ game.overT=(game.overT||0)+dt; if(game.overT>1.6){ game.overT=0; restart(); } return; }
+    game.v=26+game.level*2.2;
+    if(game.shootCd>0) game.shootCd-=dt;
+    if(game.chainFlash>0) game.chainFlash-=dt;
+    if(game.clearFlash>0) game.clearFlash-=dt;
+    for(const f of game.fx) f.t-=dt; game.fx=game.fx.filter(f=>f.t>0);
+
+    // move chain (front advances)
+    if(game.balls.length){ game.balls[game.balls.length-1].s += game.v*dt; repack(); }
+    if(game.balls.length && game.balls[game.balls.length-1].s>=SMAX){ game.over=true; return; }
+
+    // flying balls
+    for(let k=game.flying.length-1;k>=0;k--){ const f=game.flying[k];
+      if(f.homing){
+        const ti=game.balls.indexOf(f.target);
+        if(ti<0){ game.flying.splice(k,1); continue; }
+        const tp=posAt(game.balls[ti].s); const dx=tp.x-f.x, dy=tp.y-f.y, d=Math.hypot(dx,dy);
+        if(d<BD*0.6){ const idx=ti; game.balls.splice(idx,0,{s:0,color:f.color}); repack(); resolveMatches(false); game.flying.splice(k,1); continue; }
+        const sp=f.speed*dt; f.x+=dx/d*sp; f.y+=dy/d*sp;
+      } else {
+        f.x+=f.vx*dt; f.y+=f.vy*dt;
+        let collided=false;
+        for(let i=0;i<game.balls.length;i++){ const p=posAt(game.balls[i].s); if(Math.hypot(p.x-f.x,p.y-f.y)<BD*0.7){
+          const idx=i; game.balls.splice(idx,0,{s:0,color:f.color}); repack(); resolveMatches(false); collided=true; break; } }
+        if(collided || f.x<-40||f.x>W+40||f.y<-40||f.y>H+40) game.flying.splice(k,1);
+      }
+    }
+
+    // auto
+    if(game.autoPlay && !game.over){
+      const shot=findShot();
+      if(shot){ const ti=game.balls.indexOf(shot.ball); if(ti>=0){
+        const p=posAt(game.balls[ti].s); const ang=Math.atan2(p.y-FY,p.x-FX);
+        game.aim=rotateToward(game.aim,ang,9*dt);
+        if(Math.abs(angDiff(game.aim,ang))<0.35 && game.shootCd<=0) shootAuto(shot);
+      } } else if(game.balls.length<=4){ levelClear(); }
+    }
+  }
+
+  // ---------- draw ----------
+  function drawBall(x,y,col,scale){ scale=scale||1; const r=(BD/2)*scale;
+    ctx.save(); ctx.shadowColor=PGLW[col]; ctx.shadowBlur=10*scale;
+    const g=ctx.createRadialGradient(x-r*0.35,y-r*0.35,1,x,y,r); g.addColorStop(0,PGLW[col]); g.addColorStop(1,PCOL[col]);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); ctx.restore(); }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const bg=ctx.createLinearGradient(0,0,0,H); bg.addColorStop(0,'#1a1024'); bg.addColorStop(1,'#080c16');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    if(!game.running) return;
+    // path tube
+    ctx.save(); ctx.lineWidth=BD+8; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='rgba(255,255,255,.06)';
+    ctx.beginPath(); ctx.moveTo(PATH[0].x,PATH[0].y); for(let i=1;i<PATH.length;i+=2) ctx.lineTo(PATH[i].x,PATH[i].y); ctx.stroke();
+    ctx.lineWidth=BD; ctx.strokeStyle='rgba(120,90,160,.16)'; ctx.stroke(); ctx.restore();
+    // hole
+    const hp=PATH[PATH.length-1]; ctx.save(); ctx.shadowColor='#ff5d76'; ctx.shadowBlur=20;
+    ctx.fillStyle='#1a0c14'; ctx.beginPath(); ctx.arc(hp.x,hp.y,BD*0.8,0,7); ctx.fill();
+    ctx.strokeStyle='rgba(255,93,118,.6)'; ctx.lineWidth=3; ctx.stroke(); ctx.restore();
+    // balls
+    for(const b of game.balls){ const p=posAt(b.s); drawBall(p.x,p.y,b.color,1); }
+    // fx pops
+    for(const f of game.fx){ const a=Math.max(0,f.t/0.28); ctx.save(); ctx.globalAlpha=a; ctx.fillStyle=PGLW[f.col];
+      ctx.beginPath(); ctx.arc(f.x,f.y,(1-a)*BD*0.7+4,0,7); ctx.fill(); ctx.restore(); }
+    // flying
+    for(const f of game.flying) drawBall(f.x,f.y,f.color,1);
+    // frog
+    ctx.save(); ctx.translate(FX,FY); ctx.rotate(game.aim);
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.beginPath(); ctx.arc(0,0,BD*1.1,0,7); ctx.fill();
+    ctx.fillStyle='#2a2440'; ctx.fillRect(0,-7,BD*1.3,14);
+    ctx.save(); ctx.shadowColor=PGLW[game.cur]; ctx.shadowBlur=14; ctx.fillStyle=PCOL[game.cur];
+    ctx.beginPath(); ctx.arc(BD*1.1,0,BD*0.42,0,7); ctx.fill(); ctx.restore(); ctx.restore();
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(FX,FY,BD*0.55,0,7); ctx.fill();
+    // next preview
+    ctx.fillStyle='#8aa0c8'; ctx.font='700 12px system-ui,sans-serif'; ctx.textAlign='right';
+    ctx.fillText('NEXT', W-16, 54); drawBall(W-40, 64, game.nxt, 0.7);
+    // HUD
+    ctx.fillStyle='#e8eefc'; ctx.font='800 20px system-ui,sans-serif'; ctx.textAlign='left';
+    ctx.fillText('分数 '+game.score, 16, 30);
+    ctx.textAlign='right'; ctx.fillStyle='#ff9b6b'; ctx.font='800 18px system-ui,sans-serif';
+    ctx.fillText('Lv '+game.level+' · 珠 '+game.balls.length, W-16, 30);
+    // flashes
+    if(game.chainFlash>0 && game.lastChain>1){ ctx.save(); ctx.globalAlpha=Math.min(1,game.chainFlash*1.6);
+      ctx.fillStyle='#ffd23f'; ctx.font='800 38px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('连击 ×'+game.lastChain, W/2, H/2-90); ctx.restore(); }
+    if(game.clearFlash>0){ ctx.save(); ctx.globalAlpha=Math.min(1,game.clearFlash*1.4);
+      ctx.fillStyle='#34e89e'; ctx.font='800 34px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('过关！ Lv '+(game.level), W/2, H/2-120); ctx.restore(); }
+    if(game.autoPlay){ ctx.save(); ctx.fillStyle='#34e89e'; ctx.font='700 12px system-ui,sans-serif';
+      ctx.textAlign='left'; ctx.fillText('🤖 AUTO', 16, H-16); ctx.restore(); }
+    if(game.over){ ctx.fillStyle='rgba(6,9,18,.7)'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#ff5d76'; ctx.font='800 32px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('珠链到达洞口', W/2, H/2-10); ctx.fillStyle='#8aa0c8'; ctx.font='700 15px system-ui,sans-serif';
+      ctx.fillText('重开中… 分数 '+game.score, W/2, H/2+22); }
+  }
+
+  // ---------- loop ----------
+  let last=performance.now();
+  function loop(ts){ const dt=Math.min(0.05,(ts-last)/1000); last=ts; if(game.running) update(dt); draw(); requestAnimationFrame(loop); }
+
+  // ---------- events ----------
+  autoBtn.addEventListener('click', toggleAuto);
+  document.getElementById('btn-start').addEventListener('click', ()=>{ game.autoPlay=false; autoBtn.classList.remove('on'); autoBtn.textContent='自动 关'; start(); });
+  function toCanvas(e){ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+  let aiming=false;
+  canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); if(!game.running||game.over||game.autoPlay) return;
+    const p=toCanvas(e); game.aim=Math.atan2(p.y-FY,p.x-FX); aiming=true; });
+  canvas.addEventListener('pointermove', e=>{ if(aiming&&!game.autoPlay&&game.running&&!game.over){ const p=toCanvas(e); game.aim=Math.atan2(p.y-FY,p.x-FX); } });
+  canvas.addEventListener('pointerup', e=>{ e.preventDefault(); if(aiming&&!game.autoPlay&&game.running&&!game.over){ shoot(); } aiming=false; });
+  window.addEventListener('keydown', e=>{ if(!game.running||game.over||game.autoPlay) return;
+    if(e.key===' '){ shoot(); } else if(e.key==='ArrowLeft'){ game.aim-=0.12; } else if(e.key==='ArrowRight'){ game.aim+=0.12; } });
+  last=performance.now(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

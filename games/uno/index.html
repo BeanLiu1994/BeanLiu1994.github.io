@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0b0f1a" />
+<title>霓虹 UNO · Neon UNO</title>
+<style>
+  :root{
+    --bg:#0b0f1a; --panel:#121a2e; --border:#243049;
+    --text:#e8eefc; --muted:#8aa0c8; --accent:#5cc8ff; --ok:#34e89e; --warn:#ffd23f;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; overflow:hidden; overscroll-behavior:none;
+    background:radial-gradient(1200px 800px at 50% -10%, #16213e 0%, var(--bg) 60%);
+    color:var(--text); font-family:"Segoe UI",system-ui,-apple-system,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    touch-action:none; -webkit-user-select:none; user-select:none; }
+  #shell{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  canvas{ width:min(100vw,460px); height:auto; max-height:100vh; border-radius:18px;
+    box-shadow:0 0 0 1px var(--border), 0 18px 60px rgba(0,0,0,.55), 0 0 60px rgba(92,200,255,.12);
+    background:#0a0e18; touch-action:none; display:block; }
+  .auto-toggle{ position:fixed; top:max(10px,env(safe-area-inset-top)); right:12px; z-index:30;
+    padding:10px 14px; border-radius:999px; border:1px solid var(--border);
+    background:rgba(18,26,46,.85); color:var(--text); font-weight:700; font-size:14px; letter-spacing:.5px;
+    backdrop-filter:blur(6px); box-shadow:0 6px 20px rgba(0,0,0,.4); cursor:pointer; touch-action:none; }
+  .auto-toggle.on{ border-color:var(--ok); color:#06281c;
+    background:linear-gradient(180deg,#5cf0b0,#2bd08a); box-shadow:0 0 22px rgba(52,232,158,.5); }
+  .overlay{ position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
+    background:rgba(6,9,18,.72); backdrop-filter:blur(4px); padding:18px; }
+  .overlay.hidden{ display:none; }
+  .panel{ width:min(92vw,420px); background:linear-gradient(180deg,#13203a,#0d1426);
+    border:1px solid var(--border); border-radius:20px; padding:26px 22px; text-align:center;
+    box-shadow:0 0 50px rgba(92,200,255,.14), inset 0 1px 0 rgba(255,255,255,.04); }
+  .panel h1{ margin:0 0 2px; font-size:30px; letter-spacing:2px;
+    background:linear-gradient(90deg,#5cc8ff,#b98bff,#34e89e); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .panel h2{ margin:0 0 14px; font-size:24px; color:var(--accent); }
+  .panel .sub{ margin:0 0 14px; color:var(--muted); letter-spacing:4px; font-size:12px; }
+  .panel .desc{ color:var(--muted); font-size:13px; line-height:1.7; margin:0 0 18px; }
+  .panel .desc b{ color:var(--text); }
+  .btn{ display:inline-block; margin:6px; padding:12px 26px; border-radius:999px; border:none; cursor:pointer;
+    font-weight:800; font-size:16px; letter-spacing:1px; color:#06223a;
+    background:linear-gradient(180deg,#7fd4ff,#3aa0ff); box-shadow:0 8px 24px rgba(58,160,255,.45); }
+  .btn.ghost{ color:var(--text); background:rgba(255,255,255,.06); border:1px solid var(--border); box-shadow:none; }
+  .hint{ margin-top:16px; color:var(--muted); font-size:12px; line-height:1.6; }
+  .colors{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px; }
+  .colors button{ height:64px; border-radius:14px; border:2px solid rgba(255,255,255,.25); cursor:pointer; }
+  .c-red{ background:linear-gradient(180deg,#ff6b8b,#e23a5e); }
+  .c-yellow{ background:linear-gradient(180deg,#ffe06b,#f5b400); }
+  .c-green{ background:linear-gradient(180deg,#5cf0b0,#1faf73); }
+  .c-blue{ background:linear-gradient(180deg,#6fb4ff,#2f7be0); }
+</style>
+</head>
+<body>
+<div id="shell">
+  <canvas id="game-canvas" width="460" height="780"></canvas>
+  <button id="auto-toggle" class="auto-toggle" type="button">自动 关</button>
+
+  <div id="overlay" class="overlay">
+    <div class="panel">
+      <h1>霓虹 UNO</h1>
+      <p class="sub">N E O N · U N O</p>
+      <p class="desc">
+        你（底部）对战 3 名 AI。<br/>
+        轮到你时，点亮起的牌即可打出；或点牌堆抽牌。<br/>
+        颜色 / 数字 / 符号相同即可接；万能牌可指定颜色。<br/>
+        <b>跳过 / 反转 / +2 / 万能+4</b> 各有特效，先出完手牌者获胜！
+      </p>
+      <button id="btn-start" class="btn">开始游戏</button>
+      <div class="hint">
+        ⌨ 键盘：← → 选牌，空格/回车 出牌，D 抽牌<br/>
+        📱 触屏：直接点手牌或牌堆
+      </div>
+    </div>
+  </div>
+
+  <div id="colorpick" class="overlay hidden">
+    <div class="panel">
+      <h2>选择颜色</h2>
+      <div class="colors">
+        <button class="c-red"    data-c="red"></button>
+        <button class="c-yellow" data-c="yellow"></button>
+        <button class="c-green"  data-c="green"></button>
+        <button class="c-blue"   data-c="blue"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const COLORS = {
+    red:   "#ff5d76", yellow:"#ffd23f", green:"#34e89e", blue:"#4f9cff",
+    wild:  "#cfd8ff"
+  };
+  const CGLW = { red:"#ff8aa0", yellow:"#ffe27a", green:"#74f0bf", blue:"#8fc2ff", wild:"#ffffff" };
+  const W = 460, H = 780;
+  const canvas = document.getElementById('game-canvas');
+  const ctx = canvas.getContext('2d');
+  const autoBtn = document.getElementById('auto-toggle');
+  const overlay = document.getElementById('overlay');
+  const colorpick = document.getElementById('colorpick');
+
+  const ACTIONS = ['skip','rev','draw2','wild4'];
+  function isAction(v){ return v==='skip'||v==='rev'||v==='draw2'||v==='wild4'; }
+
+  // ---------- game state ----------
+  const game = {
+    running:false, autoPlay:false, over:false,
+    players:[], discard:[], drawPile:[],
+    current:0, dir:1, currentColor:'red', pendingDraw:0,
+    round:1, totalTurns:0, score:0, winner:-1,
+    turnCd:0, awaiting:false, highlight:-1, fx:[], autoBadge:0,
+    pickWildFor:null,
+    start:start, startAuto:startAuto, toggleAuto:toggleAuto,
+    restart:restart, playHuman:playHuman, drawHuman:drawHuman,
+    setColor:setColor
+  };
+  window.game = game;
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i];a[i]=a[j];a[j]=t; } return a; }
+  function buildDeck(){
+    const d=[]; const cs=['red','yellow','green','blue'];
+    for(const c of cs){
+      d.push({color:c,value:0});
+      for(let v=1;v<=9;v++){ d.push({color:c,value:v}); d.push({color:c,value:v}); }
+      d.push({color:c,value:'skip'}); d.push({color:c,value:'skip'});
+      d.push({color:c,value:'rev'});  d.push({color:c,value:'rev'});
+      d.push({color:c,value:'draw2'});d.push({color:c,value:'draw2'});
+    }
+    for(let i=0;i<4;i++){ d.push({color:'wild',value:'wild'}); d.push({color:'wild',value:'wild4'}); }
+    return d;
+  }
+  function deal(){
+    game.drawPile = shuffle(buildDeck());
+    game.players = [[],[],[],[]];
+    for(let i=0;i<7;i++) for(let p=0;p<4;p++) game.players[p].push(game.drawPile.pop());
+    // first discard (not wild if possible)
+    let top = game.drawPile.pop();
+    while(top.color==='wild'){ game.drawPile.unshift(top); top=game.drawPile.pop(); }
+    game.discard=[top];
+    game.currentColor = top.color;
+    game.current=0; game.dir=1; game.pendingDraw=0; game.over=false; game.winner=-1;
+  }
+
+  function isPlayable(card, top, color){
+    if(card.color==='wild') return true;
+    if(card.color===color) return true;
+    return String(card.value)===String(top.value);
+  }
+  function bestColor(hand){
+    const cnt={red:0,yellow:0,green:0,blue:0};
+    for(const c of hand) if(c.color!=='wild') cnt[c.color]++;
+    let best='red',b=-1; for(const k in cnt) if(cnt[k]>b){b=cnt[k];best=k;}
+    return best;
+  }
+  function drawCards(p,n){
+    for(let i=0;i<n;i++){
+      if(game.drawPile.length===0){
+        if(game.discard.length>1){
+          const top=game.discard.pop();
+          game.drawPile=shuffle(game.discard); game.discard=[top];
+        } else break;
+      }
+      if(game.drawPile.length===0) break;
+      game.players[p].push(game.drawPile.pop());
+    }
+  }
+  function advance(steps){ const N=game.players.length; game.current=(game.current+game.dir*steps+N*4)%N; }
+  function removeCard(p,card){ const i=game.players[p].indexOf(card); if(i>=0) game.players[p].splice(i,1); }
+
+  function playCard(p, card, chosen){
+    removeCard(p,card);
+    game.discard.push(card);
+    game.totalTurns++; game.score=game.totalTurns;
+    const top=card;
+    let color = (card.color==='wild') ? chosen : card.color;
+    game.currentColor=color;
+    // visual fx
+    game.fx.push({card:card, color:color, t:0.45});
+    if(card.color==='wild'){ /* chosen handled */ }
+    else if(card.value==='skip'){ advance(2); }
+    else if(card.value==='rev'){ game.dir*=-1; advance((game.players.length===2)?2:1); }
+    else if(card.value==='draw2'){ game.pendingDraw+=2; advance(2); }
+    else if(card.value==='wild4'){ game.pendingDraw+=4; advance(2); }
+    else advance(1);
+    if(game.players[p].length===0){ game.over=true; game.winner=p; }
+  }
+
+  function aiPick(p){
+    const hand=game.players[p]; const top=game.discard[game.discard.length-1];
+    const playable=hand.filter(c=>isPlayable(c,top,game.currentColor));
+    if(playable.length===0) return null;
+    let best=null,bs=-1e9;
+    for(const c of playable){
+      let s=0;
+      if(c.color==='wild'){ s+=bestColor(hand).length - 0.4; }
+      else s+=hand.filter(x=>x.color===c.color).length;
+      if(c.value==='draw2') s+=(hand.length<=3?6:0.5);
+      if(c.value==='wild4') s+=(hand.length<=3?7:0.2);
+      if(c.value==='skip'||c.value==='rev') s+=0.3;
+      s+=Math.random()*0.01;
+      if(s>bs){bs=s;best=c;}
+    }
+    return best;
+  }
+
+  function resolveTurn(){
+    if(game.over) return;
+    if(game.pendingDraw>0){
+      drawCards(game.current, game.pendingDraw);
+      game.pendingDraw=0; advance(1); game.turnCd=0.45; return;
+    }
+    const p=game.current; const hand=game.players[p];
+    const pick=aiPick(p);
+    if(pick){
+      const chosen=(pick.color==='wild')?bestColor(hand):null;
+      playCard(p,pick,chosen);
+    } else {
+      drawCards(p,1);
+      const drawn=hand[hand.length-1];
+      if(drawn && isPlayable(drawn, game.discard[game.discard.length-1], game.currentColor)){
+        const chosen=(drawn.color==='wild')?bestColor(hand):null;
+        playCard(p,drawn,chosen);
+      } else advance(1);
+    }
+    game.turnCd=0.5;
+  }
+
+  // ---------- public control ----------
+  function start(){
+    if(game.running) return;
+    game.running=true; game.round=1; game.totalTurns=0; game.score=0;
+    game.over=false; game.fx=[]; game.autoBadge=0; game.awaiting=false;
+    deal();
+    overlay.classList.add('hidden'); colorpick.classList.add('hidden');
+    last=performance.now(); requestAnimationFrame(loop);
+  }
+  function startAuto(){
+    game.autoPlay=true; autoBtn.classList.add('on'); autoBtn.textContent='自动 开';
+    if(!game.running){ deal(); game.running=true; game.round=1; game.totalTurns=0; game.score=0;
+      game.over=false; game.fx=[]; overlay.classList.add('hidden'); colorpick.classList.add('hidden');
+      last=performance.now(); requestAnimationFrame(loop); }
+  }
+  function toggleAuto(){
+    game.autoPlay=!game.autoPlay;
+    autoBtn.classList.toggle('on',game.autoPlay);
+    autoBtn.textContent=game.autoPlay?'自动 开':'自动 关';
+    if(game.autoPlay && !game.running) startAuto();
+    else if(!game.autoPlay){ game.awaiting=false; }
+  }
+  function restart(){
+    game.round++; game.over=false; game.winner=-1;
+    game.fx=[]; deal(); game.turnCd=0.4;
+  }
+
+  // ---------- human input ----------
+  function humanTurnActive(){ return !game.autoPlay && !game.over && game.current===0 && game.running; }
+  function playHuman(card){
+    if(!humanTurnActive()) return;
+    const top=game.discard[game.discard.length-1];
+    if(!isPlayable(card,top,game.currentColor)){ flashDenied(); return; }
+    if(card.color==='wild'){ game.pickWildFor=card; openColorPick(); return; }
+    playCard(0,card,null); game.awaiting=false; game.turnCd=0.35;
+  }
+  function drawHuman(){
+    if(!humanTurnActive()) return;
+    if(aiPick(0)!==null){ flashDenied(); return; } // must play if possible
+    drawCards(0,1); const drawn=game.players[0][game.players[0].length-1];
+    if(drawn && isPlayable(drawn,game.discard[game.discard.length-1],game.currentColor)){
+      if(drawn.color==='wild'){ game.pickWildFor=drawn; openColorPick(); return; }
+      playCard(0,drawn,null);
+    } else advance(1);
+    game.awaiting=false; game.turnCd=0.35;
+  }
+  function flashDenied(){ game.deniedT=0.4; }
+  function openColorPick(){ colorpick.classList.remove('hidden'); }
+  function setColor(c){
+    colorpick.classList.add('hidden');
+    const card=game.pickWildFor; game.pickWildFor=null;
+    if(!card) return;
+    if(humanTurnActive()){ playCard(0,card,c); game.awaiting=false; game.turnCd=0.35; }
+  }
+
+  // ---------- layout / hit testing ----------
+  function handLayout(){
+    const hand=game.players[0]; const n=hand.length;
+    const cw=Math.min(64, (W-40)/Math.max(n,1)); const ch=cw*1.45;
+    const totalW=n*cw + (n-1)*6; const x0=(W-totalW)/2; const y=H-ch-14;
+    const out=[];
+    for(let i=0;i<n;i++) out.push({x:x0+i*(cw+6), y:y, w:cw, h:ch, card:hand[i], i});
+    return out;
+  }
+  function hit(mx,my){
+    const lay=handLayout();
+    for(let i=lay.length-1;i>=0;i--){ const r=lay[i]; if(mx>=r.x&&mx<=r.x+r.w&&my>=r.y&&my<=r.y+r.h) return r; }
+    // draw pile area (center-right)
+    const dp=drawPileRect(); if(mx>=dp.x&&mx<=dp.x+dp.w&&my>=dp.y&&my<=dp.y+dp.h) return {draw:true};
+    return null;
+  }
+  function drawPileRect(){ const w=58,h=82; return {x:W/2+34, y:H/2-30, w, h}; }
+
+  // ---------- drawing ----------
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function drawCardFace(x,y,w,h,card,hi){
+    const col=COLORS[card.color]||'#fff'; const glw=CGLW[card.color]||'#fff';
+    ctx.save();
+    if(hi){ ctx.shadowColor=glw; ctx.shadowBlur=22; }
+    rr(x,y,w,h,10);
+    const g=ctx.createLinearGradient(x,y,x,y+h);
+    if(card.color==='wild'){ g.addColorStop(0,'#5a6bff'); g.addColorStop(.5,'#b85cff'); g.addColorStop(1,'#ff5ca8'); }
+    else { g.addColorStop(0,glw); g.addColorStop(1,col); }
+    ctx.fillStyle=g; ctx.fill();
+    ctx.shadowBlur=0;
+    rr(x+4,y+4,w-8,h-8,8); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=1.5; ctx.stroke();
+    // center glyph
+    let label = isAction(card.value)
+      ? (card.value==='skip'?'⊘':card.value==='rev'?'⇄':card.value==='draw2'?'+2':'+4')
+      : String(card.value);
+    ctx.fillStyle = (card.color==='wild')?'#fff':'rgba(8,12,24,.82)';
+    ctx.font='800 '+Math.floor(h*0.34)+'px system-ui,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(card.color==='wild'){ // four-color fan
+      const parts=[COLORS.red,COLORS.yellow,COLORS.green,COLORS.blue];
+      for(let i=0;i<4;i++){ ctx.fillStyle=parts[i]; ctx.beginPath();
+        ctx.arc(x+w/2,y+h/2, h*0.16, i*Math.PI/2, i*Math.PI/2+Math.PI/2); ctx.fill(); }
+      ctx.fillStyle='rgba(8,12,24,.55)'; ctx.beginPath(); ctx.arc(x+w/2,y+h/2,h*0.13,0,7); ctx.fill();
+    } else {
+      if(label.length>1){ ctx.font='800 '+Math.floor(h*0.2)+'px system-ui,sans-serif'; }
+      ctx.fillText(label, x+w/2, y+h/2);
+      // corner mini
+      ctx.font='700 '+Math.floor(h*0.15)+'px system-ui,sans-serif';
+      ctx.fillText(label, x+w*0.22, y+h*0.18);
+      ctx.fillText(label, x+w*0.78, y+h*0.84);
+    }
+    ctx.restore();
+  }
+
+  function drawBot(p, name, cx, cy, isLeft){
+    const hand=game.players[p]; const n=hand.length;
+    ctx.save();
+    ctx.fillStyle='rgba(255,255,255,.05)'; rr(cx-44,cy-30,88,60,14); ctx.fill();
+    // card backs
+    const bs=Math.min(16, 360/Math.max(n,1));
+    for(let i=0;i<n;i++){ ctx.fillStyle='rgba(92,200,255,.5)'; rr(cx-n*bs/2+i*bs, cy-22, bs-2, 40, 4); ctx.fill(); }
+    ctx.fillStyle = (game.current===p && !game.over)?'#ffd23f':'#8aa0c8';
+    ctx.font='700 13px system-ui,sans-serif'; ctx.textAlign='center';
+    ctx.fillText(name+(game.current===p&&!game.over?' ◀':''), cx, cy+ (isLeft?-34:40));
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // bg
+    const bg=ctx.createLinearGradient(0,0,0,H); bg.addColorStop(0,'#0c1426'); bg.addColorStop(1,'#080c16');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    if(!game.running){ return; }
+
+    // HUD
+    ctx.fillStyle='#e8eefc'; ctx.font='800 20px system-ui,sans-serif'; ctx.textAlign='left';
+    ctx.fillText('第 '+game.round+' 局', 16, 30);
+    ctx.textAlign='right'; ctx.fillStyle='#8aa0c8'; ctx.font='700 14px system-ui,sans-serif';
+    ctx.fillText('出牌 '+game.score+' · 余牌 '+(game.players[0]?game.players[0].length:0), W-16, 30);
+
+    // current color ring (top center)
+    const ccol=COLORS[game.currentColor]||'#fff';
+    ctx.save(); ctx.shadowColor=ccol; ctx.shadowBlur=18;
+    ctx.fillStyle=ccol; ctx.beginPath(); ctx.arc(W/2, 52, 12, 0, 7); ctx.fill(); ctx.restore();
+
+    // bots
+    drawBot(1,'左侧', 62, 120, true);
+    drawBot(2,'对面', W/2, 120, false);
+    drawBot(3,'右侧', W-62, 120, false);
+
+    // discard + draw
+    const top=game.discard[game.discard.length-1];
+    const fxNow=game.fx[game.fx.length-1];
+    if(top){
+      let sc=1; if(fxNow){ const t=fxNow.t; sc=1+0.18*Math.sin((0.45-t)/0.45*Math.PI); }
+      const dw=96,dh=140; const dx=W/2-34-dw/2, dy=H/2-30;
+      ctx.save(); ctx.translate(W/2-34, H/2-30); ctx.scale(sc,sc); ctx.translate(-(W/2-34),-(H/2-30));
+      drawCardFace(dx,dy,dw,dh,top, game.autoPlay && fxNow); ctx.restore();
+    }
+    const dp=drawPileRect();
+    ctx.save(); ctx.shadowColor='rgba(92,200,255,.5)'; ctx.shadowBlur=14;
+    rr(dp.x,dp.y,dp.w,dp.h,8); ctx.fillStyle='rgba(92,200,255,.18)'; ctx.fill();
+    rr(dp.x+4,dp.y+4,dp.w-8,dp.h-8,6); ctx.strokeStyle='rgba(92,200,255,.6)'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.shadowBlur=0; ctx.fillStyle='rgba(255,255,255,.5)'; ctx.font='700 11px system-ui,sans-serif';
+    ctx.textAlign='center'; ctx.fillText('抽牌', dp.x+dp.w/2, dp.y+dp.h/2);
+    ctx.fillText('('+game.drawPile.length+')', dp.x+dp.w/2, dp.y+dp.h/2+14);
+    ctx.restore();
+
+    // hand
+    const lay=handLayout();
+    for(const r of lay){
+      const playable = humanTurnActive() && isPlayable(r.card, top, game.currentColor);
+      const hi = (playable) || (game.highlight===r.i);
+      ctx.globalAlpha = (humanTurnActive() && !playable)?0.62:1;
+      if(hi && humanTurnActive()){ ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=20; }
+      drawCardFace(r.x,r.y,r.w,r.h,r.card, hi && humanTurnActive());
+      if(hi && humanTurnActive()) ctx.restore();
+      ctx.globalAlpha=1;
+    }
+    if(humanTurnActive() && !game.awaiting){ game.awaiting=true; }
+    if(humanTurnActive() && (aiPick(0)===null)){
+      ctx.fillStyle='#ffd23f'; ctx.font='700 13px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText('👉 点「抽牌」区抽牌', W/2, lay.length?lay[0].y-12:H-30);
+    }
+
+    // fx flying card / auto badge
+    if(game.autoBadge>0){ game.autoBadge-=1/60; }
+    if(game.autoPlay){
+      ctx.save(); ctx.globalAlpha=0.9; ctx.fillStyle='#34e89e'; ctx.font='700 12px system-ui,sans-serif';
+      ctx.textAlign='left'; ctx.fillText('🤖 AUTO', 16, H-16); ctx.restore();
+    }
+    if(game.deniedT>0){ game.deniedT-=1/60; ctx.fillStyle='#ff5d6c'; ctx.font='700 13px system-ui,sans-serif';
+      ctx.textAlign='center'; ctx.fillText('不能出这张', W/2, H-50); }
+
+    // over banner
+    if(game.over){
+      ctx.fillStyle='rgba(6,9,18,.66)'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = game.winner===0?'#34e89e':'#ff5d76';
+      ctx.font='800 34px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText(game.winner===0?'🎉 你赢啦！':'AI 获胜', W/2, H/2-10);
+      ctx.fillStyle='#8aa0c8'; ctx.font='700 15px system-ui,sans-serif';
+      ctx.fillText('即将开始第 '+(game.round+1)+' 局…', W/2, H/2+24);
+    }
+  }
+
+  // ---------- loop ----------
+  let last=performance.now();
+  function loop(ts){
+    const dt=Math.min(0.05, (ts-last)/1000); last=ts;
+    if(game.running){
+      // fx decay
+      for(const f of game.fx) f.t-=dt; game.fx=game.fx.filter(f=>f.t>0);
+      if(game.over){ game.overT=(game.overT||0)+dt; if(game.overT>1.6){ game.overT=0; restart(); } }
+      else {
+        if(game.turnCd>0){ game.turnCd-=dt; }
+        else if(game.autoPlay || game.current!==0){ resolveTurn(); }
+        else { /* wait for human (awaiting handled in draw) */ }
+      }
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- events ----------
+  autoBtn.addEventListener('click', toggleAuto);
+  document.getElementById('btn-start').addEventListener('click', function(){ game.autoPlay=false; autoBtn.classList.remove('on'); autoBtn.textContent='自动 关'; start(); });
+  colorpick.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=> setColor(b.dataset.c)));
+
+  function toCanvas(e){
+    const r=canvas.getBoundingClientRect();
+    const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+    const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+    return { x: cx*(W/r.width), y: cy*(H/r.height) };
+  }
+  let downX=0,downY=0;
+  canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); const p=toCanvas(e); downX=p.x;downY=p.y; });
+  canvas.addEventListener('pointerup', e=>{
+    e.preventDefault(); const p=toCanvas(e);
+    if(Math.hypot(p.x-downX,p.y-downY)>26) return; // ignore drags
+    if(!humanTurnActive()) return;
+    const h=hit(p.x,p.y);
+    if(!h) return;
+    if(h.draw){ drawHuman(); return; }
+    if(h.card){ game.highlight=h.i; playHuman(h.card); }
+  });
+  canvas.addEventListener('pointermove', e=> e.preventDefault());
+
+  window.addEventListener('keydown', e=>{
+    if(!humanTurnActive()) return;
+    const lay=handLayout();
+    if(e.key==='ArrowRight'){ game.highlight=Math.min((game.highlight<0?-1:game.highlight)+1, lay.length-1); }
+    else if(e.key==='ArrowLeft'){ game.highlight=Math.max((game.highlight<0?0:game.highlight)-1,0); }
+    else if(e.key===' '||e.key==='Enter'){ if(game.highlight>=0&&lay[game.highlight]) playHuman(lay[game.highlight].card); }
+    else if(e.key==='d'||e.key==='D'){ drawHuman(); }
+  });
+
+  // boot
+  last=performance.now(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
