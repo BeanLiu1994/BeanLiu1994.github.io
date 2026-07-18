@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>Shisen · Neon Mahjong Connect</title>
+<style>
+  :root{
+    --bg:#0a0e1a; --surface:#11182b; --text:#eaf2ff; --muted:#7d8bb5;
+    --accent:#39d0ff; --accent2:#ff5d9e; --gold:#ffd166; --ok:#39ff9e;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;position:fixed;width:100%;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #11304f 0%, transparent 55%), radial-gradient(ellipse at 50% 100%, #3a1140 0%, transparent 55%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:480px;height:100vh;max-height:880px;display:flex;flex-direction:column;padding:12px;gap:10px;}
+  .header{display:flex;align-items:center;justify-content:space-between;}
+  .title-block h1{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:8px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff10;border-radius:10px;padding:6px 12px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:.5rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:2px;}
+  .score-card .value{font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;flex:1;min-height:0;background:var(--surface);border:1px solid #ffffff10;border-radius:16px;overflow:hidden;box-shadow:0 0 50px #00000040,0 0 70px #39d0ff18;}
+  .board-wrap, .board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:100%;}
+  .controls{display:flex;gap:8px;}
+  .btn{flex:1;min-width:80px;padding:11px 14px;border:1px solid #ffffff14;border-radius:11px;background:var(--surface);color:var(--text);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .18s;letter-spacing:.5px;text-align:center;}
+  .btn:hover{background:#ffffff12;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#0a0e1a;}
+  .btn.primary:hover{box-shadow:0 0 22px #39d0ff55;}
+  .btn.auto-on{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#0a0e1a;animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 6px #39d0ff44;}50%{box-shadow:0 0 20px #39d0ff88,0 0 38px #ff5d9e55;}}
+  .ai-indicator{display:none;align-items:center;gap:8px;justify-content:center;font-size:.72rem;color:var(--muted);min-height:18px;}
+  .ai-indicator.show{display:flex;}
+  .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);animation:blink .8s infinite;}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.7);}}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s;z-index:5;}
+  .overlay.active{opacity:1;pointer-events:auto;}
+  .overlay-bg{position:absolute;inset:0;background:#0a0e1add;backdrop-filter:blur(5px);}
+  .overlay-content{position:relative;text-align:center;z-index:1;padding:20px;}
+  .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay-content p{color:var(--muted);margin-bottom:14px;font-size:.85rem;}
+  .hint{text-align:center;font-size:.64rem;color:var(--muted);line-height:1.5;}
+  @media (max-width:400px){.title-block h1{font-size:1.3rem;}.btn{padding:10px;font-size:.76rem;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>Shisen</h1><div class="sub">M A H J O N G   C O N N E C T</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+      <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay" id="overlay-over">
+      <div class="overlay-bg"></div>
+      <div class="overlay-content">
+        <h2 id="over-title">通关！</h2>
+        <p id="over-msg">全部消除，AI 自动续局</p>
+        <button class="btn primary" id="btn-again" style="min-width:140px;">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动连线消除中…</span></div>
+  <div class="controls">
+    <button class="btn primary" id="btn-auto">自动游玩</button>
+    <button class="btn" id="btn-restart">重开</button>
+  </div>
+  <div class="hint">点选两个相同图案 · 连线转折不超过两次即可消除 · 自动模式 AI 保证全清通关</div>
+</div>
+<script>
+(function(){
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), bestEl=document.getElementById('best');
+  const overlay=document.getElementById('overlay-over'), overMsg=document.getElementById('over-msg'), overTitle=document.getElementById('over-title');
+  const btnAuto=document.getElementById('btn-auto'), btnRestart=document.getElementById('btn-restart'), btnAgain=document.getElementById('btn-again');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  const SYMS=['🍎','🍊','🍋','🍇','🫐','🍓','🍑','🍒','🌟','⚡','🔥','💎','🌈','🍀','🌸','🌙','☀️','❄️','🐱','🐶'];
+  const COLORS=['#ff5d6c','#ff8a3d','#ffd166','#39ff9e','#39d0ff','#5d8bff','#b18cff','#ff5d9e','#ff7ad9','#39ffd0','#c6ff4d','#ffb14d','#7ad9ff','#9bff5d','#ff9bb0','#a0a0ff','#ffd95d','#5dffe0','#ff8ad0','#8affc1'];
+  const Wc=8, Hc=6;
+  const DIRS=[[-1,0],[1,0],[0,-1],[0,1]];
+
+  class Game{
+    constructor(){
+      this.autoPlay=false; this.over=false;
+      this.best=parseInt(localStorage.getItem('shisenBest')||'0',10); bestEl.textContent=this.best;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput(); this.newGame();
+      this.last=performance.now(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const rc=canvas.getBoundingClientRect();
+      this.W=Math.max(300,Math.min(rc.width||420,480)); this.H=Math.max(360,Math.min(rc.height||640,860));
+      const d=window.devicePixelRatio||1; canvas.width=this.W*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0);
+      this.cell=Math.floor(Math.min(this.W*0.96/Wc, this.H*0.92/Hc));
+      this.boardX=Math.floor((this.W-this.cell*Wc)/2);
+      this.boardY=Math.floor((this.H-this.cell*Hc)/2);
+    }
+    cellCenter(r,c){ return { x:this.boardX+(c+0.5)*this.cell, y:this.boardY+(r+0.5)*this.cell }; }
+    newGame(){
+      this.genBoard();
+      this.score=0; this.removed=0; this.combo=0; this.lastClear=-99;
+      this.over=false; this.overFrame=0; this.frame=0; this.lastAutoFrame=-99; this.autoStep=10;
+      this.selA=null; this.clearAnim=null; this.autoPlan=null; this.ptr=0; this.flash=0;
+      scoreEl.textContent='0'; bestEl.textContent=this.best;
+      overlay.classList.remove('active'); aiStatus.textContent='AI 自动连线消除中…';
+    }
+    genBoard(){
+      const total=Wc*Hc; const cells=[]; for(let r=0;r<Hc;r++) for(let c=0;c<Wc;c++) cells.push(r+','+c);
+      for(let attempt=0;attempt<300;attempt++){
+        const syms=[]; for(let i=0;i<total/2;i++) syms.push(SYMS[(Math.random()*SYMS.length)|0]);
+        const flat=[]; for(const s of syms){ flat.push(s); flat.push(s); }
+        for(let i=flat.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=flat[i]; flat[i]=flat[j]; flat[j]=t; }
+        const occ=new Map(); for(let i=0;i<cells.length;i++) occ.set(cells[i],flat[i]);
+        const sol=this.findSolution(occ);
+        if(sol&&sol.length===total/2){ this.occ=occ; this.solution=sol; return; }
+      }
+      // fallback: adjacent pairs (always solvable)
+      const occ=new Map(); const flat=[]; for(let i=0;i<total/2;i++) flat.push(SYMS[(Math.random()*SYMS.length)|0]);
+      const f2=[]; for(const s of flat){ f2.push(s); f2.push(s); }
+      let k=0; for(let r=0;r<Hc;r++) for(let c=0;c<Wc;c+=2){ occ.set(r+','+c,f2[k]); occ.set(r+','+(c+1),f2[k]); k++; }
+      this.occ=occ; this.solution=this.findSolution(occ)||[];
+    }
+    findPath(ak,bk,occ){
+      const [ar,ac]=ak.split(',').map(Number), [br,bc]=bk.split(',').map(Number);
+      const seen=new Map(), prev=new Map(), q=[];
+      for(let d=0;d<4;d++){ const nr=ar+DIRS[d][0], nc=ac+DIRS[d][1];
+        if(nr<-1||nr>Hc||nc<-1||nc>Wc) continue; const isB=(nr===br&&nc===bc); if(!isB&&occ.has(nr+','+nc)) continue;
+        const key=nr+','+nc+','+d; if(!seen.has(key)){ seen.set(key,0); prev.set(key,null); q.push({r:nr,c:nc,d,turns:0}); } }
+      while(q.length){ const cur=q.shift();
+        if(cur.r===br&&cur.c===bc){ const path=[]; let ck=cur.r+','+cur.c+','+cur.d; while(ck){ const p=ck.split(','); path.push({r:+p[0],c:+p[1]}); ck=prev.get(ck); } path.push({r:ar,c:ac}); return path.reverse(); }
+        for(let nd=0;nd<4;nd++){ const nt=cur.turns+(nd!==cur.d?1:0); if(nt>2) continue; const nr=cur.r+DIRS[nd][0], nc=cur.c+DIRS[nd][1];
+          if(nr<-1||nr>Hc||nc<-1||nc>Wc) continue; const isB=(nr===br&&nc===bc); if(!isB&&occ.has(nr+','+nc)) continue;
+          const key=nr+','+nc+','+nd; if(!seen.has(key)||seen.get(key)>nt){ seen.set(key,nt); prev.set(key,cur.r+','+cur.c+','+cur.d); q.push({r:nr,c:nc,d:nd,turns:nt}); } }
+      }
+      return null;
+    }
+    linkablePairs(occ){
+      const bySym=new Map(); for(const [k,s] of occ){ if(!bySym.has(s)) bySym.set(s,[]); bySym.get(s).push(k); }
+      const out=[];
+      for(const [s,list] of bySym){ for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){ if(this.findPath(list[i],list[j],occ)) out.push({a:list[i],b:list[j],sym:s}); } }
+      return out;
+    }
+    findSolution(occ){
+      const step={n:0}; const memo=new Map();
+      const rec=(o,seq)=>{
+        if(step.n++>300000) return null;
+        if(o.size===0) return seq;
+        const h=[...o.keys()].sort().join('|'); if(memo.has(h)) return memo.get(h);
+        const cands=this.linkablePairs(o);
+        if(cands.length===0){ memo.set(h,null); return null; }
+        cands.sort((x,y)=>{ const ca=this.countSym(o,x.sym), cb=this.countSym(o,y.sym); return ca-cb; });
+        for(const cd of cands){ const o2=new Map(o); o2.delete(cd.a); o2.delete(cd.b); const res=rec(o2,seq.concat([[cd.a,cd.b]])); if(res){ memo.set(h,res); return res; } }
+        memo.set(h,null); return null;
+      };
+      return rec(new Map(occ),[]);
+    }
+    countSym(o,s){ let n=0; for(const v of o.values()) if(v===s) n++; return n; }
+    doClear(ak,bk,path){
+      const sym=this.occ.get(ak); this.occ.delete(ak); this.occ.delete(bk);
+      this.combo = (this.frame-this.lastClear<70)?this.combo+1:1; this.lastClear=this.frame;
+      this.score += 10*this.combo; this.removed += 2;
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('shisenBest',String(this.best)); bestEl.textContent=this.best; }
+      scoreEl.textContent=this.score;
+      this.clearAnim={path,a:ak,b:bk,sym,t:0,dur:14};
+      if(this.occ.size===0) this.win();
+    }
+    win(){ if(this.over) return; this.over=true; this.overFrame=this.frame; if(!this.autoPlay){ overTitle.textContent='通关！'; overlay.classList.add('active'); } }
+    startAuto(){ this.autoPlay=true; btnAuto.classList.add('auto-on'); btnAuto.textContent='自动中'; aiInd.classList.add('show'); aiStatus.textContent='AI 自动连线消除中…'; this.autoPlan=null; this.ptr=0; }
+    stopAuto(){ this.autoPlay=false; btnAuto.classList.remove('auto-on'); btnAuto.textContent='自动游玩'; aiInd.classList.remove('show'); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    shuffleRemaining(){
+      const keys=[...this.occ.keys()]; const syms=[...this.occ.values()];
+      for(let t=0;t<60;t++){ for(let i=syms.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const tmp=syms[i]; syms[i]=syms[j]; syms[j]=tmp; }
+        const o2=new Map(); for(let i=0;i<keys.length;i++) o2.set(keys[i],syms[i]);
+        if(this.linkablePairs(o2).length>0){ this.occ=o2; this.flash=12; return; } }
+    }
+    bindInput(){
+      const getXY=(e)=>{ const r=canvas.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX); const cy=(e.touches?e.touches[0].clientY:e.clientY); return {x:cx-r.left,y:cy-r.top}; };
+      const cellAt=(x,y)=>{ const c=Math.floor((x-this.boardX)/this.cell), r=Math.floor((y-this.boardY)/this.cell); if(r<0||r>=Hc||c<0||c>=Wc) return null; const k=r+','+c; return this.occ.has(k)?k:null; };
+      const onDown=(e)=>{ if(this.autoPlay||this.over||this.clearAnim) return; const p=getXY(e); const k=cellAt(p.x,p.y);
+        if(!k){ this.selA=null; e.preventDefault(); return; }
+        if(this.selA===k){ this.selA=null; e.preventDefault(); return; }
+        if(!this.selA){ this.selA=k; e.preventDefault(); return; }
+        if(this.occ.get(this.selA)===this.occ.get(k)){ const path=this.findPath(this.selA,k,this.occ); if(path){ const a=this.selA; this.selA=null; this.doClear(a,k,path); e.preventDefault(); return; } }
+        this.selA=k; e.preventDefault();
+      };
+      canvas.addEventListener('pointerdown',onDown); canvas.addEventListener('touchstart',onDown,{passive:false});
+    }
+    loop(now){ const dt=Math.min(40,now-this.last); this.last=now; this.frame++; this.update(dt); this.render(); requestAnimationFrame(this.loop); }
+    update(dt){
+      const f=dt/16.67;
+      if(this.clearAnim){ this.clearAnim.t+=f; if(this.clearAnim.t>=this.clearAnim.dur) this.clearAnim=null; }
+      if(this.flash>0) this.flash-=f;
+      if(!this.clearAnim && !this.over){
+        if(this.autoPlay){
+          if(this.frame-this.lastAutoFrame>=this.autoStep){ this.lastAutoFrame=this.frame;
+            if(!this.autoPlan||this.ptr>=this.autoPlan.length){ this.autoPlan=this.findSolution(this.occ); this.ptr=0; }
+            if(this.autoPlan&&this.autoPlan.length>0){ const [ak,bk]=this.autoPlan[this.ptr++]; const path=this.findPath(ak,bk,this.occ); if(path) this.doClear(ak,bk,path); else this.autoPlan=null; }
+            else if(this.occ.size>0){ this.shuffleRemaining(); }
+          }
+        } else {
+          if(this.occ.size>0 && this.linkablePairs(this.occ).length===0) this.shuffleRemaining();
+        }
+      }
+      if(this.over&&this.autoPlay&&this.frame-this.overFrame>34){ this.newGame(); if(this.autoPlay) btnAuto.classList.add('auto-on'); }
+    }
+    roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    render(){
+      ctx.clearRect(0,0,this.W,this.H);
+      // board cells bg
+      for(let r=0;r<Hc;r++) for(let c=0;c<Wc;c++){ ctx.fillStyle='#0c1322'; this.roundRect(this.boardX+c*this.cell+2,this.boardY+r*this.cell+2,this.cell-4,this.cell-4,6); ctx.fill(); }
+      // tiles
+      for(const [k,s] of this.occ){ const [r,c]=k.split(',').map(Number); if(this.clearAnim&&(k===this.clearAnim.a||k===this.clearAnim.b)) continue; this.drawTile(r,c,s,1); }
+      // selected
+      if(this.selA){ const [r,c]=this.selA.split(',').map(Number); this.drawTile(r,c,this.occ.get(this.selA),1,true); }
+      // clear anim
+      if(this.clearAnim){ const e=this.clearAnim.t/this.clearAnim.dur; const al=1-e;
+        for(const k of [this.clearAnim.a,this.clearAnim.b]){ const [r,c]=k.split(',').map(Number); this.drawTile(r,c,this.clearAnim.sym,al); }
+        // path
+        const path=this.clearAnim.path; ctx.strokeStyle='#39d0ff'; ctx.lineWidth=Math.max(3,this.cell*0.16); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.shadowColor='#39d0ff'; ctx.shadowBlur=14;
+        ctx.beginPath(); const total=path.length; const upto=Math.max(2,Math.floor((total-1)*e)+1);
+        for(let i=0;i<upto;i++){ const p=this.cellCenter(path[i].r,path[i].c); if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); }
+        ctx.stroke(); ctx.shadowBlur=0;
+      }
+      if(this.flash>0){ ctx.globalAlpha=this.flash/12*0.25; ctx.fillStyle='#39ff9e'; ctx.fillRect(0,0,this.W,this.H); ctx.globalAlpha=1; }
+    }
+    drawTile(r,c,sym,alpha,sel){
+      const p=this.cellCenter(r,c); const s=this.cell*0.86; const x=p.x-s/2, y=p.y-s/2;
+      const ci=SYMS.indexOf(sym); const col=COLORS[ci%COLORS.length];
+      ctx.globalAlpha=alpha; ctx.fillStyle='#101a2e'; ctx.strokeStyle=col; ctx.lineWidth=sel?3:1.8;
+      if(sel){ ctx.shadowColor=col; ctx.shadowBlur=16; } this.roundRect(x,y,s,s,8); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0;
+      ctx.globalAlpha=alpha; ctx.font=Math.floor(s*0.56)+'px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(sym,p.x,p.y+1);
+      ctx.globalAlpha=1;
+    }
+  }
+  const game=new Game();
+  window.game=game;
+  btnAuto.addEventListener('click',()=>game.toggleAuto());
+  btnRestart.addEventListener('click',()=>{ game.stopAuto(); game.newGame(); });
+  btnAgain.addEventListener('click',()=>{ game.stopAuto(); game.newGame(); });
+})();
+</script>
+</body>
+</html>
