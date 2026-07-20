@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c0a1e" />
+<title>占色大战 · Filler</title>
+<style>
+  :root{
+    --bg:#0c0a1e; --surface:#15122e; --text:#f3eeff; --muted:#9a90c8;
+    --accent:#ff5db1; --accent2:#5de1ff; --gold:#ffd23f; --ok:#5dffa6; --glow:#5de1ff55;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #2a1b55 0%, transparent 60%),radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:58px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.you .value{color:var(--accent2);}
+  .score-card.ai .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#0a0820;}
+  .palette{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap;}
+  .swatch{width:36px;height:36px;border-radius:9px;border:2px solid #ffffff22;cursor:pointer;transition:transform .12s ease,box-shadow .2s ease;}
+  .swatch:active{transform:scale(.9);}
+  .swatch.on{box-shadow:0 0 0 3px var(--text),0 0 16px var(--glow);transform:translateY(-2px);}
+  .swatch.dim{opacity:.3;pointer-events:none;}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent2);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#0a0820cc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;opacity:0;transform:translateY(-6px);transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>占色大战 · Filler</h1><div class="sub">Color Territory War</div></div>
+    <div class="score-panel">
+      <div class="score-card you"><div class="label">你</div><div class="value" id="you">1</div></div>
+      <div class="score-card ai"><div class="label">AI</div><div class="value" id="ai">1</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay"><h2 id="ovTitle">结束</h2><p id="ovText"></p><button class="auto on" id="ovBtn">再来一局</button></div>
+  </div>
+  <div class="palette" id="palette"></div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">轮到你时，点一个<b>颜色</b>把己方领地染成该色并吞并相邻的同色格 · 占更多格子者获胜</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elYou=$('you'), elAi=$('ai'), elBadge=$('badge'),
+        elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        elPalette=$('palette'), btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const W=12,H=12,N=W*H;
+  const PAL=['#ff5d6a','#ffd23f','#5dffa6','#5de1ff','#c77bff','#ff9f43'];
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const bw=380,bh=380,cell=Math.floor(bw/W),gw=cell*W,gh=cell*H;
+  let ox=Math.floor((bw-gw)/2), oy=Math.floor((bh-gh)/2);
+  function setupCanvas(){ if(!cv||!cv.getContext) return; cv.width=bw*dpr; cv.height=bh*dpr; cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%'; }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+  const idx=(r,c)=>r*W+c;
+  const nb=(i)=>{const r=(i/W)|0,c=i%W,o=[];if(r>0)o.push(i-W);if(r<H-1)o.push(i+W);if(c>0)o.push(i-1);if(c<W-1)o.push(i+1);return o;};
+
+  let board=new Array(N).fill(0), owner=new Array(N).fill(-1);
+  let pColor=0,aColor=0, turn=0, moves=0, over=false, winner=-1, bestYou=0, autoTimer=0;
+  let auto=false;
+  try{ bestYou=parseInt(localStorage.getItem('filler_best')||'0',10)||0; }catch(e){bestYou=0;}
+
+  function genLevel(){
+    for(let i=0;i<N;i++){ board[i]=(Math.random()*PAL.length)|0; owner[i]=-1; }
+    owner[0]=0; owner[N-1]=1;
+    pColor=board[0]; aColor=board[N-1];
+    // initial absorb same-color regions touching each start
+    absorb(0); absorb(1);
+    // guarantee starts differ in color to avoid instant tie weirdness
+    turn=0; moves=0; over=false; winner=-1; autoTimer=0;
+    buildPalette();
+  }
+
+  function claim(id, newColor){
+    const col = id===0?pColor:aColor;
+    // recolor owned cells
+    for(let i=0;i<N;i++) if(owner[i]===id) board[i]=newColor;
+    // flood absorb neutral cells of newColor adjacent to territory
+    const q=[]; for(let i=0;i<N;i++) if(owner[i]===id) q.push(i);
+    let head=0;
+    while(head<q.length){
+      const cur=q[head++];
+      for(const x of nb(cur)){
+        if(owner[x]===-1 && board[x]===newColor){ owner[x]=id; q.push(x); }
+      }
+    }
+    if(id===0) pColor=newColor; else aColor=newColor;
+  }
+  function absorb(id){
+    const col = id===0?pColor:aColor;
+    const q=[]; for(let i=0;i<N;i++) if(owner[i]===id) q.push(i);
+    let head=0;
+    while(head<q.length){ const cur=q[head++]; for(const x of nb(cur)){ if(owner[x]===-1 && board[x]===col){ owner[x]=id; q.push(x); } } }
+  }
+  function count(id){ let n=0; for(let i=0;i<N;i++) if(owner[i]===id) n++; return n; }
+  function neutralLeft(){ for(let i=0;i<N;i++) if(owner[i]===-1) return true; return false; }
+
+  function greedyColor(id){
+    const col = id===0?pColor:aColor;
+    let best=-1, bestGain=-1, tie=[];
+    for(let c=0;c<PAL.length;c++){
+      if(c===col) continue;
+      // count neutral cells adjacent to territory with color c
+      let gain=0; const seen=new Set();
+      for(let i=0;i<N;i++){ if(owner[i]!==id) continue; for(const x of nb(i)){ if(owner[x]===-1&&board[x]===c&&!seen.has(x)){ seen.add(x); // count connected component
+        const st=[x]; let h=0; while(h<st.length){ const cur=st[h++]; for(const y of nb(cur)){ if(owner[y]===-1&&board[y]===c&&!seen.has(y)){ seen.add(y); st.push(y); } } } gain+=st.length; } } }
+      if(gain>bestGain){ bestGain=gain; best=c; tie=[c]; } else if(gain===bestGain&&gain>=0){ tie.push(c); }
+    }
+    return bestGain>0 ? tie[(Math.random()*tie.length)|0] : (best>=0?best:(col+1)%PAL.length);
+  }
+
+  function playerMove(c){
+    if(over||auto||turn!==0) return;
+    if(c===pColor) return;
+    claim(0,c); turn=1; moves++; aiTurn();
+  }
+  function aiTurn(){
+    if(over) return;
+    // AI moves
+    const c=greedyColor(1); claim(1,c); moves++;
+    turn=0;
+    if(!neutralLeft() || moves>80) finish();
+    else buildPalette();
+  }
+  function finish(){
+    over=true; const y=count(0), a=count(1);
+    winner = y>a?0:(a>y?1:-1);
+    if(winner===0 && (bestYou===0||y>bestYou)){ bestYou=y; try{localStorage.setItem('filler_best',String(bestYou));}catch(e){} }
+    elOvTitle.textContent = winner===0?'🎉 你赢了！':(winner===1?'AI 获胜':'平局');
+    elOvText.textContent = '你 '+y+' · AI '+a+' · 最佳 '+bestYou;
+    elOverlay.classList.add('show');
+  }
+
+  function autoStep(){
+    if(over) return;
+    if(turn===0){ const c=greedyColor(0); if(c===pColor) return; claim(0,c); turn=1; moves++; aiTurn(); }
+  }
+  function setAuto(v){ auto=v; if(btnAuto){btnAuto.classList.toggle('on',v);btnAuto.textContent=v?'自动中…':'自动游玩';} if(elBadge)elBadge.classList.toggle('show',v); if(v)autoTimer=0.25; }
+
+  // palette
+  function buildPalette(){
+    elPalette.innerHTML='';
+    for(let c=0;c<PAL.length;c++){
+      const s=document.createElement('div'); s.className='swatch'; s.style.background=PAL[c];
+      const isCur = (turn===0&&c===pColor)||(turn===1&&c===aColor);
+      if(isCur) s.classList.add('dim');
+      s.addEventListener('click',()=>{ if(auto||over||turn!==0) return; playerMove(c); });
+      elPalette.appendChild(s);
+    }
+  }
+
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over) return; setAuto(!auto); });
+  btnRestart&&btnRestart.addEventListener('click',restart);
+  btnOv&&btnOv.addEventListener('click',restart);
+  function restart(){ genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+
+  // update
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto&&!over){ autoTimer-=dt; if(autoTimer<=0){ autoStep(); autoTimer=0.22; } }
+    if(elYou) elYou.textContent=count(0); if(elAi) elAi.textContent=count(1);
+  }
+
+  // render
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function render(){
+    if(!ctx) return; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,bw,bh);
+    for(let i=0;i<N;i++){ const r=(i/W)|0,c=i%W,x=ox+c*cell,y=oy+r*cell;
+      ctx.fillStyle=PAL[board[i]]; roundRect(x+1,y+1,cell-2,cell-2,3); ctx.fill();
+      if(owner[i]===0){ ctx.strokeStyle='rgba(93,225,255,0.9)'; ctx.lineWidth=2; roundRect(x+2,y+2,cell-4,cell-4,3); ctx.stroke(); }
+      else if(owner[i]===1){ ctx.strokeStyle='rgba(255,93,177,0.9)'; ctx.lineWidth=2; roundRect(x+2,y+2,cell-4,cell-4,3); ctx.stroke(); }
+    }
+  }
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-last)/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  genLevel();
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){setAuto(!!v);},
+    get over(){return over;}, get won(){return winner===0;},
+    get you(){return count(0);}, get ai(){return count(1);}, get moves(){return moves;},
+    toggleAuto(){setAuto(!auto);}, restart(){genLevel();setAuto(false);elOverlay.classList.remove('show');},
+    update(dt){update(dt);}
+  };
+  window.__test={ restart(){genLevel();setAuto(false);elOverlay.classList.remove('show');}, setAuto(v){setAuto(!!v);},
+    tick(dt){update(dt);render();}, get score(){return count(0);}, get moves(){return moves;}, get over(){return over;}, get won(){return winner===0;},
+    get autoProgress(){return over?10000:(count(0)+count(1)>0?Math.floor(10000*(count(0)+count(1))/N):0);}, get remaining(){let n=0;for(let i=0;i<N;i++)if(owner[i]===-1)n++;return n;} };
+})();
+</script>
+</body>
+</html>

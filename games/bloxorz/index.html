@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c0a1e" />
+<title>滚块迷宫 · Bloxorz</title>
+<style>
+  :root{
+    --bg:#0c0a1e; --surface:#15122e; --text:#f3eeff; --muted:#9a90c8;
+    --accent:#ff5db1; --accent2:#5de1ff; --gold:#ffd23f; --ok:#5dffa6; --glow:#5de1ff55;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #2a1b55 0%, transparent 60%),radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#0a0820;}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent2);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#0a0820cc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;opacity:0;transform:translateY(-6px);transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block"><h1>滚块迷宫 · Bloxorz</h1><div class="sub">Rolling Block Maze</div></div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">步数</div><div class="value" id="moves">0</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay"><h2 id="ovTitle">通关！</h2><p id="ovText"></p><button class="auto on" id="ovBtn">下一关</button></div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">用 <b>方向键 / WASD</b> 或 <b>滑动</b> 滚动方块 · 让方块<b>竖立</b>停在发光格上 · 不能滚出平台</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elMoves=$('moves'), elBest=$('best'), elBadge=$('badge'),
+        elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const W=7,H=7, N=W*H;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const bw=380, bh=380, cell=Math.floor(bw/Math.max(W,H)), gw=cell*W, gh=cell*H;
+  let ox=Math.floor((bw-gw)/2), oy=Math.floor((bh-gh)/2);
+  function setupCanvas(){ if(!cv||!cv.getContext) return; cv.width=bw*dpr; cv.height=bh*dpr; cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%'; }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  const DIRS={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]};
+  let floor=new Array(N).fill(true);
+  let goal={r:0,c:0}, start={r:0,c:0,o:'S'};
+  let state={r:0,c:0,o:'S'};
+  let solution=[], solIdx=0;
+  let moves=0, best=0, level=1, won=false;
+  let auto=false, autoTimer=0;
+  let anim=null; // {from:{x,y,o}, to:{x,y,o}, t}
+  try{ best=parseInt(localStorage.getItem('bloxorz_best')||'0',10)||0; }catch(e){best=0;}
+
+  const idx=(r,c)=>r*W+c;
+  function cellsOf(s){ if(s.o==='S') return [[s.r,s.c]]; if(s.o==='H') return [[s.r,s.c],[s.r,s.c+1]]; return [[s.r,s.c],[s.r+1,s.c]]; }
+  function inGrid(r,c){ return r>=0&&r<H&&c>=0&&c<W; }
+  function move(s,d){
+    const [dr,dc]=DIRS[d];
+    if(s.o==='S'){
+      if(d==='up') return {r:s.r+dr,c:s.c,o:'V'};
+      if(d==='down') return {r:s.r,c:s.c,o:'V'};
+      if(d==='left') return {r:s.r,c:s.c+dc,o:'H'};
+      if(d==='right') return {r:s.r,c:s.c,o:'H'};
+    } else if(s.o==='H'){
+      if(d==='up') return {r:s.r-1,c:s.c,o:'S'};
+      if(d==='down') return {r:s.r+1,c:s.c,o:'S'};
+      if(d==='left') return {r:s.r,c:s.c-1,o:'H'};
+      if(d==='right') return {r:s.r,c:s.c+1,o:'H'};
+    } else {
+      if(d==='up') return {r:s.r-1,c:s.c,o:'V'};
+      if(d==='down') return {r:s.r+1,c:s.c,o:'V'};
+      if(d==='left') return {r:s.r,c:s.c-1,o:'S'};
+      if(d==='right') return {r:s.r,c:s.c+1,o:'S'};
+    }
+  }
+  function valid(s){ const cs=cellsOf(s); for(const [r,c] of cs){ if(!inGrid(r,c)||!floor[idx(r,c)]) return false; } return true; }
+
+  function bfs(){
+    const key=(s)=>s.r+','+s.c+','+s.o;
+    const start0={r:start.r,c:start.c,o:'S'};
+    const q=[start0]; const prev=new Map(); prev.set(key(start0),null);
+    while(q.length){
+      const cur=q.shift();
+      if(cur.o==='S'&&cur.r===goal.r&&cur.c===goal.c){
+        // reconstruct
+        const path=[]; let k=key(cur);
+        while(prev.get(k)){ const p=prev.get(k); path.push(p.dir); k=p.key; }
+        return path.reverse();
+      }
+      for(const d of ['up','down','left','right']){
+        const nx=move(cur,d);
+        if(valid(nx)&&!prev.has(key(nx))){ prev.set(key(nx),{key:key(cur),dir:d}); q.push(nx); }
+      }
+    }
+    return null;
+  }
+
+  function genLevel(){
+    let tries=0;
+    while(tries++<200){
+      floor=new Array(N).fill(true);
+      const voids=2+Math.min(8,level);
+      let placed=0, guard=0;
+      while(placed<voids && guard++<500){
+        const i=(Math.random()*N)|0; const r=(i/W)|0,c=i%W;
+        if(floor[i]){ floor[i]=false; placed++; }
+      }
+      // pick start & goal on floor, far apart
+      const floors=[]; for(let i=0;i<N;i++) if(floor[i]) floors.push(i);
+      if(floors.length<10) continue;
+      start={r:(floors[0]/W)|0,c:floors[0]%W,o:'S'};
+      goal={r:(floors[floors.length-1]/W)|0,c:floors[floors.length-1]%W};
+      const sol=bfs();
+      if(sol&&sol.length>=4){ solution=sol; solIdx=0; moves=0; won=false; state={r:start.r,c:start.c,o:'S'}; anim=null; return; }
+    }
+    // fallback: empty board
+    floor=new Array(N).fill(true); start={r:0,c:0,o:'S'}; goal={r:H-1,c:W-1}; solution=bfs()||[]; solIdx=0; moves=0; won=false; state={r:0,c:0,o:'S'}; anim=null;
+  }
+
+  function applyMove(d){
+    if(won||anim) return;
+    const nx=move(state,d);
+    if(!valid(nx)) return;
+    const from={x:state.c,y:state.r,o:state.o};
+    state=nx; const to={x:state.c,y:state.r,o:state.o};
+    anim={from,to,t:0};
+    moves++;
+    if(state.o==='S'&&state.r===goal.r&&state.c===goal.c){ won=true; finish(); }
+  }
+  function finish(){
+    if(best===0||moves<best){ best=moves; try{localStorage.setItem('bloxorz_best',String(best));}catch(e){} }
+    elOvTitle.textContent='🎉 第 '+level+' 关通关';
+    elOvText.textContent='用了 '+moves+' 步 · 最佳 '+best;
+    elOverlay.classList.add('show');
+  }
+
+  function autoStep(){ if(solIdx<solution.length){ applyMove(solution[solIdx++]); } }
+  function setAuto(v){ auto=v; if(btnAuto){btnAuto.classList.toggle('on',v);btnAuto.textContent=v?'自动中…':'自动游玩';} if(elBadge)elBadge.classList.toggle('show',v); if(v)autoTimer=0.35; }
+
+  // input
+  function key(e){ const k=e.key.toLowerCase(); if(k==='arrowup'||k==='w')applyMove('up'); else if(k==='arrowdown'||k==='s')applyMove('down'); else if(k==='arrowleft'||k==='a')applyMove('left'); else if(k==='arrowright'||k==='d')applyMove('right'); }
+  window.addEventListener('keydown',key);
+  let pStart=null;
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',(e)=>{ if(auto)return; pStart={x:e.clientX,y:e.clientY}; },{passive:false});
+    window.addEventListener('pointerup',(e)=>{
+      if(auto||!pStart) return; const dx=e.clientX-pStart.x, dy=e.clientY-pStart.y; pStart=null;
+      if(Math.abs(dx)<12&&Math.abs(dy)<12) return;
+      if(Math.abs(dx)>Math.abs(dy)) applyMove(dx>0?'right':'left'); else applyMove(dy>0?'down':'up');
+    },{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(won)return; setAuto(!auto); });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ level++; genLevel(); setAuto(false); elOverlay.classList.remove('show'); });
+  btnOv&&btnOv.addEventListener('click',()=>{ level++; genLevel(); setAuto(false); elOverlay.classList.remove('show'); });
+
+  // update
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto&&!won&&!anim){ autoTimer-=dt; if(autoTimer<=0&&solIdx<solution.length){ autoStep(); autoTimer=0.3; } }
+    if(anim){ anim.t+=dt*5.5; if(anim.t>=1){ anim=null; } }
+    if(elMoves)elMoves.textContent=moves; if(elBest)elBest.textContent=best;
+  }
+
+  // render
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function render(){
+    if(!ctx) return; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,bw,bh);
+    for(let r=0;r<H;r++)for(let c=0;c<W;c++){
+      const x=ox+c*cell,y=oy+r*cell;
+      if(!floor[idx(r,c)]){ ctx.fillStyle='#080614'; roundRect(x+2,y+2,cell-4,cell-4,5); ctx.fill(); continue; }
+      ctx.fillStyle='#1d1840'; roundRect(x+2,y+2,cell-4,cell-4,5); ctx.fill();
+      ctx.strokeStyle='#2e2660'; ctx.lineWidth=1; roundRect(x+2.5,y+2.5,cell-5,cell-5,5); ctx.stroke();
+    }
+    // goal
+    const gx=ox+goal.c*cell, gy=oy+goal.r*cell;
+    const gp=0.4+0.3*Math.sin((typeof performance!=='undefined'?performance.now():Date.now())/300);
+    ctx.save(); ctx.shadowColor='#5dffa6'; ctx.shadowBlur=14*gp+6; ctx.fillStyle='rgba(93,255,166,'+(0.35+0.3*gp)+')';
+    roundRect(gx+4,gy+4,cell-8,cell-8,6); ctx.fill(); ctx.restore();
+    // block
+    let vr=state.r, vc=state.c, vo=state.o;
+    if(anim){ const t=anim.t; const e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+      vr=anim.from.y+(anim.to.y-anim.from.y)*e; vc=anim.from.x+(anim.to.x-anim.from.x)*e; vo=anim.from.o;
+      if(e>0.5) vo=anim.to.o; }
+    const bx=ox+vc*cell, by=oy+vr*cell;
+    ctx.save(); ctx.shadowColor='#5de1ff'; ctx.shadowBlur=16; ctx.fillStyle='#5de1ff';
+    if(vo==='S'){ roundRect(bx+3,by+3,cell-6,cell-6,7); ctx.fill(); }
+    else if(vo==='H'){ roundRect(bx+3,by+3,cell*2-6,cell-6,7); ctx.fill(); }
+    else { roundRect(bx+3,by+3,cell-6,cell*2-6,7); ctx.fill(); }
+    ctx.restore();
+  }
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-last)/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  genLevel();
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){setAuto(!!v);},
+    get over(){return won;}, get won(){return won;},
+    get moves(){return moves;}, get level(){return level;},
+    toggleAuto(){setAuto(!auto);}, restart(){genLevel();setAuto(false);elOverlay.classList.remove('show');},
+    update(dt){update(dt);}
+  };
+  window.__test={ restart(){genLevel();setAuto(false);elOverlay.classList.remove('show');}, setAuto(v){setAuto(!!v);},
+    tick(dt){update(dt);render();}, get score(){return -moves;}, get moves(){return moves;}, get over(){return won;}, get won(){return won;},
+    get autoProgress(){return won?10000:(solIdx>0?Math.floor(10000*solIdx/solution.length):0);}, get remaining(){return solution.length-solIdx;} };
+})();
+</script>
+</body>
+</html>

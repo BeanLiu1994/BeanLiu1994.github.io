@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c0a1e" />
+<title>折纸 · KAMI</title>
+<style>
+  :root{
+    --bg:#0c0a1e; --surface:#15122e; --text:#f3eeff; --muted:#9a90c8;
+    --accent:#ff5db1; --accent2:#5de1ff; --gold:#ffd23f; --ok:#5dffa6;
+    --glow:#ff5db155;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #2a1b55 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .score-card.limit .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#0a0820);}
+  .palette{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap;min-height:40px;}
+  .swatch{width:34px;height:34px;border-radius:9px;border:2px solid #ffffff22;cursor:pointer;transition:transform .12s ease,box-shadow .2s ease;position:relative;}
+  .swatch:active{transform:scale(.9);}
+  .swatch.on{box-shadow:0 0 0 3px var(--text),0 0 16px var(--glow);transform:translateY(-2px);}
+  .swatch.dim{opacity:.32;}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent2);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#0a0820cc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>折纸 · KAMI</h1>
+      <div class="sub">Paper Fold Puzzle</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">步数</div><div class="value" id="moves">0</div></div>
+      <div class="score-card limit"><div class="label">上限</div><div class="value" id="limit">0</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">完成！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="palette" id="palette"></div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击一块<b>同色连通区域</b>选中，再点下方<b>颜色</b>把它折叠成该色 · 目标：整张纸变成<b>同一种颜色</b></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elMoves=$('moves'), elLimit=$('limit'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        elPalette=$('palette'), btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const COLS=9, ROWS=9, N=COLS*ROWS;
+  const PAL=['#19c3b1','#ff6b8b','#ffd23f','#7b5cff','#5de1ff','#ff9f43'];
+  const TOP=0; // index 0 is the "target" neutral color
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const W=380,H=380, cell=Math.floor(W/COLS), bw=cell*COLS, bh=cell*ROWS;
+
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+  const ox=(bw-W)/2, oy=(bh-H)/2; // center inside canvas (equal)
+
+  // ---------- state ----------
+  let board=new Array(N).fill(0);
+  let used=new Array(N).fill(false);
+  let folds=[];
+  let solution=[];
+  let level=1, moves=0, limit=0, best=0;
+  let selected=null;          // array of cell indices
+  let pickColor=1;            // chosen fold target color
+  let auto=false, autoTimer=0;
+  let over=false, won=false;
+  let flashes=[];             // {cells, t}
+  let selAnim=0;
+  try{ best=parseInt(localStorage.getItem('kami_best')||'0',10)||0; }catch(e){best=0;}
+
+  const nb=(i)=>{const r=(i/COLS)|0,c=i%COLS,o=[];if(r>0)o.push(i-COLS);if(r<ROWS-1)o.push(i+COLS);if(c>0)o.push(i-1);if(c<COLS-1)o.push(i+1);return o;};
+
+  function genLevel(){
+    board=new Array(N).fill(0); used=new Array(N).fill(false); folds=[];
+    const K=Math.min(10, 5+Math.floor(level/2));
+    for(let s=0;s<K;s++){
+      const unused=[]; for(let i=0;i<N;i++) if(!used[i]) unused.push(i);
+      if(unused.length<3) break;
+      const seed=unused[(Math.random()*unused.length)|0];
+      // grow a connected region within unused cells
+      const region=[seed]; const q=[seed]; const seen=new Set([seed]);
+      const target=3+((Math.random()*6)|0);
+      while(q.length && region.length<target){
+        const cur=q.splice((Math.random()*q.length)|0,1)[0];
+        for(const x of nb(cur)){ if(!used[x]&&!seen.has(x)){ seen.add(x); region.push(x); q.push(x); if(region.length>=target) break; } }
+      }
+      if(region.length<2) continue;
+      const to=1+((Math.random()*(PAL.length-1))|0);
+      folds.push({cells:region.slice(), to});
+      for(const c of region){ board[c]=to; used[c]=true; }
+    }
+    solution=folds.slice().reverse();          // reverse folds each recolor their cells to 0
+    limit=folds.length+1;
+    moves=0; over=false; won=false; selected=null; flashes=[]; autoTimer=0;
+  }
+
+  function regionOf(i){
+    const col=board[i]; const res=[i]; const q=[i]; const seen=new Set([i]);
+    while(q.length){ const cur=q.pop(); for(const x of nb(cur)){ if(!seen.has(x)&&board[x]===col){ seen.add(x); res.push(x); q.push(x); } } }
+    return res;
+  }
+
+  function doFold(cells, color){
+    for(const c of cells) board[c]=color;
+    flashes.push({cells:cells.slice(), t:0});
+    moves++;
+    if(isMono()){ won=true; over=true; finish(); }
+    else if(moves>=limit){ over=true; lost(); }
+  }
+
+  function isMono(){ const c0=board[0]; for(let i=1;i<N;i++) if(board[i]!==c0) return false; return true; }
+  function colorCount(){ const s=new Set(board); return s.size; }
+
+  function finish(){
+    if(best===0||moves<best){ best=moves; try{localStorage.setItem('kami_best',String(best));}catch(e){} }
+    elOvTitle.textContent='🎉 通关！';
+    elOvText.textContent='用 '+moves+' 步 · 最佳 '+best;
+    elOverlay.classList.add('show');
+  }
+  function lost(){
+    elOvTitle.textContent='步数用尽';
+    elOvText.textContent='再试一次，目标 '+limit+' 步内完成';
+    elOverlay.classList.add('show');
+  }
+
+  // ---------- auto ----------
+  function autoStep(){
+    if(!solution.length){ return; }
+    const step=solution.shift();
+    // verify the cells still form their expected color
+    const col=board[step.cells[0]];
+    if(col!==step.to){ // safety: find them, just recolor to 0 anyway
+      for(const c of step.cells) board[c]=0;
+    } else {
+      doFold(step.cells,0);
+    }
+    if(!solution.length && !won && !over){ // ensure final mono
+      if(isMono()){ won=true; over=true; finish(); }
+    }
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v) autoTimer=0.4;
+  }
+
+  // ---------- input ----------
+  function cellAt(e){
+    const r=cv.getBoundingClientRect();
+    const cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left;
+    const cy=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top;
+    const x=Math.floor(cx/r.width*bw), y=Math.floor(cy/r.height*bh);
+    const c=Math.floor(x/cell), rrow=Math.floor(y/cell);
+    if(c<0||c>=COLS||rrow<0||rrow>=ROWS) return -1;
+    return rrow*COLS+c;
+  }
+  function onDown(e){
+    if(over||auto) return;
+    const i=cellAt(e); if(i<0) return;
+    const reg=regionOf(i);
+    if(selected && selected.indexOf(i)>=0){ selected=null; }
+    else { selected=reg; pickColor=(board[i]===0?1:0); }
+    e.preventDefault&&e.preventDefault();
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+
+  // palette
+  function buildPalette(){
+    elPalette.innerHTML='';
+    const present=new Set(board);
+    for(let k=0;k<PAL.length;k++){
+      if(!present.has(k)) continue;
+      const s=document.createElement('div');
+      s.className='swatch'+(k===pickColor?' on':'');
+      s.style.background=PAL[k];
+      s.dataset.k=k;
+      s.addEventListener('click',()=>{
+        if(over||auto) return;
+        pickColor=k;
+        buildPalette();
+        if(selected){
+          if(board[selected[0]]===k){ selected=null; buildPalette(); return; }
+          doFold(selected,k); selected=null;
+        }
+      });
+      elPalette.appendChild(s);
+    }
+  }
+
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over) return; setAuto(!auto); });
+  btnRestart&&btnRestart.addEventListener('click',restart);
+  btnOv&&btnOv.addEventListener('click',restart);
+
+  function restart(){
+    level++; genLevel(); setAuto(false); elOverlay.classList.remove('show'); buildPalette();
+  }
+  function softRestart(){ genLevel(); setAuto(false); elOverlay.classList.remove('show'); buildPalette(); }
+
+  // ---------- update ----------
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto && !over){
+      autoTimer-=dt;
+      if(autoTimer<=0 && solution.length){ autoStep(); autoTimer=0.42; }
+    }
+    for(const f of flashes) f.t+=dt*2.2;
+    flashes=flashes.filter(f=>f.t<1);
+    if(selected) selAnim+=dt;
+    // UI
+    if(elMoves) elMoves.textContent=moves;
+    if(elLimit) elLimit.textContent=limit;
+    if(elBest) elBest.textContent=best;
+  }
+
+  // ---------- render ----------
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    // cells
+    for(let i=0;i<N;i++){
+      const r=(i/COLS)|0,c=i%COLS,x=c*cell,y=r*cell;
+      ctx.fillStyle=PAL[board[i]];
+      const pad=1.5;
+      roundRect(x+pad,y+pad,cell-pad*2,cell-pad*2,6); ctx.fill();
+    }
+    // selected outline
+    if(selected){
+      const pulse=0.5+0.5*Math.sin(selAnim*6);
+      ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,'+(0.6+0.4*pulse)+')';
+      for(const i of selected){ const r=(i/COLS)|0,c=i%COLS,x=c*cell,y=r*cell; roundRect(x+2,y+2,cell-4,cell-4,6); ctx.stroke(); }
+    }
+    // flashes
+    for(const f of flashes){ const a=1-f.t; ctx.fillStyle='rgba(255,255,255,'+(a*0.8)+')'; for(const i of f.cells){ const r=(i/COLS)|0,c=i%COLS,x=c*cell,y=r*cell; roundRect(x+2,y+2,cell-4,cell-4,6); ctx.fill(); } }
+  }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  // init
+  genLevel(); buildPalette();
+
+  // ---------- hooks ----------
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get moves(){return moves;}, get level(){return level;}, get limit(){return limit;},
+    get mono(){return isMono();},
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ restart(); },
+    update(dt){ update(dt); },
+    render(){ render(); }
+  };
+  window.__test={
+    restart(){ softRestart(); },
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get score(){return -moves;}, get moves(){return moves;}, get over(){return over;}, get won(){return won;},
+    get autoProgress(){ return won?10000:(solution.length>0?(10000*(1-solution.length/limit)):0); },
+    get remaining(){return solution.length;}
+  };
+})();
+</script>
+</body>
+</html>
