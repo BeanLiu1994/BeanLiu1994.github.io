@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a1410" />
+<title>帐篷与树 · TENTS</title>
+<style>
+  :root{
+    --bg:#0a1410; --surface:#12231b; --text:#eaffe9; --muted:#7fae8e;
+    --accent:#5dffa6; --accent2:#ffd23f; --gold:#ffd23f; --ok:#5dffa6;
+    --glow:#5dffa655; --dim:#274a37;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #143524 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0c2016 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:480px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .score-card.tents .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:10px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#06120c);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--gold));color:#0a1410;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:10px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#06120ccc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:16px;right:16px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--gold));color:#0a1410;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>帐篷与树 · TENTS</h1>
+      <div class="sub">Camp by the Trees</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card tents"><div class="label">帐篷</div><div class="value" id="tents">0</div></div>
+      <div class="score-card"><div class="label">关卡</div><div class="value" id="level">1</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">搭营完成！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击格子<b>放置/收回帐篷</b>：每棵树旁恰有一顶帐篷，帐篷互不相邻，且每行每列数量符合<b>边缘数字</b></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elTents=$('tents'), elLevel=$('level'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const GRID=8, N=GRID*GRID;
+  const TARGET_TENTS=10;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const W=384,H=384, cell=Math.floor(W/GRID), bw=cell*GRID, bh=cell*GRID;
+
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  const DR=[-1,0,1,0], DC=[0,1,0,-1];           // 4-dir
+  const DR8=[-1,-1,-1,0,0,1,1,1], DC8=[-1,0,1,-1,1,-1,0,1]; // 8-dir
+  const idx=(r,c)=>r*GRID+c;
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i];a[i]=a[j];a[j]=t; } return a; }
+
+  // ---------- state ----------
+  let trees=new Set();        // tree cells
+  let solTents=new Set();     // solution tent cells
+  let rowCnt=new Array(GRID).fill(0), colCnt=new Array(GRID).fill(0);
+  let placed=new Set();       // player / auto placed tents
+  let level=1, best=0, solvedLevels=0;
+  let auto=false, autoTimer=0, autoQueue=[], autoPtr=0;
+  let over=false, won=false, winFlash=0, treeSway=0;
+  let pulse=new Array(N).fill(0); // placement feedback
+  try{ best=parseInt(localStorage.getItem('tents_best')||'0',10)||0; }catch(e){best=0;}
+
+  function genLevel(){
+    let ok=false;
+    for(let attempt=0;attempt<400 && !ok;attempt++){
+      trees=new Set(); solTents=new Set();
+      const cells=shuffle([...Array(N).keys()]);
+      let nt=0;
+      for(const c of cells){ if(nt>=TARGET_TENTS) break; trees.add(c); nt++; }
+      ok=true;
+      for(const t of trees){
+        const r=(t/GRID)|0,c=t%GRID;
+        const cand=shuffle([...Array(4).keys()].map(d=>({r:r+DR[d],c:c+DC[d]})))
+          .filter(p=>p.r>=0&&p.r<GRID&&p.c>=0&&p.c<GRID && !trees.has(idx(p.r,p.c)) && !solTents.has(idx(p.r,p.c))
+                 && !touchesTent(p.r,p.c) && !adjTree(p.r,p.c,t));
+        if(!cand.length){ ok=false; break; }
+        const p=cand[0]; solTents.add(idx(p.r,p.c));
+      }
+      if(ok){
+        // verify each tent adjacent to exactly one tree (already enforced) & no two tents adjacent (enforced)
+        rowCnt=new Array(GRID).fill(0); colCnt=new Array(GRID).fill(0);
+        for(const t of solTents){ const r=(t/GRID)|0,c=t%GRID; rowCnt[r]++; colCnt[c]++; }
+        // ensure each row/col count is satisfiable (<=GRID); always true
+      }
+    }
+    placed=new Set();
+    autoQueue=shuffle([...solTents]); autoPtr=0;
+    over=false; won=false; winFlash=0; autoTimer=0;
+    pulse=new Array(N).fill(0);
+  }
+  function touchesTent(r,c){ for(let k=0;k<8;k++){ const rr=r+DR8[k],cc=c+DC8[k]; if(rr>=0&&rr<GRID&&cc>=0&&cc<GRID&&solTents.has(idx(rr,cc))) return true; } return false; }
+  function adjTree(r,c,t){ for(let d=0;d<4;d++){ const rr=r+DR[d],cc=c+DC[d]; if(rr>=0&&rr<GRID&&cc>=0&&cc<GRID){ const id=idx(rr,cc); if(trees.has(id)&&id!==t) return true; } } return false; }
+
+  function validPlacement(set){
+    if(set.size!==solTents.size) return false;
+    // no two tents adjacent (8-dir)
+    for(const t of set){ const r=(t/GRID)|0,c=t%GRID; for(let k=0;k<8;k++){ const rr=r+DR8[k],cc=c+DC8[k]; if(rr>=0&&rr<GRID&&cc>=0&&cc<GRID){ const id=idx(rr,cc); if(id!==t&&set.has(id)) return false; } } }
+    // each tent adjacent to exactly one tree, each tree has >=1 tent
+    for(const t of set){ const r=(t/GRID)|0,c=t%GRID; let cnt=0; for(let d=0;d<4;d++){ const rr=r+DR[d],cc=c+DC[d]; if(rr>=0&&rr<GRID&&cc>=0&&cc<GRID&&trees.has(idx(rr,cc))) cnt++; } if(cnt!==1) return false; }
+    // row/col counts
+    const rc=new Array(GRID).fill(0), cc2=new Array(GRID).fill(0);
+    for(const t of set){ rc[(t/GRID)|0]++; cc2[t%GRID]++; }
+    for(let i=0;i<GRID;i++){ if(rc[i]!==rowCnt[i]||cc2[i]!==colCnt[i]) return false; }
+    return true;
+  }
+
+  function onSolved(){
+    won=true; over=true; winFlash=1; solvedLevels++;
+    const sc=solvedLevels*1000+placed.size;
+    if(best===0||sc>best){ best=sc; try{localStorage.setItem('tents_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⛺ 全部搭好！'; elOvText.textContent='自动模式持续搭营中…';
+      setTimeout(()=>{ if(auto){ genLevel(); setAuto(true); } }, 800);
+    } else { elOvTitle.textContent='🎉 搭营完成！'; elOvText.textContent='第 '+level+' 关达成'; elOverlay.classList.add('show'); }
+  }
+
+  // ---------- auto ----------
+  function autoStep(){
+    if(autoPtr>=autoQueue.length){ if(!over&&validPlacement(placed)) onSolved(); return; }
+    const i=autoQueue[autoPtr++];
+    if(!placed.has(i)){ placed.add(i); pulse[i]=1; if(validPlacement(placed)) onSolved(); }
+  }
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v) autoTimer=0.18;
+  }
+
+  // ---------- input ----------
+  function cellAt(e){
+    const r=cv.getBoundingClientRect();
+    const cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left;
+    const cy=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top;
+    const x=Math.floor(cx/r.width*bw), y=Math.floor(cy/r.height*bh);
+    const c=Math.floor(x/cell), rrow=Math.floor(y/cell);
+    if(c<0||c>=GRID||rrow<0||rrow>=GRID) return -1;
+    return rrow*GRID+c;
+  }
+  function onDown(e){
+    if(over||auto) return;
+    const i=cellAt(e); if(i<0) return;
+    if(trees.has(i)){ e.preventDefault&&e.preventDefault(); return; }
+    if(placed.has(i)){ placed.delete(i); } else { placed.add(i); pulse[i]=1; }
+    if(validPlacement(placed)) onSolved();
+    e.preventDefault&&e.preventDefault();
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ genLevel(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',restart);
+  btnOv&&btnOv.addEventListener('click',restart);
+  function restart(){ level++; genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+  function softRestart(){ genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+
+  // ---------- update ----------
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto && !over){
+      autoTimer-=dt;
+      if(autoTimer<=0 && autoPtr<autoQueue.length){ autoStep(); autoTimer=0.16; }
+    } else if(auto && over && validPlacement(placed)){ /* waiting for restart */ }
+    for(let i=0;i<N;i++) if(pulse[i]>0) pulse[i]=Math.max(0,pulse[i]-dt*1.5);
+    if(winFlash>0) winFlash=Math.max(0,winFlash-dt*1.2);
+    treeSway+=dt;
+    if(elTents) elTents.textContent=placed.size;
+    if(elLevel) elLevel.textContent=level;
+    if(elBest) elBest.textContent=best;
+  }
+
+  // ---------- render ----------
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    const PAD=2;
+    for(let i=0;i<N;i++){
+      const r=(i/GRID)|0,c=i%GRID,x=c*cell,y=r*cell;
+      ctx.fillStyle = (r+c)%2 ? 'rgba(20,40,30,0.5)' : 'rgba(15,32,24,0.5)';
+      roundRect(x+PAD,y+PAD,cell-PAD*2,cell-PAD*2,6); ctx.fill();
+    }
+    // grid lines
+    ctx.strokeStyle='rgba(93,255,166,0.10)'; ctx.lineWidth=1;
+    for(let k=0;k<=GRID;k++){ ctx.beginPath(); ctx.moveTo(k*cell,0); ctx.lineTo(k*cell,bh); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,k*cell); ctx.lineTo(bw,k*cell); ctx.stroke(); }
+    // row/col counts
+    ctx.fillStyle='rgba(173,233,197,0.9)'; ctx.font='bold 12px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    for(let r=0;r<GRID;r++){ const want=rowCnt[r]; const got=rowGot(r); ctx.fillStyle = (want&&got===want)?'#5dffa6':(got>want?'#ff6b8b':'rgba(173,233,197,0.85)'); ctx.fillText(String(want), bw-cell/2, r*cell+cell/2); }
+    for(let c=0;c<GRID;c++){ const want=colCnt[c]; const got=colGot(c); ctx.fillStyle = (want&&got===want)?'#5dffa6':(got>want?'#ff6b8b':'rgba(173,233,197,0.85)'); ctx.fillText(String(want), c*cell+cell/2, bh-cell/2); }
+    // trees
+    for(const t of trees){ const r=(t/GRID)|0,c=t%GRID,x=c*cell+cell/2,y=r*cell+cell/2;
+      ctx.save(); ctx.translate(x,y);
+      const sway=Math.sin(treeSway*1.5+r+c)*1.5;
+      ctx.fillStyle='#2f7d4f'; ctx.beginPath(); ctx.moveTo(sway,-cell*0.28); ctx.lineTo(sway-9,2); ctx.lineTo(sway+9,2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#3fa066'; ctx.beginPath(); ctx.moveTo(sway,-cell*0.12); ctx.lineTo(sway-7,cell*0.22); ctx.lineTo(sway+7,cell*0.22); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#7a4a2a'; ctx.fillRect(sway-2,cell*0.2,4,cell*0.12);
+      ctx.restore();
+    }
+    // tents (placed)
+    for(const t of placed){ const r=(t/GRID)|0,c=t%GRID,x=c*cell+cell/2,y=r*cell+cell/2;
+      const p=pulse[t]; ctx.save(); ctx.translate(x,y);
+      ctx.shadowColor='#5dffa6'; ctx.shadowBlur=8+p*14;
+      ctx.fillStyle='#5dffa6';
+      ctx.beginPath(); ctx.moveTo(0,-cell*0.26); ctx.lineTo(cell*0.28,cell*0.22); ctx.lineTo(-cell*0.28,cell*0.22); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur=0; ctx.fillStyle='rgba(10,20,16,0.5)'; ctx.fillRect(-cell*0.02,-cell*0.02,cell*0.04,cell*0.22);
+      ctx.restore();
+    }
+    if(winFlash>0){ ctx.fillStyle='rgba(93,255,166,'+(winFlash*0.22)+')'; ctx.fillRect(0,0,bw,bh); }
+  }
+  function rowGot(r){ let g=0; for(const t of placed) if(((t/GRID)|0)===r) g++; return g; }
+  function colGot(c){ let g=0; for(const t of placed) if((t%GRID)===c) g++; return g; }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  genLevel();
+
+  // ---------- hooks ----------
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get level(){return level;}, get best(){return best;}, get tents(){return placed.size;},
+    get score(){return solvedLevels*1000+placed.size;},
+    startAuto(){ setAuto(true); if(over){ genLevel(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ restart(); }
+  };
+  window.__test={
+    restart(){ softRestart(); }, setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get score(){return solvedLevels*1000+placed.size;},
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get remaining(){return solTents.size-placed.size;}
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a0e1f" />
+<title>飞刀 · KNIFE HIT</title>
+<style>
+  :root{
+    --bg:#1a0e1f; --surface:#251430; --text:#fdeaff; --muted:#b58ec4;
+    --accent:#ff5db1; --accent2:#5de1ff; --gold:#ffd23f; --ok:#5dffa6;
+    --glow:#ff5db155;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #3a1840 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #1c0d2e 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:56px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .score-card.knives .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#120a18);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a0e1f;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#120a18cc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a0e1f;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>飞刀 · KNIFE HIT</h1>
+      <div class="sub">Stick the Knives</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card knives"><div class="label">本关</div><div class="value" id="knives">0</div></div>
+      <div class="score-card"><div class="label">关卡</div><div class="value" id="level">1</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">过关！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">下一关</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击屏幕<b>掷出飞刀</b>，刀要落在原木的<b>空隙</b>处 · 自动模式会精准找空位投掷并<b>持续通关</b></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elKnives=$('knives'), elLevel=$('level'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const W=380,H=380;
+  const CX=W/2, CY=H/2-20, R=78;
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=W*dpr; cv.height=H*dpr;
+    cv.style.width=W+'px'; cv.style.height=H+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  const TAU=Math.PI*2, DEG=Math.PI/180;
+  const THRESH=13*DEG;          // collision threshold (radians)
+  const BOTTOM=Math.PI/2;       // angle pointing down (toward thrower); 0=up... we use standard math: 0=right, PI/2=down
+
+  // ---------- state ----------
+  let angle=0, angVel=1.2;       // log rotation (rad/s), direction can flip
+  let stuck=[];                  // offsets (rad) of knives embedded in log, relative to log angle
+  let flying=null;               // {fromAngle, t} incoming knife animation (screen angle fixed, moves up)
+  let level=1, best=0, totalStuck=0;
+  let needKnives=6;
+  let stuckThisLevel=0;
+  let auto=false, autoCooldown=0;
+  let over=false, dead=false, won=false;
+  let shake=0, flash=0, shield=0;
+  let dirTimer=0;
+  try{ best=parseInt(localStorage.getItem('knifehit_best')||'0',10)||0; }catch(e){best=0;}
+
+  function genLevel(){
+    needKnives=Math.min(9, 5+Math.floor(level/2));
+    stuckThisLevel=0;
+    stuck=[];
+    // pre-placed knives
+    const pre=Math.min(needKnives-2, 1+Math.floor(level/3));
+    const slots=shuffle([...Array(12).keys()]).slice(0,pre).map(k=>k*(TAU/12)+(Math.random()-0.5)*0.15);
+    stuck=slots;
+    totalStuck+=0;
+    angle=Math.random()*TAU;
+    angVel=1.0+level*0.12;
+    over=false; dead=false; won=false; flying=null; autoCooldown=0.25; shake=0; flash=0; shield=0; dirTimer=1.5+Math.random();
+  }
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i];a[i]=a[j];a[j]=t; } return a; }
+  function angDist(a,b){ let d=Math.abs(a-b)%(TAU); if(d>Math.PI) d=TAU-d; return d; }
+
+  // bottom hit offset (relative to log) when throwing now
+  function bottomOffset(){ return BOTTOM - angle; }
+  function isClearAtThrow(){
+    const bo=bottomOffset();
+    for(const s of stuck){ if(angDist(bo,s)<THRESH) return false; }
+    return true;
+  }
+  function embedOffset(){ return bottomOffset(); }
+
+  // ---------- throw ----------
+  function throwKnife(){
+    if(over||dead||flying) return false;
+    const bo=bottomOffset();
+    if(!isClearAtThrow()){
+      if(!auto){ dead=true; over=true; flash=1; shake=10; onDead(); }
+      else { shield=0.4; } // attract mode: bounce, ignore
+      return false;
+    }
+    // animate: a flying knife travels from bottom to the log rim
+    flying={ t:0, offset:bo };
+    return true;
+  }
+  function landFlying(){
+    if(!flying) return;
+    const off=flying.offset;
+    // double check after travel (log moved a bit); if now occupied, treat as hit
+    let hit=false;
+    for(const s of stuck){ if(angDist(off,s)<THRESH){ hit=true; break; } }
+    if(hit){
+      if(!auto){ dead=true; over=true; flash=1; shake=10; onDead(); }
+      else { shield=0.4; }
+    } else {
+      stuck.push(off); stuckThisLevel++; totalStuck++;
+      shake=4;
+      if(stuckThisLevel>=needKnives) onLevelClear();
+    }
+    flying=null;
+  }
+
+  function onLevelClear(){
+    won=true; over=true;
+    if(auto){ elOvTitle.textContent='🔪 过关！'; elOvText.textContent='自动模式持续挑战中…';
+      setTimeout(()=>{ if(auto){ level++; genLevel(); setAuto(true); } }, 800);
+    } else {
+      elOvTitle.textContent='🎉 过关！'; elOvText.textContent='进入第 '+(level+1)+' 关';
+      elOverlay.classList.add('show');
+    }
+  }
+  function onDead(){
+    if(best===0||totalStuck>best){ best=totalStuck; try{localStorage.setItem('knifehit_best',String(best));}catch(e){} }
+    elOvTitle.textContent='💥 撞刀了！'; elOvText.textContent='本局共掷中 '+totalStuck+' 刀';
+    elOverlay.classList.add('show');
+  }
+
+  // ---------- auto ----------
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v) autoCooldown=0.2;
+  }
+
+  // ---------- input ----------
+  function onDown(e){
+    if(over) { if(!auto){ /* allow overlay button */ } return; }
+    throwKnife();
+    e.preventDefault&&e.preventDefault();
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ level++; genLevel(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',restart);
+  btnOv&&btnOv.addEventListener('click',restart);
+  function restart(){ level=1; totalStuck=0; genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+  function softRestart(){ genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+
+  // ---------- update ----------
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(!over){
+      // rotation, occasional direction flip
+      dirTimer-=dt;
+      if(dirTimer<=0){ angVel=-angVel; dirTimer=1.2+Math.random()*1.6; }
+      angle=(angle+angVel*dt)%TAU; if(angle<0) angle+=TAU;
+      if(flying){ flying.t+=dt*4.5; if(flying.t>=1) landFlying(); }
+      if(auto){
+        autoCooldown-=dt;
+        if(autoCooldown<=0 && !flying && !over){ if(isClearAtThrow()){ if(throwKnife()) autoCooldown=0.28; else autoCooldown=0.08; } else autoCooldown=0.05; }
+      }
+    }
+    if(shake>0) shake=Math.max(0,shake-dt*30);
+    if(flash>0) flash=Math.max(0,flash-dt*1.5);
+    if(shield>0) shield=Math.max(0,shield-dt);
+    if(elKnives) elKnives.textContent=stuckThisLevel+'/'+needKnives;
+    if(elLevel) elLevel.textContent=level;
+    if(elBest) elBest.textContent=best;
+  }
+
+  // ---------- render ----------
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    if(shake>0){ ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake); }
+    // log
+    ctx.save(); ctx.translate(CX,CY); ctx.rotate(angle);
+    const grd=ctx.createRadialGradient(0,0,8,0,0,R);
+    grd.addColorStop(0,'#6b3f2a'); grd.addColorStop(1,'#3a2114');
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(0,0,R,0,TAU); ctx.fill();
+    ctx.strokeStyle='rgba(255,180,120,0.5)'; ctx.lineWidth=3; ctx.stroke();
+    // wood rings
+    ctx.strokeStyle='rgba(255,200,150,0.18)'; ctx.lineWidth=2;
+    for(let rr=R-10; rr>12; rr-=12){ ctx.beginPath(); ctx.arc(0,0,rr,0,TAU); ctx.stroke(); }
+    // embedded knives (offset relative to log)
+    for(const s of stuck){ ctx.save(); ctx.rotate(s); drawKnife(R-2,-1,true); ctx.restore(); }
+    ctx.restore();
+    // shield ring (auto attract mode)
+    if(shield>0){ ctx.strokeStyle='rgba(93,255,166,'+(shield)+')'; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(CX,CY,R+8,0,TAU); ctx.stroke(); }
+    // flying knife (approaching from bottom)
+    if(flying){ const p=flying.t; const y=CY+R + (1-p)*(H-(CY+R)+10); ctx.save(); ctx.translate(CX, y); drawKnife(-1,1,false); ctx.restore(); }
+    // aim guide at bottom (where next throw lands)
+    if(!over){ const bo=bottomOffset(); const ax=CX+Math.sin(bo)* (R+46)*0 + 0; /* bottom is straight down from thrower */ }
+    ctx.restore();
+    if(flash>0){ ctx.fillStyle='rgba(255,93,177,'+(flash*0.3)+')'; ctx.fillRect(0,0,W,H); }
+  }
+  function drawKnife(fromR, dir, embedded){
+    // blade pointing outward (dir: +1 means tip outward/up). We draw along -y as "out".
+    if(embedded){
+      // blade goes from rim inward toward center
+      ctx.fillStyle='#d7e1ee'; ctx.strokeStyle='#9fb0c4'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0,-2); ctx.lineTo(0,-(22)); ctx.lineTo(5,-(16)); ctx.lineTo(5,0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // handle (outside)
+      ctx.fillStyle='#ff5db1'; ctx.fillRect(-3,0,6,12);
+    } else {
+      ctx.save();
+      ctx.fillStyle='#d7e1ee'; ctx.strokeStyle='#9fb0c4'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0,-8); ctx.lineTo(0,-30); ctx.lineTo(5,-24); ctx.lineTo(5,-8); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#ff5db1'; ctx.fillRect(-3,-8,6,12);
+      ctx.restore();
+    }
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  genLevel();
+
+  // ---------- hooks ----------
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;}, get dead(){return dead;},
+    get level(){return level;}, get best(){return best;}, get knives(){return stuckThisLevel;},
+    get score(){return totalStuck;},
+    startAuto(){ setAuto(true); if(over){ level++; genLevel(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ restart(); }
+  };
+  window.__test={
+    restart(){ softRestart(); }, setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get score(){return totalStuck;}, get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get remaining(){return needKnives-stuckThisLevel;}
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06121d" />
+<title>联网 · NET</title>
+<style>
+  :root{
+    --bg:#06121d; --surface:#0e1d2c; --text:#eaf6ff; --muted:#7f9bb3;
+    --accent:#38f9d7; --accent2:#6a8cff; --gold:#ffd23f; --ok:#5dffa6;
+    --glow:#38f9d755; --dim:#26425a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #123047 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a2336 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:56px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .score-card.power .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#04101a);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>联网 · NET</h1>
+      <div class="sub">Rotate · Connect · Power</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card power"><div class="label">已通电</div><div class="value" id="powered">0</div></div>
+      <div class="score-card"><div class="label">关卡</div><div class="value" id="level">1</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">联网成功！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击格子<b>旋转</b>管道，让所有节点都连通到中央<b>服务器</b>（金色）· 自动模式会从服务器逐格点亮</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elPowered=$('powered'), elLevel=$('level'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const GRID=6, N=GRID*GRID;
+  const SERVER=((GRID>>1)*GRID)+(GRID>>1); // center
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const W=384,H=384, cell=Math.floor(W/GRID), bw=cell*GRID, bh=cell*GRID;
+  const PAD=6;
+
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  // directions: 0=up,1=right,2=down,3=left ; bits up=1,right=2,down=4,left=8
+  const DR=[-1,0,1,0], DC=[0,1,0,-1], BIT=[1,2,4,8], OPP=[2,3,0,1];
+  const rotCW=(m)=>((m<<1)|(m>>3))&15;
+  const nb=(i)=>{const r=(i/GRID)|0,c=i%GRID,o=[];if(r>0)o.push([i-GRID,0]);if(r<GRID-1)o.push([i+GRID,2]);if(c>0)o.push([i-1,3]);if(c<GRID-1)o.push([i+1,1]);return o;};
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i];a[i]=a[j];a[j]=t; } return a; }
+
+  // ---------- state ----------
+  let solMask=new Array(N).fill(0);   // solution orientation
+  let mask=new Array(N).fill(0);      // current orientation
+  let rot=new Array(N).fill(0);       // displayed rotation (for tween)
+  let targetRot=new Array(N).fill(0);
+  let powered=new Array(N).fill(false);
+  let level=1, best=0, solvedLevels=0;
+  let auto=false, autoTimer=0;
+  let over=false, won=false;
+  let autoQueue=[], autoPtr=0;
+  let winFlash=0, serverPulse=0;
+  try{ best=parseInt(localStorage.getItem('net_best')||'0',10)||0; }catch(e){best=0;}
+
+  function genLevel(){
+    // randomized DFS spanning tree rooted at server
+    solMask=new Array(N).fill(0);
+    const visited=new Array(N).fill(false);
+    const stack=[SERVER]; visited[SERVER]=true; const order=[SERVER];
+    while(stack.length){
+      const i=stack[stack.length-1];
+      const ns=nb(i).filter(([n])=>!visited[n]);
+      if(ns.length){
+        const [n,d]=ns[(Math.random()*ns.length)|0];
+        visited[n]=true; solMask[i]|=BIT[d]; solMask[n]|=BIT[OPP[d]];
+        stack.push(n); order.push(n);
+      } else stack.pop();
+    }
+    // scramble rotations
+    mask=solMask.map(m=>{ let x=m; const r=(Math.random()*4)|0; for(let k=0;k<r;k++) x=rotCW(x); return x; });
+    rot=mask.map(()=>0); targetRot=rot.slice();
+    autoQueue=order.slice(); autoPtr=0;
+    over=false; won=false; winFlash=0; autoTimer=0;
+    recomputePower();
+    if(poweredCount()===N){ // extremely unlikely; re-scramble
+      genLevel();
+    }
+  }
+
+  function recomputePower(){
+    powered=new Array(N).fill(false);
+    const stack=[SERVER]; powered[SERVER]=true;
+    while(stack.length){
+      const i=stack.pop(); const m=mask[i];
+      for(let d=0;d<4;d++){ if(!(m&BIT[d])) continue; const r=(i/GRID)|0,c=i%GRID; const nr=r+DR[d],nc=c+DC[d];
+        if(nr<0||nr>=GRID||nc<0||nc>=GRID) continue; const j=nr*GRID+nc;
+        if(powered[j]) continue; const md=OPP[d]; if(mask[j]&BIT[md]){ powered[j]=true; stack.push(j); } }
+    }
+  }
+  function poweredCount(){ let c=0; for(let i=0;i<N;i++) if(powered[i]) c++; return c; }
+
+  function checkWin(){ return poweredCount()===N; }
+
+  function onSolved(){
+    won=true; over=true; winFlash=1;
+    solvedLevels++;
+    const sc=solvedLevels*1000+poweredCount();
+    if(best===0||sc>best){ best=sc; try{localStorage.setItem('net_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⚡ 全部通电！'; elOvText.textContent='自动模式持续联网中…';
+      // keep looping in auto mode
+      setTimeout(()=>{ if(auto){ genLevel(); setAuto(true); } }, 900);
+    } else {
+      elOvTitle.textContent='🎉 联网成功！'; elOvText.textContent='用 '+level+' 关完成';
+      elOverlay.classList.add('show');
+    }
+  }
+
+  // ---------- auto ----------
+  function autoStep(){
+    if(autoPtr>=autoQueue.length) return;
+    const i=autoQueue[autoPtr];
+    if(mask[i]===solMask[i]){ autoPtr++; return; }
+    mask[i]=rotCW(mask[i]);
+    targetRot[i]+=Math.PI/2;
+    recomputePower();
+    if(mask[i]===solMask[i]) autoPtr++;
+    if(checkWin() && !over){ onSolved(); }
+  }
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v){ autoTimer=0.35; }
+  }
+
+  // ---------- input ----------
+  function cellAt(e){
+    const r=cv.getBoundingClientRect();
+    const cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left;
+    const cy=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top;
+    const x=Math.floor(cx/r.width*bw), y=Math.floor(cy/r.height*bh);
+    const c=Math.floor(x/cell), rrow=Math.floor(y/cell);
+    if(c<0||c>=GRID||rrow<0||rrow>=GRID) return -1;
+    return rrow*GRID+c;
+  }
+  function onDown(e){
+    if(over||auto) return;
+    const i=cellAt(e); if(i<0) return;
+    mask[i]=rotCW(mask[i]); targetRot[i]+=Math.PI/2;
+    recomputePower();
+    if(checkWin()) onSolved();
+    e.preventDefault&&e.preventDefault();
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ genLevel(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',restart);
+  btnOv&&btnOv.addEventListener('click',restart);
+  function restart(){ level++; genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+  function softRestart(){ genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+
+  // ---------- update ----------
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto && !over){
+      autoTimer-=dt;
+      if(autoTimer<=0 && autoPtr<autoQueue.length){ autoStep(); autoTimer=0.22; }
+    }
+    for(let i=0;i<N;i++){ const d=targetRot[i]-rot[i]; rot[i]+=d*Math.min(1,dt*10); if(Math.abs(d)<0.01) rot[i]=targetRot[i]; }
+    if(winFlash>0) winFlash=Math.max(0,winFlash-dt*1.2);
+    serverPulse+=dt;
+    if(elPowered) elPowered.textContent=poweredCount();
+    if(elLevel) elLevel.textContent=level;
+    if(elBest) elBest.textContent=best;
+  }
+
+  // ---------- render ----------
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    const cx0=cell/2, cy0=cell/2, R=cell/2-PAD;
+    for(let i=0;i<N;i++){
+      const r=(i/GRID)|0,c=i%GRID,x=c*cell,y=r*cell;
+      const on=powered[i];
+      // tile background
+      ctx.fillStyle = on ? 'rgba(56,249,215,0.10)' : 'rgba(38,66,90,0.35)';
+      roundRect(x+3,y+3,cell-6,cell-6,8); ctx.fill();
+      ctx.save(); ctx.translate(x+cx0,y+cy0); ctx.rotate(rot[i]);
+      // pipes
+      const m=mask[i];
+      const col = on ? (i===SERVER?'#ffd23f':'#38f9d7') : '#3a5b73';
+      ctx.lineWidth = i===SERVER?7:5; ctx.strokeStyle=col; ctx.lineCap='round';
+      if(i===SERVER){ // server hub
+        ctx.shadowColor=col; ctx.shadowBlur=14;
+      } else if(on){ ctx.shadowColor='#38f9d7'; ctx.shadowBlur=8; } else { ctx.shadowBlur=0; }
+      for(let d=0;d<4;d++){ if(m&BIT[d]){ ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(DC[d]*R,DR[d]*R); ctx.stroke(); } }
+      // center node
+      ctx.shadowBlur=0; ctx.fillStyle=col;
+      ctx.beginPath(); ctx.arc(0,0,i===SERVER?6:3.2,0,Math.PI*2); ctx.fill();
+      if(i===SERVER){ // pulsing ring
+        const pr=8+Math.sin(serverPulse*4)*2.5; ctx.strokeStyle='rgba(255,210,63,0.8)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(0,0,pr,0,Math.PI*2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if(winFlash>0){ ctx.fillStyle='rgba(56,249,215,'+(winFlash*0.25)+')'; ctx.fillRect(0,0,bw,bh); }
+  }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  genLevel();
+
+  // ---------- hooks ----------
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get level(){return level;}, get best(){return best;},
+    get score(){return solvedLevels*1000+poweredCount();},
+    get powered(){return poweredCount();},
+    startAuto(){ setAuto(true); if(over){ genLevel(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ restart(); }
+  };
+  window.__test={
+    restart(){ softRestart(); },
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get score(){return solvedLevels*1000+poweredCount();},
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get remaining(){return checkWin()?0:(N-poweredCount());}
+  };
+})();
+</script>
+</body>
+</html>
