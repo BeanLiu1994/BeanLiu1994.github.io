@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f1f" />
+<title>蛇梯棋 · Snakes & Ladders</title>
+<style>
+  :root{
+    --bg:#0a0f1f; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#46e0c8; --accent2:#7c8cff; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#46e0c855; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #15233f 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a1a30 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .score-card.pos .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#07101e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>蛇梯棋 · SNAKE & LADDER</h1>
+      <div class="sub">Roll · Climb · Slide</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card pos"><div class="label">位置</div><div class="value" id="pos">1</div></div>
+      <div class="score-card"><div class="label">步数</div><div class="value" id="rolls">0</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">–</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">登顶成功！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击棋盘<b>掷骰子</b>，踩到梯子往上爬、踩到蛇往下滑 · 先到 <b>100</b> 即胜</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elPos=$('pos'), elRolls=$('rolls'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const N=100, GRID=10, W=400, H=400, cell=W/GRID, bw=W, bh=H;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  // ---- board geometry ----
+  function cellRC(n){ // n:1..100 -> {x:col,y:visualRow}
+    const idx=n-1, row=(idx/GRID)|0, rem=idx%GRID;
+    const col=(row%2===0)?rem:(GRID-1-rem);
+    const vrow=GRID-1-row;
+    return {x:col,y:vrow};
+  }
+  function center(n){ const {x,y}=cellRC(n); return {cx:(x+0.5)*cell, cy:(y+0.5)*cell}; }
+  function centerFloat(pf){
+    const lo=Math.floor(pf), hi=Math.min(N,Math.ceil(pf));
+    if(lo===hi||hi>100) return center(Math.min(100,lo));
+    const a=center(lo), b=center(hi), t=pf-lo;
+    return {cx:a.cx+(b.cx-a.cx)*t, cy:a.cy+(b.cy-a.cy)*t};
+  }
+
+  // ---- state ----
+  let ladders={}, snakes={};
+  let posF=1, dieVal=1, rolls=0;
+  let phase='roll'; // roll | dice | move | warp | win
+  let diceTimer=0, moveFrom=1, moveTo=1, moveT=0, moveDur=0.18;
+  let warpFrom=1, warpTo=1, warpT=0, warpDur=0.5, warpType='ladder';
+  let auto=false, autoTimer=0, winTimer=0;
+  let over=false, won=false;
+  let best=0;
+  try{ best=parseInt(localStorage.getItem('snake_best')||'0',10)||0; }catch(e){best=0;}
+  let dieFace=1;
+
+  function genBoard(){
+    ladders={}; snakes={};
+    const used=new Set();
+    const add=(map,s,e)=>{ if(used.has(s)||used.has(e)) return false; if(s===e) return false;
+      if(s<=1||e>=100||e<=1) return false; map[s]=e; used.add(s); used.add(e); return true; };
+    // ladders (climb up)
+    for(let k=0;k<11;k++){ const s=2+((Math.random()*89)|0); const e=s+5+((Math.random()*Math.max(1,90-s))|0); if(e<100) add(ladders,s,e); }
+    // snakes (slide down)
+    for(let k=0;k<11;k++){ const s=15+((Math.random()*84)|0); const e=2+((Math.random()*Math.max(1,s-15))|0); if(e>=2&&e<s) add(snakes,s,e); }
+    // guarantee at least one of each
+    if(Object.keys(ladders).length===0) ladders[3]=22;
+    if(Object.keys(snakes).length===0) snakes[38]=12;
+  }
+
+  function newGame(){
+    genBoard(); posF=1; dieVal=1; rolls=0; phase='roll'; over=false; won=false;
+    diceTimer=0; moveT=0; warpT=0; winTimer=0; autoTimer=0.4;
+    elOverlay.classList.remove('show');
+  }
+
+  function roll(){
+    if(phase!=='roll'||over) return;
+    dieVal=1+((Math.random()*6)|0);
+    phase='dice'; diceTimer=0.45; rolls++;
+  }
+  function startMove(){
+    moveFrom=posF; moveTo=Math.min(N, Math.floor(posF)+dieVal);
+    moveT=0; phase='move';
+  }
+  function afterMove(){
+    const cur=Math.floor(posF); posF=cur;
+    if(ladders[cur]!=null){ startWarp(cur,ladders[cur],'ladder'); }
+    else if(snakes[cur]!=null){ startWarp(cur,snakes[cur],'snake'); }
+    else if(cur>=N){ win(); }
+    else phase='roll';
+  }
+  function startWarp(from,to,type){
+    warpFrom=from; warpTo=to; warpType=type; warpT=0; posF=from; phase='warp';
+  }
+  function afterWarp(){
+    posF=warpTo;
+    if(Math.floor(posF)>=N) win(); else phase='roll';
+  }
+  function win(){
+    phase='win'; over=true; won=true;
+    if(best===0||rolls<best){ best=rolls; try{localStorage.setItem('snake_best',String(best));}catch(e){} }
+    if(auto){
+      elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用 '+rolls+' 步登顶，继续下一张棋盘…';
+      winTimer=1.0;
+    } else {
+      elOvTitle.textContent='🎉 登顶成功！'; elOvText.textContent='用 '+rolls+' 步到达 100';
+      elOverlay.classList.add('show');
+    }
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v){ autoTimer=Math.min(autoTimer,0.4); }
+  }
+
+  // ---- input ----
+  function onDown(e){
+    if(over||auto) return;
+    if(phase==='roll'){ roll(); }
+    e.preventDefault&&e.preventDefault();
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto && !over){
+      if(phase==='roll'){ autoTimer-=dt; if(autoTimer<=0){ roll(); autoTimer=0.35; } }
+    }
+    if(phase==='dice'){ diceTimer-=dt; if(diceTimer<=0) startMove(); }
+    else if(phase==='move'){ moveT+=dt/moveDur; if(moveT>=1){ moveT=1; posF=moveTo; afterMove(); } else { posF=moveFrom+(moveTo-moveFrom)*easeInOut(moveT); } }
+    else if(phase==='warp'){ warpT+=dt/warpDur; if(warpT>=1){ warpT=1; afterWarp(); } }
+    else if(phase==='win' && auto){ winTimer-=dt; if(winTimer<=0){ newGame(); setAuto(true); } }
+    dieFace = (phase==='dice') ? (1+((Math.random()*6)|0)) : dieVal;
+    if(elPos) elPos.textContent=Math.floor(posF);
+    if(elRolls) elRolls.textContent=rolls;
+    if(elBest) elBest.textContent=best?best:'–';
+  }
+  function easeInOut(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    // cells
+    for(let n=1;n<=N;n++){
+      const {x,y}=cellRC(n);
+      const px=x*cell, py=y*cell;
+      const light=((x+y)%2===0);
+      ctx.fillStyle=light?'rgba(70,224,200,0.06)':'rgba(124,140,255,0.06)';
+      roundRect(px+2,py+2,cell-4,cell-4,6); ctx.fill();
+      ctx.fillStyle='rgba(180,200,230,0.45)';
+      ctx.font='10px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.fillText(String(n),px+5,py+4);
+    }
+    // snakes
+    for(const s in snakes){
+      const e=snakes[s];
+      drawSnake(parseInt(s,10), e);
+    }
+    // ladders
+    for(const s in ladders){
+      const e=ladders[s];
+      drawLadder(parseInt(s,10), e);
+    }
+    // token
+    const p=centerFloat(posF);
+    const glow = (phase==='warp') ? 22 : 14;
+    ctx.save();
+    ctx.shadowColor='#ffd23f'; ctx.shadowBlur=glow;
+    ctx.fillStyle='#ffd23f';
+    ctx.beginPath(); ctx.arc(p.cx,p.cy,cell*0.28,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0; ctx.fillStyle='#0a0f1f';
+    ctx.beginPath(); ctx.arc(p.cx,p.cy,cell*0.13,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // dice in top-left
+    drawDie();
+  }
+  function drawLadder(a,b){
+    const A=center(a), B=center(b);
+    const ang=Math.atan2(B.cy-A.cy,B.cx-A.cx);
+    const nx=Math.cos(ang+Math.PI/2), ny=Math.sin(ang+Math.PI/2);
+    const w=cell*0.16;
+    ctx.strokeStyle='#46e0c8'; ctx.lineWidth=3; ctx.lineCap='round';
+    ctx.shadowColor='#46e0c8'; ctx.shadowBlur=8;
+    // rails
+    const off=6;
+    ctx.beginPath();
+    ctx.moveTo(A.cx+nx*w, A.cy+ny*w); ctx.lineTo(B.cx+nx*w, B.cy+ny*w);
+    ctx.moveTo(A.cx-nx*w, A.cy-ny*w); ctx.lineTo(B.cx-nx*w, B.cy-ny*w);
+    ctx.stroke();
+    // rungs
+    const steps=Math.max(3,Math.round(Math.hypot(B.cx-A.cx,B.cy-A.cy)/(cell*0.5)));
+    ctx.lineWidth=2;
+    for(let i=1;i<steps;i++){
+      const t=i/steps, x=A.cx+(B.cx-A.cx)*t, y=A.cy+(B.cy-A.cy)*t;
+      ctx.beginPath(); ctx.moveTo(x+nx*w,y+ny*w); ctx.lineTo(x-nx*w,y-ny*w); ctx.stroke();
+    }
+    ctx.shadowBlur=0;
+  }
+  function drawSnake(a,b){
+    const A=center(a), B=center(b);
+    const mx=(A.cx+B.cx)/2, my=(A.cy+B.cy)/2;
+    const ang=Math.atan2(B.cy-A.cy,B.cx-A.cx);
+    const nx=Math.cos(ang+Math.PI/2), ny=Math.sin(ang+Math.PI/2);
+    const bow=Math.min(60, Math.hypot(B.cx-A.cx,B.cy-A.cy)*0.4);
+    const cxp=mx+nx*bow, cyp=my+ny*bow;
+    ctx.strokeStyle='#ff6b8a'; ctx.lineWidth=cell*0.18; ctx.lineCap='round';
+    ctx.shadowColor='#ff6b8a'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.moveTo(A.cx,A.cy);
+    ctx.quadraticCurveTo(cxp,cyp,B.cx,B.cy); ctx.stroke();
+    ctx.shadowBlur=0;
+    // head
+    ctx.fillStyle='#ff6b8a';
+    ctx.beginPath(); ctx.arc(A.cx,A.cy,cell*0.2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#0a0f1f';
+    const ex=Math.cos(ang)*cell*0.07, ey=Math.sin(ang)*cell*0.07;
+    ctx.beginPath(); ctx.arc(A.cx+ex-ny*cell*0.07,A.cy+ey-nx*cell*0.07,cell*0.05,0,Math.PI*2);
+    ctx.arc(A.cx+ex+ny*cell*0.07,A.cy+ey+nx*cell*0.07,cell*0.05,0,Math.PI*2); ctx.fill();
+  }
+  function drawDie(){
+    const x=10,y=10,s=cell*0.7;
+    ctx.fillStyle='rgba(18,26,48,0.85)'; roundRect(x,y,s,s,8); ctx.fill();
+    ctx.strokeStyle='#46e0c8'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#eaf2ff';
+    const cxp=x+s/2, cyp=y+s/2, r=s*0.09, o=s*0.26;
+    const P={1:[[0,0]],2:[[-o,-o],[o,o]],3:[[-o,-o],[0,0],[o,o]],4:[[-o,-o],[o,-o],[-o,o],[o,o]],5:[[-o,-o],[o,-o],[0,0],[-o,o],[o,o]],6:[[-o,-o],[o,-o],[-o,0],[o,0],[-o,o],[o,o]]};
+    (P[dieFace]||P[1]).forEach(([dx,dy])=>{ ctx.beginPath(); ctx.arc(cxp+dx,cyp+dy,r,0,Math.PI*2); ctx.fill(); });
+  }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get pos(){return Math.floor(posF);}, get rolls(){return rolls;}, get best(){return best;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    roll(){ roll(); },
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get pos(){return Math.floor(posF);}, get rolls(){return rolls;}, get phase(){return phase;}
+  };
+})();
+</script>
+</body>
+</html>

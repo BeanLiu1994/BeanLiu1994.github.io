@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f1f" />
+<title>炮术对决 · Artillery Duel</title>
+<style>
+  :root{
+    --bg:#0a0f1f; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#46e0c8; --accent2:#7c8cff; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#46e0c855; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #15233f 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a1a30 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:62px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.p1 .value{color:var(--accent);}
+  .score-card.p2 .value{color:var(--bad);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#07101e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>炮术对决 · ARTILLERY</h1>
+      <div class="sub">Aim · Wind · Fire</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card p1"><div class="label">我方</div><div class="value" id="pHP">100</div></div>
+      <div class="score-card"><div class="label">回合</div><div class="value" id="turn">1</div></div>
+      <div class="score-card p2"><div class="label">敌方</div><div class="value" id="eHP">100</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">胜利！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">在场上<b>拖拽</b>设定角度与力度后松手发射 · 注意顶部<b>风向</b> · 把对方血量打光即胜</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elPHP=$('pHP'), elEHP=$('eHP'), elTurn=$('turn'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const W=420, H=380, bw=W, bh=H;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  // ---- physics constants ----
+  const G=520, SPEED=560, STEP=3;
+  const pX=48, eX=W-48, fortH=22, fortW=30;
+  const hitR=15;
+  let terr=new Array(Math.ceil(W/STEP)+1);
+  function terrainY(x){ const i=Math.max(0,Math.min(terr.length-1,Math.round(x/STEP))); return terr[i]; }
+  function genTerrain(){
+    const base=H-66;
+    const a1=0.5+Math.random()*0.7, a2=0.25+Math.random()*0.4, a3=0.12+Math.random()*0.25;
+    const p1=Math.random()*6.28, p2=Math.random()*6.28, p3=Math.random()*6.28;
+    for(let i=0;i<terr.length;i++){ const x=i*STEP;
+      let h=base - (Math.sin(x*0.016+a1*3+p1)*24 + Math.sin(x*0.041+a2*5+p2)*12 + Math.sin(x*0.09+a3*7+p3)*6);
+      terr[i]=Math.max(70,Math.min(H-30,h));
+    }
+    for(let s=0;s<2;s++) for(let i=1;i<terr.length-1;i++) terr[i]=(terr[i-1]+terr[i]*2+terr[i+1])/4;
+    flatten(pX); flatten(eX);
+  }
+  function flatten(cx){ const ci=Math.round(cx/STEP); const lo=Math.max(1,ci-3), hi=Math.min(terr.length-2,ci+3);
+    let sum=0; for(let i=lo;i<=hi;i++) sum+=terr[i]; const avg=sum/(hi-lo+1);
+    for(let i=lo;i<=hi;i++) terr[i]=avg; }
+  function fortTop(x){ return terrainY(x)-fortH; }
+
+  // ---- state ----
+  let pHP=100, eHP=100, turn=1;
+  let phase='aim'; // aim | fly | explode | over
+  let current='P';
+  let wind=0;
+  let aimAngle=45*Math.PI/180, aimPower=0.7;
+  let proj=null, projFlight=0;
+  let particles=[];
+  let auto=false, autoTimer=0, explodeTimer=0;
+  let over=false, winner=null;
+  let won=false;
+  let dragging=false, dragX=0, dragY=0;
+
+  function newGame(){
+    genTerrain(); pHP=100; eHP=100; turn=1; phase='aim'; current='P';
+    wind=(Math.random()*2-1)*90; aimAngle=45*Math.PI/180; aimPower=0.7;
+    proj=null; particles=[]; over=false; winner=null; won=false;
+    autoTimer=0.6; explodeTimer=0; dragging=false;
+    elOverlay.classList.remove('show');
+  }
+
+  function muzzle(side){
+    const x=(side==='P')?pX:eX, dir=(side==='P')?1:-1;
+    return { x:x+dir*18, y:fortTop(x)-14, dir };
+  }
+
+  function fire(){
+    if(phase!=='aim') return;
+    const m=muzzle(current);
+    const vx=m.dir*aimPower*SPEED*Math.cos(aimAngle);
+    const vy=-aimPower*SPEED*Math.sin(aimAngle);
+    proj={ x:m.x, y:m.y, vx, vy, trail:[] };
+    projFlight=0; phase='fly';
+  }
+
+  // simulate a shot, return landing {x,y,hit,dist}
+  function simulate(side, angle, power){
+    const m=muzzle(side);
+    let vx=m.dir*power*SPEED*Math.cos(angle);
+    let vy=-power*SPEED*Math.sin(angle);
+    let x=m.x, y=m.y, t=0;
+    const dt=0.02;
+    const tgt=(side==='P')?{x:eX,y:fortTop(eX)}:{x:pX,y:fortTop(pX)};
+    while(t<8){
+      vy+=G*dt; vx+=wind*dt; x+=vx*dt; y+=vy*dt; t+=dt;
+      if(x<-20||x>W+20||y>H+20) return {x,y,hit:false,dist:Math.hypot(x-tgt.x,y-tgt.y)};
+      if(y>=terrainY(x)) return {x,y,hit:false,dist:Math.hypot(x-tgt.x,y-tgt.y)};
+      if(Math.hypot(x-tgt.x,y-tgt.y)<hitR) return {x,y,hit:true,dist:0};
+    }
+    return {x,y,hit:false,dist:Math.hypot(x-tgt.x,y-tgt.y)};
+  }
+
+  function aiChoose(side){
+    let best=null, bestScore=-1e9;
+    for(let ad=8; ad<=85; ad+=2){
+      const ang=ad*Math.PI/180;
+      for(let p=0.35; p<=1.0; p+=0.03){
+        const r=simulate(side,ang,p);
+        let score = r.hit ? (10000 - r.dist) : -r.dist;
+        if(score>bestScore){ bestScore=score; best={angle:ang,power:p,hit:r.hit}; }
+      }
+    }
+    if(!best) best={angle:45*Math.PI/180,power:0.7,hit:false};
+    return best;
+  }
+
+  function doExplode(x,y,side){
+    const tgt=(side==='P')?{x:eX,y:fortTop(eX)}:{x:pX,y:fortTop(pX)};
+    const d=Math.hypot(x-tgt.x,y-tgt.y);
+    let dmg=0;
+    if(d<hitR) dmg=34; else if(d<42) dmg=Math.round(14*(1-(d-hitR)/(42-hitR)));
+    if(side==='P') eHP=Math.max(0,eHP-dmg); else pHP=Math.max(0,pHP-dmg);
+    // particles
+    for(let i=0;i<22;i++){ const a=Math.random()*6.28, sp=40+Math.random()*160;
+      particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-40,life:0.5+Math.random()*0.4,age:0,
+        col: dmg>0?'#ffd23f':'#7c8cff'}); }
+    phase='explode'; explodeTimer=0.7;
+  }
+
+  function nextTurn(){
+    if(pHP<=0||eHP<=0){ over=true; winner=(eHP<=0)?'P':'E'; won=(winner==='P');
+      if(auto){ elOvTitle.textContent='⚡ 自动对战结束'; elOvText.textContent=(won?'我方':'敌方')+'获胜，继续下一局…'; autoTimer=1.1; }
+      else { elOvTitle.textContent= won?'🎉 胜利！':'💥 战败'; elOvText.textContent='敌方剩余 '+eHP+' · 我方剩余 '+pHP; elOverlay.classList.add('show'); }
+      return;
+    }
+    current=(current==='P')?'E':'P';
+    if(current==='P') turn++;
+    wind=(Math.random()*2-1)*90;
+    phase='aim'; autoTimer=0.6;
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+  }
+
+  // ---- input (manual aim for player) ----
+  function pointerPos(e){
+    const r=cv.getBoundingClientRect();
+    const cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left;
+    const cy=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top;
+    return { x:cx/r.width*bw, y:cy/r.height*bh };
+  }
+  function onDown(e){
+    if(auto||over||phase!=='aim'||current!=='P') return;
+    dragging=true; const p=pointerPos(e); dragX=p.x; dragY=p.y; updateAim(); e.preventDefault&&e.preventDefault();
+  }
+  function onMove(e){
+    if(!dragging) return; const p=pointerPos(e); dragX=p.x; dragY=p.y; updateAim(); e.preventDefault&&e.preventDefault();
+  }
+  function onUp(e){
+    if(!dragging) return; dragging=false;
+    if(phase==='aim'&&current==='P'&&!auto) fire();
+    e.preventDefault&&e.preventDefault();
+  }
+  function updateAim(){
+    const m=muzzle('P');
+    const dx=dragX-m.x, dy=dragY-m.y;
+    let ang=Math.atan2(-dy, Math.abs(dx));
+    ang=Math.max(5*Math.PI/180, Math.min(85*Math.PI/180, ang));
+    let pw=Math.hypot(dx,dy)/180; pw=Math.max(0.2,Math.min(1,pw));
+    aimAngle=ang; aimPower=pw;
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('pointermove',onMove,{passive:false});
+    window.addEventListener('pointerup',onUp,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',onMove,{passive:false});
+    window.addEventListener('touchend',onUp,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(phase==='aim'){
+      if(auto||current==='E'){
+        autoTimer-=dt;
+        if(autoTimer<=0){ const best=aiChoose(current); aimAngle=best.angle; aimPower=best.power; fire(); }
+      }
+    } else if(phase==='fly'){
+      projFlight+=dt;
+      const sdt=Math.min(dt,0.03);
+      let steps=Math.max(1,Math.ceil(dt/0.008));
+      for(let s=0;s<steps;s++){
+        proj.vy+=G*sdt; proj.vx+=wind*sdt; proj.x+=proj.vx*sdt; proj.y+=proj.vy*sdt;
+      }
+      proj.trail.push({x:proj.x,y:proj.y}); if(proj.trail.length>28) proj.trail.shift();
+      const tgt=(current==='P')?{x:eX,y:fortTop(eX)}:{x:pX,y:fortTop(pX)};
+      if(proj.x<-20||proj.x>W+20||proj.y>H+20){ doExplode(proj.x,Math.max(0,Math.min(H,proj.y)),current); }
+      else if(proj.y>=terrainY(proj.x)){ doExplode(proj.x,terrainY(proj.x),current); }
+      else if(Math.hypot(proj.x-tgt.x,proj.y-tgt.y)<hitR){ doExplode(proj.x,proj.y,current); }
+      else if(projFlight>9){ doExplode(proj.x,proj.y,current); }
+    } else if(phase==='explode'){
+      explodeTimer-=dt;
+      for(const p of particles){ p.age+=dt; p.vy+=300*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; }
+      particles=particles.filter(p=>p.age<p.life);
+      if(explodeTimer<=0){ proj=null; nextTurn(); }
+    } else if(phase==='over' && auto){
+      autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); }
+    }
+    if(elPHP) elPHP.textContent=pHP;
+    if(elEHP) elEHP.textContent=eHP;
+    if(elTurn) elTurn.textContent=turn;
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    // terrain
+    ctx.beginPath(); ctx.moveTo(0,H);
+    for(let x=0;x<=W;x+=STEP) ctx.lineTo(x,terrainY(x));
+    ctx.lineTo(W,H); ctx.closePath();
+    const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#16314a'); g.addColorStop(1,'#0c1c2e');
+    ctx.fillStyle=g; ctx.fill();
+    ctx.strokeStyle='#46e0c8'; ctx.lineWidth=2; ctx.shadowColor='#46e0c8'; ctx.shadowBlur=8;
+    ctx.beginPath(); for(let x=0;x<=W;x+=STEP){ const y=terrainY(x); if(x===0)ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.stroke();
+    ctx.shadowBlur=0;
+    // forts
+    drawFort(pX,'#46e0c8', current==='P'?aimAngle:40*Math.PI/180);
+    drawFort(eX,'#ff6b8a', current==='E'?Math.PI-aimAngle:Math.PI-40*Math.PI/180);
+    // aim preview
+    if(phase==='aim' && (dragging||(auto))){
+      const side=current; const m=muzzle(side);
+      let px=m.x, py=m.y, vx=m.dir*aimPower*SPEED*Math.cos(aimAngle), vy=-aimPower*SPEED*Math.sin(aimAngle);
+      ctx.fillStyle='rgba(255,210,63,0.5)';
+      for(let i=0;i<60;i++){ vy+=G*0.02; vx+=wind*0.02; px+=vx*0.02; py+=vy*0.02;
+        if(py>terrainY(px)||px<0||px>W) break;
+        if(i%3===0){ ctx.beginPath(); ctx.arc(px,py,2,0,6.28); ctx.fill(); } }
+    }
+    // projectile
+    if(proj){
+      ctx.strokeStyle='rgba(255,210,63,0.5)'; ctx.lineWidth=2;
+      ctx.beginPath(); proj.trail.forEach((t,i)=>{ if(i===0)ctx.moveTo(t.x,t.y); else ctx.lineTo(t.x,t.y); }); ctx.stroke();
+      ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=16; ctx.fillStyle='#ffd23f';
+      ctx.beginPath(); ctx.arc(proj.x,proj.y,5,0,6.28); ctx.fill(); ctx.restore();
+    }
+    // particles
+    for(const p of particles){ const a=1-p.age/p.life; ctx.fillStyle=p.col; ctx.globalAlpha=a;
+      ctx.beginPath(); ctx.arc(p.x,p.y,3*a+1,0,6.28); ctx.fill(); }
+    ctx.globalAlpha=1;
+    // wind indicator
+    drawWind();
+  }
+  function drawFort(x,col,barrelAng){
+    const top=fortTop(x);
+    ctx.fillStyle=col; ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.moveTo(x-fortW/2,top+fortH); ctx.lineTo(x-fortW/2+5,top);
+    ctx.lineTo(x+fortW/2-5,top); ctx.lineTo(x+fortW/2,top+fortH); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // barrel
+    const cx=x, cy=top+4, dir=(x<pX)?1:-1, ang=(x<pX)?barrelAng:(Math.PI-barrelAng);
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-ang); ctx.fillStyle='#0a0f1f';
+    ctx.fillRect(0,-4,24,8); ctx.fillStyle=col; ctx.fillRect(22,-5,4,10); ctx.restore();
+  }
+  function drawWind(){
+    const cx=W/2, cy=22;
+    ctx.fillStyle='rgba(180,200,230,0.8)'; ctx.font='11px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const strength=Math.abs(wind);
+    const dir=wind>=0?1:-1;
+    ctx.fillText('风', cx, cy);
+    ctx.strokeStyle='#ffd23f'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx-22,cy+14); ctx.lineTo(cx+22*dir,cy+14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+22*dir,cy+14); ctx.lineTo(cx+22*dir-7*dir,cy+10); ctx.lineTo(cx+22*dir-7*dir,cy+18); ctx.closePath(); ctx.fillStyle='#ffd23f'; ctx.fill();
+    ctx.fillStyle='rgba(180,200,230,0.7)'; ctx.fillText(Math.round(strength), cx, cy+30);
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;}, get winner(){return winner;},
+    get pHP(){return pHP;}, get eHP(){return eHP;}, get turn(){return turn;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get winner(){return winner;}, get pHP(){return pHP;}, get eHP(){return eHP;}, get phase(){return phase;}
+  };
+})();
+</script>
+</body>
+</html>
