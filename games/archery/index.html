@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f1f" />
+<title>霓虹射箭 · Neon Archery</title>
+<style>
+  :root{
+    --bg:#0a0f1f; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#46e0c8; --accent2:#7c8cff; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#46e0c855; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #15233f 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a1a30 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.h .value{color:var(--gold);}
+  .score-card.l .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#07101e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹射箭 · NEON ARCHERY</h1>
+      <div class="sub">Aim · Draw · Loose</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card h"><div class="label">命中</div><div class="value" id="hits">0</div></div>
+      <div class="score-card l"><div class="label">风</div><div class="value" id="wind">0</div></div>
+      <div class="score-card"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">神射手！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">拖动瞄准、<b>松手/点击射箭</b> · 命中 <b>12 靶</b>通关 · 自动模式弹道求解百发百中</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elHits=$('hits'), elWind=$('wind'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const W=420, H=560, bw=W, bh=H;
+  const BX=46, BY=H-110;          // bow anchor
+  const G=430, S=540, R=24;       // gravity, launch speed, target radius
+  const DT=1/120;                 // fixed physics timestep — SHARED by gameplay + solver so prediction == reality
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  // ---- state ----
+  const TARGET=12;
+  let arrow=null;                 // {x,y,vx,vy,trail:[]}
+  let aim=45*Math.PI/180, aiming=false;
+  let tgt={x:W-90,y:H/2,wind:0};
+  let pointerX=null, pointerY=null;
+  let hits=0, score=0, best=0;
+  let auto=false, over=false, won=false, autoTimer=0, gameTime=0, acc=0;
+  let fx=[];                      // hit particles
+  try{ best=parseInt(localStorage.getItem('archery_best')||'0',10)||0; }catch(e){best=0;}
+
+  function newTarget(){
+    // pick a physically-reachable target; fall back to the closest-approach candidate
+    let best=null;
+    for(let i=0;i<24;i++){
+      const x=230+Math.random()*(W-270);     // [230,380]
+      const y=150+Math.random()*(H-310);     // [150,400] — reachable given S,G
+      const wind=(Math.random()*2-1)*70;
+      const sol=solveClosest(x,y,wind);
+      if(sol.d < R*0.7){ tgt.x=x; tgt.y=y; tgt.wind=wind; aim=sol.a; return; }
+      if(!best || sol.d<best.d) best={x,y,wind,d:sol.d};
+    }
+    tgt.x=best.x; tgt.y=best.y; tgt.wind=best.wind; aim=solveClosest(best.x,best.y,best.wind).a;
+  }
+  function newGame(){
+    arrow=null; aim=45*Math.PI/180; aiming=false; pointerX=null; pointerY=null;
+    hits=0; score=0; over=false; won=false; autoTimer=0; gameTime=0; acc=0; fx=[];
+    newTarget();
+    elOverlay.classList.remove('show');
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+  }
+
+  function shoot(){
+    if(arrow||over) return;
+    const a=aim;
+    arrow={x:BX,y:BY,vx:S*Math.cos(a),vy:-S*Math.sin(a),trail:[]};
+  }
+
+  // one fixed physics step — identical formula used by gameplay and the solver,
+  // so the predicted trajectory EXACTLY matches the real flight (frame-rate independent).
+  function simStep(p, wind){
+    p.vx += wind*DT; p.vy += G*DT; p.x += p.vx*DT; p.y += p.vy*DT;
+  }
+  // closest approach distance of a shot fired at angle a to point (tx,ty)
+  function closestForAngle(a, tx, ty, wind){
+    const p={x:BX, y:BY, vx:S*Math.cos(a), vy:-S*Math.sin(a)};
+    let md=1e9;
+    for(let s=0;s<900;s++){
+      simStep(p,wind);
+      const d=Math.hypot(p.x-tx, p.y-ty); if(d<md) md=d;
+      if(p.x>W+40 || p.y>H+40 || p.y<-60) break;
+    }
+    return md;
+  }
+  // coarse sweep -> refine -> fine refine; returns {a, d} (d = closest approach)
+  function solveClosest(tx,ty,wind){
+    let bestA=45*Math.PI/180, bestD=1e9;
+    const tryA=(a)=>{ const d=closestForAngle(a,tx,ty,wind); if(d<bestD){ bestD=d; bestA=a; } };
+    for(let ad=10; ad<=86; ad+=1) tryA(ad*Math.PI/180);
+    for(let dl=-1.0; dl<=1.0; dl+=0.1) tryA(bestA+dl*Math.PI/180);
+    for(let dl=-0.15; dl<=0.15; dl+=0.02) tryA(bestA+dl*Math.PI/180);
+    return {a:bestA, d:bestD};
+  }
+  function solveAngle(tx,ty,wind){ return solveClosest(tx,ty,wind).a; }
+
+  function winGame(){
+    over=true; won=true;
+    if(hits>best){ best=hits; try{localStorage.setItem('archery_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⚡ 自动神射！'; elOvText.textContent='命中 '+hits+' 靶，继续下一局…'; autoTimer=1.0; }
+    else { elOvTitle.textContent='🎯 神射手！'; elOvText.textContent='命中 '+hits+' 靶'; elOverlay.classList.add('show'); }
+  }
+
+  // ---- input ----
+  function aimAt(cx,cy){ aim=Math.atan2(BY-cy, cx-BX); if(aim<0)aim+=6.2832; }
+  function onDown(e){
+    if(over||auto) return;
+    const r=cv.getBoundingClientRect();
+    pointerX=((e.touches?e.touches[0].clientX:e.clientX)-r.left)*(bw/r.width);
+    pointerY=((e.touches?e.touches[0].clientY:e.clientY)-r.top)*(bh/r.height);
+    aiming=true; aimAt(pointerX,pointerY); e.preventDefault&&e.preventDefault();
+  }
+  function onMove(e){
+    if(over||auto||!aiming) return;
+    const r=cv.getBoundingClientRect();
+    pointerX=((e.touches?e.touches[0].clientX:e.clientX)-r.left)*(bw/r.width);
+    pointerY=((e.touches?e.touches[0].clientY:e.clientY)-r.top)*(bh/r.height);
+    aimAt(pointerX,pointerY); e.preventDefault&&e.preventDefault();
+  }
+  function onUp(e){ if(over||auto) return; aiming=false; shoot(); }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('pointermove',onMove,{passive:false});
+    window.addEventListener('pointerup',onUp,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',onMove,{passive:false});
+    window.addEventListener('touchend',onUp,{passive:false});
+  }
+  window.addEventListener('keydown',(e)=>{ if(e.key===' '){ if(!auto&&!over){ shoot(); } } if(e.key==='ArrowUp')aim=Math.min(86*Math.PI/180,aim+0.05); if(e.key==='ArrowDown')aim=Math.max(8*Math.PI/180,aim-0.05); });
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(over){
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      updateFx(dt); return;
+    }
+    gameTime+=dt; score+=dt*4;
+
+    if(auto && !arrow){ shoot(); }
+    if(arrow){
+      acc += dt;
+      while(acc >= DT){
+        acc -= DT;
+        arrow.vx += tgt.wind*DT; arrow.vy += G*DT;
+        arrow.x += arrow.vx*DT; arrow.y += arrow.vy*DT;
+        arrow.trail.push({x:arrow.x,y:arrow.y}); if(arrow.trail.length>16) arrow.trail.shift();
+        // hit?
+        if(Math.hypot(arrow.x-tgt.x, arrow.y-tgt.y) < R){
+          hits++; score+=120;
+          for(let i=0;i<14;i++) fx.push({x:tgt.x,y:tgt.y,vx:(Math.random()-0.5)*180,vy:(Math.random()-0.5)*180,t:0,col:i%2?'#ffd23f':'#46e0c8'});
+          arrow=null; acc=0;
+          if(hits>=TARGET){ winGame(); return; }
+          newTarget();
+          break;
+        } else if(arrow.x>W+40||arrow.y>H+40||arrow.y<-60||arrow.x<-40){
+          arrow=null; acc=0; // miss -> next shot (aim already solves current target)
+          break;
+        }
+      }
+    }
+    updateFx(dt);
+    if(elHits) elHits.textContent=hits;
+    if(elWind) elWind.textContent=(tgt.wind>0?'→':'←')+Math.abs(Math.round(tgt.wind));
+    if(elBest) elBest.textContent=best;
+  }
+  function updateFx(dt){
+    for(const p of fx){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=200*dt; p.t+=dt; }
+    fx=fx.filter(p=>p.t<0.7);
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    // ground
+    ctx.fillStyle='rgba(124,140,255,0.05)'; ctx.fillRect(0,H-40,W,40);
+    ctx.strokeStyle='rgba(124,140,255,0.2)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,H-40); ctx.lineTo(W,H-40); ctx.stroke();
+    // target rings
+    const rings=[['#ff6b8a',R],['#ffd23f',R*0.72],['#46e0c8',R*0.46],['#eaf2ff',R*0.2]];
+    for(const [c,rr] of rings){ ctx.beginPath(); ctx.arc(tgt.x,tgt.y,rr,0,6.28); ctx.fillStyle=c; ctx.globalAlpha=0.85; ctx.fill(); }
+    ctx.globalAlpha=1;
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(tgt.x,tgt.y,R,0,6.28); ctx.stroke();
+    // aim guide (manual) or predicted path (auto)
+    if(!arrow){
+      ctx.save(); ctx.setLineDash([4,6]); ctx.strokeStyle= auto?'rgba(70,224,200,0.5)':'rgba(255,255,255,0.4)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(BX,BY);
+      let x=BX,y=BY,vx=S*Math.cos(aim),vy=-S*Math.sin(aim);
+      for(let s=0;s<120;s++){ vx+=tgt.wind*DT; vy+=G*DT; x+=vx*DT; y+=vy*DT; if(s%3===0){ ctx.lineTo(x,y);} if(x>W||y>H) break; }
+      ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    }
+    // bow
+    ctx.save(); ctx.translate(BX,BY); ctx.rotate(-aim);
+    ctx.strokeStyle='#ffd23f'; ctx.lineWidth=4; ctx.shadowColor='#ffd23f'; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.arc(0,0,26,-1.1,1.1); ctx.stroke(); ctx.restore();
+    ctx.fillStyle='#ffd23f'; ctx.beginPath(); ctx.arc(BX,BY,4,0,6.28); ctx.fill();
+    // arrow
+    if(arrow){
+      for(let i=0;i<arrow.trail.length;i++){ const t=arrow.trail[i]; ctx.fillStyle='rgba(70,224,200,'+(i/arrow.trail.length*0.5)+')'; ctx.beginPath(); ctx.arc(t.x,t.y,2.5,0,6.28); ctx.fill(); }
+      const ang=Math.atan2(arrow.vy,arrow.vx);
+      ctx.save(); ctx.translate(arrow.x,arrow.y); ctx.rotate(ang);
+      ctx.strokeStyle='#eaf2ff'; ctx.lineWidth=3; ctx.shadowColor='#46e0c8'; ctx.shadowBlur=10;
+      ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(8,0); ctx.stroke();
+      ctx.fillStyle='#ff6b8a'; ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(2,-4); ctx.lineTo(2,4); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    // particles
+    for(const p of fx){ ctx.globalAlpha=1-p.t/0.7; ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,6.28); ctx.fill(); }
+    ctx.globalAlpha=1;
+    // progress
+    ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(12,8,W-24,5);
+    ctx.fillStyle='#ffd23f'; ctx.fillRect(12,8,(W-24)*Math.min(1,hits/TARGET),5);
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){return Math.floor(score);},
+    get level(){return Math.floor(hits/4)+1;},
+    get hits(){return hits;}, get best(){return best;}, get wind(){return tgt.wind;},
+    get arrowActive(){return !!arrow;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){return Math.floor(score);}, get level(){return Math.floor(hits/4)+1;},
+    get hits(){return hits;}, get best(){return best;}, get wind(){return tgt.wind;}, get arrowActive(){return !!arrow;}
+  };
+})();
+</script>
+</body>
+</html>
