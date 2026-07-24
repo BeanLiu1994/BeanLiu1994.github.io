@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zen Zone</title>
+<style>
+  :root{--bg:#0a0e17;--panel:rgba(22,28,40,.85);--border:rgba(60,75,100,.35);--text:#d8e0f0;--muted:rgba(180,196,220,.6);--accent:#7c9fff;--accent2:#a78bfa;--accent3:#5eead4;--err:#ff7a8a}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+  canvas#bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .app{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:16px 16px 32px;gap:16px;min-height:100vh}
+  header{width:100%;max-width:640px;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:var(--panel);border:1px solid var(--border);border-radius:14px;backdrop-filter:blur(12px)}
+  header h1{font-size:20px;font-weight:600;letter-spacing:2px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  header .sub{font-size:12px;color:var(--muted)}
+  a.home{color:var(--muted);text-decoration:none;font-size:13px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;transition:.2s}
+  a.home:hover{color:#fff;border-color:var(--accent)}
+  .row{width:100%;max-width:640px;display:flex;flex-direction:column;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;backdrop-filter:blur(12px)}
+  .card-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+  .sound-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sound-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:.2s;color:var(--muted);font-size:12px}
+  .sound-btn .icon{font-size:22px;line-height:1}
+  .sound-btn .vol-row{display:flex;align-items:center;gap:4px;width:100%;opacity:0;transition:.2s}
+  .sound-btn.active .vol-row{opacity:1}
+  .sound-btn .vol-row input{flex:1;height:4px;accent-color:var(--accent)}
+  .sound-btn.active{border-color:var(--accent);background:rgba(124,159,255,.08);color:#fff}
+  .timer-display{text-align:center;padding:8px 0}
+  .timer-display .time{font-size:52px;font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:4px;line-height:1.2;background:linear-gradient(135deg,var(--accent3),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .timer-display .phase{font-size:13px;color:var(--muted);margin-top:4px;min-height:20px}
+  .timer-progress{width:100%;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin:8px 0}
+  .timer-progress .bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;transition:width .3s}
+  .timer-controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .timer-controls select{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer}
+  .timer-controls select:focus{outline:none;border-color:var(--accent)}
+  .timer-controls button{padding:8px 20px;border-radius:8px;border:1px solid var(--border);font-size:13px;cursor:pointer;transition:.2s;background:rgba(255,255,255,.06);color:var(--text)}
+  .timer-controls button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff}
+  .timer-controls button.primary:hover{opacity:.85}
+  .timer-controls button.danger{border-color:var(--err);color:var(--err)}
+  .timer-controls button.danger:hover{background:var(--err);color:#fff}
+  .timer-controls button:disabled{opacity:.3;cursor:default}
+  .breath-circle{width:160px;height:160px;margin:8px auto;position:relative;display:flex;align-items:center;justify-content:center}
+  .breath-circle svg{width:100%;height:100%}
+  .breath-circle .ring{fill:none;stroke:var(--border);stroke-width:3}
+  .breath-circle .ring-fill{fill:none;stroke:url(#bgrad);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .1s}
+  .breath-circle .label{position:absolute;text-align:center}
+  .breath-circle .label .phrase{font-size:18px;font-weight:500;color:#fff}
+  .breath-circle .label .count{font-size:28px;font-weight:300;color:var(--accent3);margin-top:2px}
+  .breath-controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .breath-controls button{padding:7px 16px;border-radius:8px;border:1px solid var(--border);font-size:13px;cursor:pointer;transition:.2s;background:rgba(255,255,255,.06);color:var(--text)}
+  .breath-controls button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff}
+  .breath-controls button.primary{background:linear-gradient(135deg,var(--accent2),var(--accent3));border-color:transparent;color:#fff}
+  .breath-controls button.primary:hover{opacity:.85}
+  @media(max-width:480px){.sound-grid{grid-template-columns:1fr}.timer-display .time{font-size:40px}.breath-circle{width:130px;height:130px}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<svg style="position:absolute;width:0;height:0"><defs><linearGradient id="bgrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#5eead4"/><stop offset="50%" stop-color="#7c9fff"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient></defs></svg>
+<div class="app">
+  <header>
+    <div><h1>☯ Zen Zone</h1><div class="sub">find your calm</div></div>
+    <a class="home" href="../../">🏠 Home</a>
+  </header>
+
+  <div class="row">
+    <div class="card">
+      <div class="card-title">🌿 Ambient Sounds</div>
+      <div class="sound-grid" id="sounds">
+        <div class="sound-btn" data-key="rain"><span class="icon">🌧</span> Rain<div class="vol-row"><input type="range" min="0" max="100" value="50"></div></div>
+        <div class="sound-btn" data-key="ocean"><span class="icon">🌊</span> Ocean<div class="vol-row"><input type="range" min="0" max="100" value="50"></div></div>
+        <div class="sound-btn" data-key="forest"><span class="icon">🌲</span> Forest<div class="vol-row"><input type="range" min="0" max="100" value="50"></div></div>
+        <div class="sound-btn" data-key="fire"><span class="icon">🔥</span> Fire<div class="vol-row"><input type="range" min="0" max="100" value="50"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🧘 Meditation Timer</div>
+      <div class="timer-display">
+        <div class="time" id="timerText">05:00</div>
+        <div class="phase" id="timerPhase">Ready</div>
+        <div class="timer-progress"><div class="bar" id="timerBar"></div></div>
+      </div>
+      <div class="timer-controls">
+        <select id="timerDuration"><option value="3">3 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select>
+        <button class="primary" id="timerStart">▶ Start</button>
+        <button class="danger" id="timerReset">↺ Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🌬 Breathing Guide</div>
+      <div class="breath-circle">
+        <svg viewBox="0 0 100 100"><circle class="ring" cx="50" cy="50" r="45"/><circle class="ring-fill" id="breathRing" cx="50" cy="50" r="45" stroke-dasharray="282.74" stroke-dashoffset="0" transform="rotate(-90 50 50)"/></svg>
+        <div class="label"><div class="phrase" id="breathPhrase">Breathe</div><div class="count" id="breathCount">—</div></div>
+      </div>
+      <div class="breath-controls">
+        <button data-mode="box" class="active">□ Box (4-4-4-4)</button>
+        <button data-mode="478">○ 4-7-8</button>
+        <button class="primary" id="breathToggle">▶ Start</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ─── Background particles ───────────────────────────────────────────
+  const canvas = document.getElementById('bg');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], hue = 220;
+
+  function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+  window.addEventListener('resize', resize); resize();
+
+  class Particle {
+    constructor(){this.reset()}
+    reset(){
+      this.x = Math.random()*W; this.y = Math.random()*H;
+      this.r = 1 + Math.random()*2.5;
+      this.dx = (Math.random()-0.5)*0.15; this.dy = (Math.random()-0.5)*0.15;
+      this.alpha = 0.15 + Math.random()*0.35;
+      this.life = Math.random()*300 + 200;
+    }
+    update(){
+      this.x += this.dx; this.y += this.dy;
+      if(this.x<0||this.x>W||this.y<0||this.y>H||--this.life<0) this.reset();
+    }
+    draw(){
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+      ctx.fillStyle = `hsla(${hue+Math.random()*20-10},40%,70%,${this.alpha})`;
+      ctx.fill();
+    }
+  }
+  for(let i=0;i<80;i++) particles.push(new Particle());
+
+  let gradTime = 0;
+  function drawBg(){
+    gradTime += 0.001;
+    hue = 220 + Math.sin(gradTime)*15;
+    const grd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)*0.7);
+    grd.addColorStop(0, `hsl(${hue},30%,12%)`);
+    grd.addColorStop(0.5, `hsl(${hue-20},25%,8%)`);
+    grd.addColorStop(1, `hsl(${hue-40},20%,4%)`);
+    ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
+    particles.forEach(p=>{p.update();p.draw()});
+    // connections
+    for(let i=0;i<particles.length;i++){
+      for(let j=i+1;j<particles.length;j++){
+        const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
+        const dist = Math.sqrt(dx*dx+dy*dy);
+        if(dist < 120){
+          ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `hsla(${hue+10},30%,60%,${0.06*(1-dist/120)})`;
+          ctx.lineWidth = 0.5; ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(drawBg);
+  }
+  drawBg();
+
+  // ─── Audio Engine ──────────────────────────────────────────────────
+  let actx = null;
+  const sources = {};
+  const gains = {};
+  let playing = {};
+
+  function ensureCtx(){
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+  }
+
+  function createNoiseBuffer(len, type){
+    const sr = actx.sampleRate;
+    const buf = actx.createBuffer(1, len*sr, sr);
+    const d = buf.getChannelData(0);
+    if(type==='white'){for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
+    else if(type==='pink'){
+      let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+      for(let i=0;i<d.length;i++){
+        const w=Math.random()*2-1;
+        b0=.99886*b0+w*.0555179;b1=.99332*b1+w*.0750759;b2=.969*b2+w*.153852;
+        b3=.8665*b3+w*.3104856;b4=.55*b4+w*.5329522;b5=-.7616*b5-w*.016898;
+        d[i]=(b0+b1+b2+b3+b4+b5+b6+w*.5362)*.11;b6=w*.115926;
+      }
+    } else { // brown
+      let last=0;
+      for(let i=0;i<d.length;i++){const w=Math.random()*2-1;last=(last+.02*w)/1.02;d[i]=last*3.5}
+    }
+    return buf;
+  }
+
+  function startSound(key){
+    ensureCtx();
+    if(sources[key]) stopSound(key);
+    playing[key] = true;
+    const g = actx.createGain(); g.gain.value = 0; gains[key] = g;
+    g.connect(actx.destination);
+
+    const cfg = {
+      rain: {noise:'pink',lp:800,hp:80,lfogain:0.004,lfofreq:1.2},
+      ocean: {noise:'brown',lp:200,lfogain:0.3,lfofreq:0.15},
+      forest: {noise:'pink',lp:2000,hp:300,lfogain:0.002,lfofreq:0.6},
+      fire: {noise:'white',lp:400,hp:60}
+    }[key];
+    if(!cfg) return;
+
+    if(key==='fire'){
+      // crackling: short noise bursts
+      const src = actx.createBufferSource();
+      const buf = createNoiseBuffer(0.05, 'white');
+      src.buffer = buf; src.loop = true;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 300; bp.Q.value = 0.8;
+      const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 60;
+      const lfo = actx.createOscillator(); lfo.frequency.value = 3 + Math.random()*2;
+      const lfog = actx.createGain(); lfog.gain.value = 0.7;
+      lfo.connect(lfog); lfog.connect(g.gain);
+      lfo.start();
+      src.connect(bp); bp.connect(hp); hp.connect(g);
+      src.start();
+      sources[key] = [src, lfo, null, ()=>{try{lfo.stop()}catch(e){}}];
+    } else {
+      const src = actx.createBufferSource();
+      const buf = createNoiseBuffer(4, cfg.noise);
+      src.buffer = buf; src.loop = true;
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cfg.lp;
+      let chain = [src, lp];
+      if(cfg.hp){const hp=actx.createBiquadFilter();hp.type='highpass';hp.frequency.value=cfg.hp;chain.push(hp);chain.push(g)}
+      else chain.push(g);
+      for(let i=1;i<chain.length;i++) chain[i-1].connect(chain[i]);
+      src.start();
+      if(cfg.lfogain){
+        const lfo = actx.createOscillator(); lfo.frequency.value = cfg.lfofreq;
+        const lfog = actx.createGain(); lfog.gain.value = cfg.lfogain;
+        lfo.connect(lfog); lfog.connect(lp.frequency);
+        lfo.start();
+        sources[key] = [src, lfo];
+      } else {
+        sources[key] = [src];
+      }
+    }
+  }
+
+  function stopSound(key){
+    playing[key]=false;
+    const s = sources[key];
+    if(s){s.forEach(n=>{try{if(n&&n.stop)n.stop();else if(n&&n.disconnect)n.disconnect()}catch(e){}})}
+    delete sources[key]; delete gains[key];
+  }
+
+  function setVolume(key, vol){
+    const g = gains[key];
+    if(g) g.gain.value = vol * 0.18;
+  }
+
+  // ─── Sound UI ──────────────────────────────────────────────────────
+  const soundBtns = document.querySelectorAll('#sounds .sound-btn');
+  soundBtns.forEach(btn => {
+    const key = btn.dataset.key;
+    const slider = btn.querySelector('input');
+    btn.onclick = (e)=>{
+      if(e.target.tagName==='INPUT') return;
+      btn.classList.toggle('active');
+      if(btn.classList.contains('active')) startSound(key);
+      else stopSound(key);
+      setVolume(key, +slider.value/100);
+    };
+    slider.addEventListener('input', ()=>{
+      setVolume(key, +slider.value/100);
+      if(!btn.classList.contains('active')){
+        btn.classList.add('active'); startSound(key);
+      }
+    });
+  });
+
+  // ─── Meditation Timer ──────────────────────────────────────────────
+  const timerText = document.getElementById('timerText');
+  const timerPhase = document.getElementById('timerPhase');
+  const timerBar = document.getElementById('timerBar');
+  const timerDuration = document.getElementById('timerDuration');
+  const timerStart = document.getElementById('timerStart');
+  const timerReset = document.getElementById('timerReset');
+  let timerState = 'idle'; // idle | running | paused
+  let timerRemaining = 0, timerTotal = 0, timerInterval = null;
+
+  function playBell(freq, dur, t){
+    ensureCtx();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type='sine';o.frequency.value=freq;
+    g.gain.setValueAtTime(0.15,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t);o.stop(t+dur);
+  }
+
+  function ringBell(){
+    const now = actx.currentTime;
+    playBell(528, 1.5, now);
+    playBell(660, 1.2, now+0.15);
+    playBell(792, 1.0, now+0.3);
+  }
+
+  function updateTimerDisplay(){
+    const m = Math.floor(timerRemaining/60);
+    const s = Math.floor(timerRemaining%60);
+    timerText.textContent = String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+    if(timerTotal>0) timerBar.style.width = ((1-timerRemaining/timerTotal)*100)+'%';
+  }
+
+  function timerTick(){
+    if(timerState!=='running') return;
+    timerRemaining = Math.max(0, timerRemaining - 0.1);
+    updateTimerDisplay();
+    if(timerRemaining <= 0){
+      ringBell(); setTimeout(ringBell, 1500);
+      timerPhase.textContent = '✨ Session complete';
+      timerStart.textContent = '▶ Start';
+      timerState = 'idle'; clearInterval(timerInterval); timerInterval=null;
+      timerDuration.disabled = false;
+      return;
+    }
+    timerPhase.textContent = `Meditating — ${Math.ceil(timerRemaining/60)}:${String(Math.ceil(timerRemaining%60)).padStart(2,'0')} remaining`;
+  }
+
+  timerStart.onclick = ()=>{
+    if(timerState==='idle'){
+      const mins = +timerDuration.value;
+      timerTotal = timerRemaining = mins * 60;
+      timerState = 'running'; timerDuration.disabled = true;
+      timerStart.textContent = '⏸ Pause';
+      timerPhase.textContent = 'Starting...';
+      ringBell();
+      updateTimerDisplay();
+      timerInterval = setInterval(timerTick, 100);
+    } else if(timerState==='running'){
+      timerState = 'paused'; clearInterval(timerInterval); timerInterval=null;
+      timerStart.textContent = '▶ Resume';
+      timerPhase.textContent = 'Paused';
+    } else if(timerState==='paused'){
+      timerState = 'running';
+      timerStart.textContent = '⏸ Pause';
+      timerPhase.textContent = 'Resumed';
+      timerInterval = setInterval(timerTick, 100);
+    }
+  };
+
+  timerReset.onclick = ()=>{
+    clearInterval(timerInterval); timerInterval=null;
+    timerState='idle'; timerDuration.disabled=false;
+    timerRemaining = timerTotal = +timerDuration.value * 60;
+    updateTimerDisplay();
+    timerPhase.textContent = 'Ready';
+    timerStart.textContent = '▶ Start';
+    timerBar.style.width='0%';
+  };
+
+  // init timer display
+  timerRemaining = timerTotal = 15*60; updateTimerDisplay();
+
+  // ─── Breathing Guide ───────────────────────────────────────────────
+  const breathPhrase = document.getElementById('breathPhrase');
+  const breathCount = document.getElementById('breathCount');
+  const breathRing = document.getElementById('breathRing');
+  const breathToggle = document.getElementById('breathToggle');
+  const breathModes = document.querySelectorAll('.breath-controls button[data-mode]');
+  let breathMode = 'box', breathRunning = false, breathTimer = null;
+  const circumference = 2 * Math.PI * 45; // r=45
+
+  breathModes.forEach(b=>b.onclick=()=>{
+    breathModes.forEach(x=>x.classList.remove('active')); b.classList.add('active');
+    breathMode = b.dataset.mode;
+    if(!breathRunning){breathPhrase.textContent='Breathe';breathCount.textContent='—';breathRing.style.strokeDashoffset=circumference}
+  });
+
+  function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+
+  function setCircle(pct){
+    breathRing.style.strokeDashoffset = circumference * (1 - pct);
+  }
+
+  async function runBreathing(){
+    breathRunning = true; breathToggle.textContent = '■ Stop';
+    const [inhale, hold1, exhale, hold2] = breathMode==='box' ? [4,4,4,4] : [4,7,8,0];
+    let stepTime = 16; // ms per update step
+    while(breathRunning){
+      // Inhale
+      breathPhrase.textContent = 'Breathe In';
+      for(let i=0;i<=inhale*1000/stepTime;i++){
+        if(!breathRunning) return;
+        setCircle(i/(inhale*1000/stepTime));
+        breathCount.textContent = (inhale - i*stepTime/1000).toFixed(1)+'s';
+        await sleep(stepTime);
+      }
+      // Hold 1
+      if(hold1>0){
+        breathPhrase.textContent = 'Hold';
+        for(let i=0;i<=hold1*1000/stepTime;i++){
+          if(!breathRunning) return;
+          breathCount.textContent = (hold1 - i*stepTime/1000).toFixed(1)+'s';
+          await sleep(stepTime);
+        }
+      }
+      // Exhale
+      breathPhrase.textContent = 'Breathe Out';
+      for(let i=0;i<=exhale*1000/stepTime;i++){
+        if(!breathRunning) return;
+        setCircle(1 - i/(exhale*1000/stepTime));
+        breathCount.textContent = (exhale - i*stepTime/1000).toFixed(1)+'s';
+        await sleep(stepTime);
+      }
+      // Hold 2
+      if(hold2>0){
+        breathPhrase.textContent = 'Hold';
+        for(let i=0;i<=hold2*1000/stepTime;i++){
+          if(!breathRunning) return;
+          breathCount.textContent = (hold2 - i*stepTime/1000).toFixed(1)+'s';
+          await sleep(stepTime);
+        }
+      }
+    }
+  }
+
+  breathToggle.onclick = ()=>{
+    if(breathRunning){
+      breathRunning = false; breathToggle.textContent = '▶ Start';
+      breathPhrase.textContent = 'Breathe'; breathCount.textContent = '—';
+      setCircle(0);
+    } else {
+      runBreathing();
+    }
+  };
+  setCircle(0);
+})();
+</script>
+</body>
+</html>
