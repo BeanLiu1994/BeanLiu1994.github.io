@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0c0a1e" />
+<title>霓虹涂墙 · NURIKABE</title>
+<style>
+  :root{
+    --bg:#0c0a1e; --surface:#15122e; --text:#f3eeff; --muted:#9a90c8;
+    --accent:#7b5cff; --accent2:#5de1ff; --gold:#ffd23f; --ok:#5dffa6;
+    --glow:#7b5cff55;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #2a1b55 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #1a1140 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.best .value{color:var(--gold);}
+  .score-card.limit .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#0a0820);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent2);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#0a0820cc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0c0a1e;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹涂墙 · NURIKABE</h1>
+      <div class="sub">Shade the Walls</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">步数</div><div class="value" id="moves">0</div></div>
+      <div class="score-card limit"><div class="label">墙块</div><div class="value" id="limit">0</div></div>
+      <div class="score-card best"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">完成！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击格子在<b>白(海水)</b>与<b>黑(墙)</b>之间切换 · 数字=该白岛格数 · 黑墙须连成一片且不得出现 <b>2×2</b> 黑块 · 涂满全部墙即通关</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elMoves=$('moves'), elLimit=$('limit'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const COLS=8, ROWS=8, N=COLS*ROWS;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  const W=384,H=384, cell=Math.floor(W/COLS), bw=cell*COLS, bh=cell*ROWS;
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+  const ox=(W-bw)/2, oy=(H-bh)/2;
+
+  let board=new Array(N).fill(0);      // 0 white, 1 black
+  let clue=new Array(N).fill(0);       // 0 none, else number
+  let solution=new Array(N).fill(0);   // 1 = black in answer
+  let level=1, moves=0, limit=0, best=0;
+  let auto=false, over=false, won=false, autoTimer=0;
+  let flashes=[], selAnim=0, wrongCells=[];
+  try{ best=parseInt(localStorage.getItem('nurikabe_best')||'0',10)||0; }catch(e){best=0;}
+
+  const nb=(i)=>{const r=(i/COLS)|0,c=i%COLS,o=[];if(r>0)o.push(i-COLS);if(r<ROWS-1)o.push(i+COLS);if(c>0)o.push(i-1);if(c<COLS-1)o.push(i+1);return o;};
+
+  function has2x2(black){
+    for(let r=0;r<ROWS-1;r++)for(let c=0;c<COLS-1;c++){
+      const a=r*COLS+c,b=r*COLS+c+1,d=(r+1)*COLS+c,e=(r+1)*COLS+c+1;
+      if(black[a]&&black[b]&&black[d]&&black[e]) return true;
+    }
+    return false;
+  }
+  function blackConnected(black){
+    const cells=[]; for(let i=0;i<N;i++) if(black[i]) cells.push(i);
+    if(!cells.length) return false;
+    const seen=new Set([cells[0]]); const q=[cells[0]];
+    while(q.length){ const cur=q.pop(); for(const x of nb(cur)) if(black[x]&&!seen.has(x)){ seen.add(x); q.push(x); } }
+    return seen.size===cells.length;
+  }
+  function whiteComponents(black){
+    const comps=[]; const seen=new Array(N).fill(false);
+    for(let i=0;i<N;i++){
+      if(black[i]||seen[i]) continue;
+      const comp=[]; const q=[i]; seen[i]=true;
+      while(q.length){ const cur=q.pop(); comp.push(cur); for(const x of nb(cur)) if(!black[x]&&!seen[x]){ seen[x]=true; q.push(x); } }
+      comps.push(comp);
+    }
+    return comps;
+  }
+
+  function genLevel(){
+    const Bmin=Math.min(30, 20+Math.floor(level/2));
+    const Bmax=Math.min(34, Bmin+6);
+    let sol=null, cl=null;
+    for(let attempt=0; attempt<800; attempt++){
+      const black=new Array(N).fill(false);
+      const start=(Math.random()*N)|0; black[start]=true; let count=1;
+      let frontier=[start];
+      const target=Bmin+((Math.random()*(Bmax-Bmin+1))|0);
+      while(count<target && frontier.length){
+        const fi=(Math.random()*frontier.length)|0; const f=frontier[fi];
+        const ns=nb(f).filter(n=>!black[n]);
+        if(ns.length===0){ frontier.splice(fi,1); continue; }
+        const n=ns[(Math.random()*ns.length)|0]; black[n]=true; count++; frontier.push(n);
+      }
+      if(count<target) continue;
+      if(has2x2(black)) continue;
+      if(!blackConnected(black)) continue;
+      const comps=whiteComponents(black);
+      if(comps.length<3) continue;
+      if(comps.some(c=>c.length>16)) continue;
+      // build clues
+      const c2=new Array(N).fill(0);
+      for(const comp of comps){ const cell=comp[(Math.random()*comp.length)|0]; c2[cell]=comp.length; }
+      sol=black.slice(); cl=c2.slice(); break;
+    }
+    if(!sol){ // deterministic fallback (checkerboard-free snake)
+      sol=new Array(N).fill(false);
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++) if(((r+c)&1)===0) sol[r*COLS+c]=true;
+      const comps=whiteComponents(sol); const c2=new Array(N).fill(0);
+      for(const comp of comps){ c2[comp[0]]=comp.length; }
+      cl=c2.slice();
+    }
+    solution=sol.map(b=>b?1:0); clue=cl;
+    board=new Array(N).fill(0);
+    limit=0; for(let i=0;i<N;i++) if(solution[i]) limit++;
+    moves=0; over=false; won=false; flashes=[]; wrongCells=[]; autoTimer=0;
+  }
+
+  function isSolved(){ for(let i=0;i<N;i++) if(board[i]!==solution[i]) return false; return true; }
+
+  function finish(){
+    if(best===0||moves<best){ best=moves; try{localStorage.setItem('nurikabe_best',String(best));}catch(e){} }
+    elOvTitle.textContent='🎉 通关！';
+    elOvText.textContent='用 '+moves+' 步 · 最佳 '+best;
+    elOverlay.classList.add('show');
+  }
+
+  function toggleCell(i){
+    if(clue[i]!==0) return;       // clue cells are locked white
+    board[i]=board[i]?0:1;
+    moves++;
+    flashes.push({cells:[i], t:0});
+    if(isSolved()){ won=true; over=true; finish(); }
+  }
+
+  // ---- auto: replay solution (shade black cells in order) ----
+  let autoQueue=[];
+  function buildAuto(){
+    autoQueue=[]; for(let i=0;i<N;i++) if(solution[i] && board[i]!==1) autoQueue.push(i);
+  }
+  function autoStep(){
+    if(!autoQueue.length){ if(isSolved()){ won=true; over=true; finish(); } return; }
+    const i=autoQueue.shift(); board[i]=1; moves++; flashes.push({cells:[i], t:0});
+    if(!autoQueue.length && isSolved()){ won=true; over=true; finish(); }
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v){ buildAuto(); autoTimer=0.35; }
+  }
+
+  function cellAt(e){
+    const r=cv.getBoundingClientRect();
+    const cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0))-r.left;
+    const cy=(e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0))-r.top;
+    const x=Math.floor(cx/r.width*bw), y=Math.floor(cy/r.height*bh);
+    const c=Math.floor((x-ox)/cell), rrow=Math.floor((y-oy)/cell);
+    if(c<0||c>=COLS||rrow<0||rrow>=ROWS) return -1;
+    return rrow*COLS+c;
+  }
+  function onDown(e){
+    if(over||auto) return;
+    const i=cellAt(e); if(i<0) return;
+    toggleCell(i);
+    e.preventDefault&&e.preventDefault();
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',(e)=>e.preventDefault&&e.preventDefault(),{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over) return; setAuto(!auto); });
+  btnRestart&&btnRestart.addEventListener('click',restart);
+  btnOv&&btnOv.addEventListener('click',restart);
+
+  function restart(){ level++; genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+  function softRestart(){ genLevel(); setAuto(false); elOverlay.classList.remove('show'); }
+
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(auto && !over){
+      autoTimer-=dt;
+      if(autoTimer<=0 && autoQueue.length){ autoStep(); autoTimer=0.4; }
+    }
+    for(const f of flashes) f.t+=dt*2.2;
+    flashes=flashes.filter(f=>f.t<1);
+    if(elMoves) elMoves.textContent=moves;
+    if(elLimit) elLimit.textContent=limit;
+    if(elBest) elBest.textContent=best;
+  }
+
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    for(let i=0;i<N;i++){
+      const r=(i/COLS)|0,c=i%COLS,x=ox+c*cell,y=oy+r*cell;
+      if(board[i]===1){
+        ctx.fillStyle='#0b0a1c'; ctx.fillRect(x+1,y+1,cell-2,cell-2);
+        ctx.strokeStyle='#7b5cff'; ctx.lineWidth=1.5; ctx.shadowColor='#7b5cff'; ctx.shadowBlur=8;
+        ctx.strokeRect(x+2.5,y+2.5,cell-5,cell-5); ctx.shadowBlur=0;
+      } else {
+        ctx.fillStyle='rgba(93,225,255,0.06)'; ctx.fillRect(x+1,y+1,cell-2,cell-2);
+      }
+      if(clue[i]!==0){
+        ctx.fillStyle='rgba(243,238,255,0.92)';
+        roundRect(x+3,y+3,cell-6,cell-6,7); ctx.fill();
+        ctx.fillStyle='#0c0a1e'; ctx.font='bold '+(cell*0.5)+'px system-ui,sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(String(clue[i]), x+cell/2, y+cell/2+1);
+      }
+    }
+    // grid lines
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+    for(let k=0;k<=COLS;k++){ ctx.beginPath(); ctx.moveTo(ox+k*cell,oy); ctx.lineTo(ox+k*cell,oy+bh); ctx.stroke(); }
+    for(let k=0;k<=ROWS;k++){ ctx.beginPath(); ctx.moveTo(ox,oy+k*cell); ctx.lineTo(ox+bw,oy+k*cell); ctx.stroke(); }
+    // flashes
+    for(const f of flashes){ const a=1-f.t; ctx.fillStyle='rgba(123,92,255,'+(a*0.7)+')'; for(const i of f.cells){ const r=(i/COLS)|0,c=i%COLS,x=ox+c*cell,y=oy+r*cell; ctx.fillRect(x+2,y+2,cell-4,cell-4); } }
+  }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  genLevel();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get moves(){return moves;}, get level(){return level;}, get limit(){return limit;},
+    get solved(){return isSolved();},
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ restart(); },
+    update(dt){ update(dt); }, render(){ render(); }
+  };
+  window.__test={
+    restart(){ softRestart(); },
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get score(){return -moves;}, get moves(){return moves;}, get over(){return over;}, get won(){return won;},
+    get autoProgress(){ return won?10000:(limit>0?(10000*(1-autoQueue.length/limit)):0); },
+    get remaining(){return autoQueue.length;}
+  };
+})();
+</script>
+</body>
+</html>
