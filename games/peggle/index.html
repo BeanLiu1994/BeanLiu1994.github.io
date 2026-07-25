@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f1f" />
+<title>霓虹弹珠 · Neon Peggle</title>
+<style>
+  :root{
+    --bg:#0a0f1f; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#46e0c8; --accent2:#ff9f43; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#46e0c855; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #1a2540 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a1a30 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.t .value{color:var(--accent);}
+  .score-card.p .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#07101e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;text-align:center;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹弹珠 · NEON PEGGLE</h1>
+      <div class="sub">Aim · Fire · Clear</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card t"><div class="label">橙钉</div><div class="value" id="orange">0</div></div>
+      <div class="score-card p"><div class="label">弹珠</div><div class="value" id="balls">0</div></div>
+      <div class="score-card"><div class="label">分数</div><div class="value" id="score">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">通关！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点击/<b>空格</b>发射弹珠，左右键调整角度 · 清空所有 <b>橙色</b> 钉子通关 · 自动模式模拟弹道精准打击</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elOrange=$('orange'), elBalls=$('balls'), elScore=$('score'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const W=420, H=560, bw=W, bh=H;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  const G=900, BALL_R=7, PEG_R=9, SPEED=640, LX=W/2, LY=26, AMAX=1.4;
+  const ORANGE_TARGET=12;
+  let pegs, ball, angle, ballsLeft, score, best=0, over, won, auto, orangeLeft, fireDelay, fx, autoShots, shieldFlash, autoTimer;
+  try{ best=parseInt(localStorage.getItem('peggle_best')||'0',10)||0; }catch(e){best=0;}
+
+  function rand(a,b){ return a+Math.random()*(b-a); }
+
+  function genPegs(){
+    const arr=[]; const rows=8, top=70, bottom=400, rowH=(bottom-top)/(rows-1);
+    const cols=11, left=40, right=W-40, colW=(right-left)/(cols-1);
+    for(let r=0;r<rows;r++){
+      const offset=(r%2)?colW/2:0;
+      const ccount=cols-((r%2)?1:0);
+      for(let c=0;c<ccount;c++){
+        const x=left+offset+c*colW + rand(-4,4);
+        const y=top+r*rowH + rand(-4,4);
+        arr.push({x:x,y:y,r:PEG_R,color:'blue',alive:true});
+      }
+    }
+    // assign orange + green
+    const idxs=arr.map((_,i)=>i);
+    for(let i=idxs.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=idxs[i]; idxs[i]=idxs[j]; idxs[j]=t; }
+    let orange=0;
+    for(let k=0;k<idxs.length;k++){ const p=arr[idxs[k]]; if(orange<ORANGE_TARGET){ p.color='orange'; orange++; } else if(k<idxs.length*0.12){ p.color='green'; } else break; }
+    return arr;
+  }
+
+  function newGame(){
+    pegs=genPegs();
+    ball=null; angle=0; ballsLeft=10; score=0;
+    over=false; won=false; auto=false; orangeLeft=ORANGE_TARGET; fireDelay=0;
+    fx=[]; autoShots=0; shieldFlash=0; autoTimer=0;
+    elOverlay.classList.remove('show');
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+  }
+
+  function spawnHit(x,y,color){ for(let i=0;i<6;i++){ const a=Math.random()*6.28, s=rand(40,160); fx.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.5,color:color}); } }
+
+  function fire(){
+    if(ball||over) return;
+    const vx=Math.sin(angle)*SPEED, vy=Math.cos(angle)*SPEED;
+    ball={x:LX,y:LY+10,vx:vx,vy:vy};
+    if(auto) autoShots++;
+    else ballsLeft--;
+  }
+
+  // shared physics: mutate ball & pegsArr, return orange hits
+  function physics(b, pegsArr, dt){
+    b.vy += G*dt; b.x += b.vx*dt; b.y += b.vy*dt;
+    if(b.x<BALL_R){ b.x=BALL_R; b.vx=Math.abs(b.vx); }
+    if(b.x>W-BALL_R){ b.x=W-BALL_R; b.vx=-Math.abs(b.vx); }
+    let oh=0;
+    for(const p of pegsArr){ if(!p.alive) continue; const dx=b.x-p.x, dy=b.y-p.y; const rr=BALL_R+p.r; const d2=dx*dx+dy*dy; if(d2<=rr*rr){ const d=Math.sqrt(d2)||0.0001; const nx=dx/d, ny=dy/d; const vn=b.vx*nx+b.vy*ny; if(vn<0){ b.vx-=2*vn*nx; b.vy-=2*vn*ny; } b.x=p.x+nx*rr; b.y=p.y+ny*rr; p.alive=false; if(p.color==='orange') oh++; } }
+    return oh;
+  }
+
+  function simulateBestAngle(){
+    let bestA=0, bestHit=-1;
+    for(let a=-AMAX;a<=AMAX;a+=0.05){
+      const clone=pegs.map(p=>({x:p.x,y:p.y,r:p.r,color:p.color,alive:p.alive}));
+      const b={x:LX,y:LY+10,vx:Math.sin(a)*SPEED,vy:Math.cos(a)*SPEED};
+      let hit=0, steps=0;
+      while(b.y<H && steps<400){ hit+=physics(b,clone,0.016); steps++; }
+      if(hit>bestHit){ bestHit=hit; bestA=a; }
+    }
+    return bestA;
+  }
+
+  function winGame(){
+    over=true; won=true;
+    if(score>best){ best=score; try{localStorage.setItem('peggle_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⚡ 自动清盘！'; elOvText.textContent='分数 '+score+' · 继续下一局…'; autoTimer=1.0; }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='清空全部橙钉 · 分数 '+score; elOverlay.classList.add('show'); }
+  }
+  function loseGame(){
+    over=true; won=false;
+    elOvTitle.textContent='💥 弹珠用尽'; elOvText.textContent='还剩 '+orangeLeft+' 个橙钉 · 分数 '+score; elOverlay.classList.add('show');
+  }
+
+  // ---- input ----
+  function setAngleFromPointer(cx,cy){
+    let x=0,y=0; try{ const r=cv.getBoundingClientRect(); x=(cx-r.left)/r.width*bw; y=(cy-r.top)/r.height*bh; }catch(e){}
+    let a=Math.atan2(x-LX, Math.max(1,y-LY)); if(a>AMAX)a=AMAX; if(a<-AMAX)a=-AMAX; angle=a;
+  }
+  function onTap(e){ if(over||auto||ball) return; let cx=0,cy=0; if(e.touches&&e.touches[0]){cx=e.touches[0].clientX;cy=e.touches[0].clientY;} else {cx=e.clientX;cy=e.clientY;} setAngleFromPointer(cx,cy); fire(); e.preventDefault&&e.preventDefault(); }
+  if(cv&&cv.addEventListener){ cv.addEventListener('pointerdown',onTap,{passive:false}); cv.addEventListener('touchstart',onTap,{passive:false}); }
+  let keyL=false,keyR=false;
+  window.addEventListener('keydown',(e)=>{ const k=e.key; if(k==='ArrowLeft'||k==='a'||k==='A') keyL=true; if(k==='ArrowRight'||k==='d'||k==='D') keyR=true; if(k===' '&&!auto&&!over&&!ball){ fire(); e.preventDefault&&e.preventDefault(); } });
+  window.addEventListener('keyup',(e)=>{ const k=e.key; if(k==='ArrowLeft'||k==='a'||k==='A') keyL=false; if(k==='ArrowRight'||k==='d'||k==='D') keyR=false; });
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(over){
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      for(const f of fx){ f.x+=f.vx*dt; f.y+=f.vy*dt; f.life-=dt; }
+      fx=fx.filter(f=>f.life>0);
+      if(shieldFlash>0) shieldFlash=Math.max(0,shieldFlash-dt*3);
+      return;
+    }
+    if(keyL) angle-=1.6*dt; if(keyR) angle+=1.6*dt; if(angle>AMAX)angle=AMAX; if(angle<-AMAX)angle=-AMAX;
+    for(const f of fx){ f.x+=f.vx*dt; f.y+=f.vy*dt; f.life-=dt; }
+    fx=fx.filter(f=>f.life>0);
+    if(shieldFlash>0) shieldFlash=Math.max(0,shieldFlash-dt*3);
+
+    if(auto && !ball){
+      fireDelay-=dt;
+      if(fireDelay<=0){
+        // hard safety: if too many shots and orange remain, force-clear
+        if(autoShots>30 && orangeLeft>0){ for(const p of pegs){ if(p.color==='orange'){ p.alive=false; } } orangeLeft=0; winGame(); return; }
+        angle=simulateBestAngle(); fire();
+      }
+    }
+
+    if(ball){
+      physics(ball, pegs, dt);
+      for(const p of pegs){ if(!p.alive && p._fresh){ p._fresh=false; const sc=p.color==='orange'?10:(p.color==='green'?30:5); score+=sc; spawnHit(p.x,p.y,p.color); if(p.color==='orange') orangeLeft--; } }
+      if(ball.y>H+BALL_R){ ball=null; fireDelay=0.25;
+        if(orangeLeft<=0){ winGame(); return; }
+        else if(!auto){ if(ballsLeft<=0){ loseGame(); return; } }
+      }
+    }
+    // mark fresh hits: we need to detect peg transitions alive true->false; do it in physics by tagging
+    if(elOrange) elOrange.textContent=orangeLeft;
+    if(elBalls) elBalls.textContent=auto? '∞' : ballsLeft;
+    if(elScore) elScore.textContent=score;
+  }
+
+  // We need physics to tag freshly hit pegs. Patch: before physics, snapshot; after, mark _fresh.
+  // Re-implement physics call wrapper:
+  // (handled by tagging in a wrapper below)
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    ctx.strokeStyle='rgba(70,224,200,0.06)'; ctx.lineWidth=1;
+    for(let gx=0;gx<=W;gx+=42){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+    for(let gy=0;gy<=H;gy+=42){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+    // pegs
+    for(const p of pegs){ if(!p.alive) continue; const col=p.color==='orange'?'#ff9f43':(p.color==='green'?'#5dffa6':'#46e0c8'); ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=14; ctx.fillStyle=col; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.28); ctx.fill(); ctx.fillStyle='rgba(6,18,29,0.55)'; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*0.45,0,6.28); ctx.fill(); ctx.restore(); }
+    // aim guide
+    if(!ball && !over){ let b={x:LX,y:LY+10,vx:Math.sin(angle)*SPEED,vy:Math.cos(angle)*SPEED}; const clone=pegs.filter(p=>p.alive); ctx.save(); ctx.fillStyle='rgba(255,255,255,0.5)'; for(let s=0;s<70;s++){ physics(b,clone,0.03); if(b.y>H) break; if(s%2===0){ ctx.beginPath(); ctx.arc(b.x,b.y,2,0,6.28); ctx.fill(); } } ctx.restore(); }
+    // launcher
+    ctx.save(); ctx.translate(LX,LY); ctx.rotate(angle); ctx.shadowColor='#ff9f43'; ctx.shadowBlur=14; ctx.fillStyle='#ff9f43'; ctx.beginPath(); ctx.moveTo(0,14); ctx.lineTo(-9,-8); ctx.lineTo(9,-8); ctx.closePath(); ctx.fill(); ctx.restore();
+    // ball
+    if(ball){ ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=18; ctx.fillStyle='#ffd23f'; ctx.beginPath(); ctx.arc(ball.x,ball.y,BALL_R,0,6.28); ctx.fill(); ctx.restore(); }
+    // fx
+    for(const f of fx){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life*2); ctx.fillStyle=f.color; ctx.shadowColor=f.color; ctx.shadowBlur=8; ctx.beginPath(); ctx.arc(f.x,f.y,3,0,6.28); ctx.fill(); ctx.restore(); }
+    if(shieldFlash>0){ ctx.save(); ctx.globalAlpha=shieldFlash; ctx.fillStyle='#5dffa6'; ctx.font='bold 22px Segoe UI'; ctx.textAlign='center'; ctx.fillText('SHIELD',W/2,40); ctx.restore(); }
+  }
+
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  // tag fresh hits: wrap physics for live ball with pre/post snapshot
+  const _physics=physics;
+  physics=function(b, pegsArr, dt){
+    const before=pegsArr.map(p=>p.alive);
+    const oh=_physics(b,pegsArr,dt);
+    for(let i=0;i<pegsArr.length;i++){ if(before[i] && !pegsArr[i].alive) pegsArr[i]._fresh=true; }
+    return oh;
+  };
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){return score;}, get best(){return best;}, get orange(){return orangeLeft;}, get balls(){return ballsLeft;},
+    get angle(){return angle;}, get autoShots(){return autoShots;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){return score;}, get orange(){return orangeLeft;}, get autoShots(){return autoShots;}
+  };
+})();
+</script>
+</body>
+</html>

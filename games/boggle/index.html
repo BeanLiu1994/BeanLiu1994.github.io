@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f1f" />
+<title>霓虹拼词 · Neon Words</title>
+<style>
+  :root{
+    --bg:#0a0f1f; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#ff6b8a; --accent2:#ffd23f; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#ff6b8a55; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #1a2540 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a1a30 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.t .value{color:var(--accent);}
+  .score-card.p .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#07101e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;text-align:center;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹拼词 · NEON WORDS</h1>
+      <div class="sub">Find · Link · Score</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card t"><div class="label">已找</div><div class="value" id="found">0/<span id="target">10</span></div></div>
+      <div class="score-card p"><div class="label">时间</div><div class="value" id="time">150</div></div>
+      <div class="score-card"><div class="label">分数</div><div class="value" id="score">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">通关！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="ghost" id="clearBtn">清除</button>
+    <button class="ghost" id="submitBtn">提交</button>
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点选相邻字母连成单词（≥3 字母，可斜向）· 点末格或按<b>提交</b>确认 · 找出 <b>10</b> 个词通关 · 自动模式帮你扫词</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elFound=$('found'), elTarget=$('target'), elTime=$('time'), elScore=$('score'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn'), btnClear=$('clearBtn'), btnSubmit=$('submitBtn');
+
+  const W=420, H=470, bw=W, bh=H;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  const GRID=4, TARGET=10, TIME=150, MIN_WORDS=15, SCORE_T={3:1,4:1,5:2,6:3,7:5,8:11};
+  const PAD=22, GAP=10;
+  const CELL=(W-2*PAD-(GRID-1)*GAP)/GRID;
+
+  // ---- dictionary ----
+  const DICT_STR="the and for are but not you all any can had her was one our out day get has him his how man new now old see two way who boy did its let put say she too use cat dog sun run fun bat hat mat rat sat pat fat cap map lap tap gap rap sap nap zap box fox fix mix six bit fit hit lit pit sit kit wit big dig fig jig pig rig wig dim rim bin fin kin pin tin win sin gin ton won son con don ace age ago aid aim air ale ant ape arc arm art ash ask ate awe axe bad bag ban bar bay bed beg bet bid bog bow bud bug bun bus buy cab cam car cot cow cry cub cue cup cut dab dam den dew die din dip dot dry dub due dug dye ear eat ebb eel egg ego elf elk elm end era eve ewe eye fad fan far fax fed fen few fib fir fly fob fog for fry fur gab gag gal gas gel gem get goa god got gum gun gut guy gym hag ham has hay hem hen her hew hid hip his ire ivy jab jam jar jaw jay jet job jog jot joy jug jut keg key kid lab lad lag law lay led leg lid lie lip lob log lot low mad man mar may men met mid mob mod mom mop mud mug mum nab nag nap net nib nil nip nit nod nor not nub nut oak oar oat off oil odd one orb ore our owe owl own pad pal pan par paw pay pea peg pen pew pie pig pin ply pod pop pot pro pry pub pug pun pup put rag ram ran rap raw ray red rib rid rig rim rip rob rod roe rot row rub rue rug rum run rut rye sac sad sag sap sat saw say sea set sew shy sip sir six ski sky sly sob sod sop sow soy spa spy sty sub sue sum sun sup tab tag tan tar tax tea ten thy tic tie tin tip toe tot tow toy try tub tug tun two urn van vat vet via vie vow wad wag war was wax way web wed wee wet who why wig win wit woe wok won woo wow yak yam yap yaw yea yen yes yet yew zip zoo able acid aged also area army away baby back ball band bank bare barn base bath bear beat beds beef been beer bell belt bend best bias bike bill bind bird bite blue boat body bold bolt bond bone book boot bore born boss both bowl bull burn bush busy cage cake call calm came camp card care cart case cash cast cave cell cent chat chef chin chip city clad clam clap claw clay clip club clue coal coat code cold come cook cool cope copy cord core corn cost cozy crab crew crop cube cure curl cute dare dark dart dash data date dawn dead deal dear debt deck deed deep deer dent desk dial dice diet dime dine dirt dish dive dock does doll dome done doom door dose dove down drag draw drew drip drop drum duck duel duke dull dune dung dusk dust duty each earn ease east easy echo edge edit envy epic euro even ever evil exit face fact fade fail fair fake fall fame farm fast fate fawn fear feat feed feel feet fell felt fend fern fest film find fine fire firm fish fist five flag flap flat flaw flea fled flee flew flex flip flit flow flue foam fold folk fond font food fool foot ford fore fork form fort foul four fowl free fret frog from fuel full fume fund fury fuse gain gait gala gale game gang gape garb gash gate gave gaze gear gene germ gift gild gill girl give glad glee glow glue goal goat gold golf gone gong good gore gown grab gram gray grew grid grim grin grip grit grow gulf gull gulp guru gush gust hack hail hair half hall halt hand hang hard hare harm hate haul have hawk haze head heal heap hear heat heel heir held hell helm help hemp herb herd here hero hide high hike hill hint hire hiss hive hold hole holy home hone hood hoof hook hoop hope horn hose host hour howl huge hull hump hunt hurt hush hymn icon idea idle inch into iron isle item jade jail jamb jazz jeep jell jerk jest jibe jilt jinx jive join joke jolt jowl jump junk jury just jute keel keep kelp kept kick kill kind king kiss kite kiwi knee knew knit knob knot know lace lack lady laid lair lake lamb lame lamp land lane lank lard lark lash last late lava lawn lazy lead leaf leak lean leap left lend lens lent less lest liar lice lick lied life lift like lily limb lime limp line link lint lion list live load loaf loan lobe lock loft logo lone long look loom loop loot lord lore lose loss lost loud love luck lull lump lung lure lurk lush lust lute mace made maid mail main make male mall malt mane many mare mark mash mask mass mast mate math maze mead meal mean meat meet meld melt memo mend menu mere mesh mess mice mild mile milk mill mime mind mine mint mire miss mist mite mitt moan moat mock mode mold mole monk mood moon moor moot more morn moss most moth move much muck mule mull muss must mute myth nail name nape navy near neat neck need nest news next nice nick nigh nine node none nook noon norm nose note noun nova nude nuke null numb oath obey oats odds ogre oily okay omen omit once only onto onyx ooze open oral orca ouch ours oust oval oven over pace pack pact page paid pail pain pair pale palm pane pang pant park part pass past path pave pawn peak peal pear peat peck peek peel peer pelt pent perk pest pews pick pier pike pile pill pine ping pink pint pipe pith pity plan play plea plod plot plow ploy plug plum plus poem poet poke pole poll polo pomp pond pony pool poor pope pore pork port pose post pour pout pray prep prey prim prod prom prop prow pull pulp puma pump punk punt pupa pure purr push quad quay quid quip quit quiz race rack raft rage raid rail rain rake ramp rang rank rant rare rash rate rave read real ream reap rear redo reed reef reek reel rein rely rend rent rest rice rich ride rife rift ring rink riot ripe rise risk rite road roam roar robe rock rode role roll roof rook room root rope rose rosy rote rout rove ruby rude ruff ruin rule rump rung runt ruse rush rust ruth sack safe saga sage said sail sake sale salt same sand sane sang sank sash save scab scan scar seal seam sear seat sect seed seek seem seen seep self sell semi send sent serf shed shin ship shoe shop shot show shun shut sick side sift sigh sign silk sill silo silt sing sink site size skid skim skin skip skit slab slam slap slat sled slew slid slim slip slit slob slog slop slot slow slug slum slur smug snag snap snip snob snot snow snub snug soak soap soar sock soda sofa soft soil sold sole solo some song soon soot sore sort soul soup sour sown spam span spar spat sped spin spit spot spry spud spun spur stab stag star stay stem step stew stir stop stow stub stud stun such suck suds suit sulk sumo sump sung sunk sure surf swam swap swat sway swim swum tail take tale talk tall tame tank tape tarp tart task taut teal team tear teas tech teem tell temp tend tens tent term tern test text than that thaw them then they thin this thud thug thus tick tide tidy tile till tilt time tine tint tiny tire toad toed toes toff toga toil told toll tomb tone tong took tool toot tore torn toss tote tour tout town trap tray tree trek trim trio trip trod trot true tsar tuba tube tuck tuft tuna tune turf turn tusk tutu twig twin twit type typo tyre ugly undo unit unto upon urge urns used user uses vain vale vamp vane vary vase vast veal veil vein vend vent verb very vest veto vial vibe vice vied view vile vine viol visa vise void vole volt vote vows wade wage wail wait wake wale walk wall wand wane want ward ware warm warn wart wary wash wasp wave wavy weak wean wear weed week weep weld well welt went wept were west wham what when whet whim whip whir whiz whoa whom wick wide wife wild wile will wilt wind wine wing wink wino wipe wire wise wish wisp with woes woke wolf womb wood wool word wore work worm worn wove wrap wren writ yard yarn yawn year yell yelp yoga yoke yolk your yowl zeal zero zest zinc zone zoom about above abuse actor adapt admit adopt adult after again agent agile aglow agree ahead alarm album alert alien align alike alive allow alone along aloud alpha altar alter amaze amble amend ample angel anger angle angry ankle apart apple apply apron arena argue arise armor aroma array arrow ashen aside asset atlas atoll attic audio audit avoid awake award aware awful badge baker basic basin batch beach beard beast began begin being belly bench berry blade blame blank blast blaze bleed blend bless blind blink bliss block bloom blown bluff blunt blush board boast bonus boost booth bored bossy bound bowel brace braid brain brake brand brave bread break brew brick bride brief bring brisk broad broke brook broom brown brush build built bunch burst cabin cable camel candy canoe cargo carol carry carve catch cause cease chain chair chalk champ chant chaos charm chart chase cheap cheat check cheek cheer chess chest chick chief child chili chill chimp china chirp choir chord chore chose chuck chunk churn cider cigar civic civil claim clamp clash clasp class clean clear clerk click cliff climb cling cloak clock clone close cloth cloud clown coach coast cobra cocoa colon color comet comic coral corny couch cough could count court cover crack craft crash crawl crazy cream creek creep crest crime crisp cross crowd crown crude cruel crumb crush crust cult curve cycle daily dairy daisy dance dandy datum dealt death debit debut decay decoy delay delta dense depot depth deter devil diary digit dimly diner dingy dirty disco ditch diver dizzy dodge donor doubt dough dowel dozen draft drain drake drama drank drape drawl drawn dread dream dress dried drift drill drink drive droll drone drool droop drove drown drums drunk dryer duct eagle early earth easel eaten ebony eerie eight elbow elder elect elite ember empty enact ended enemy enjoy enter entry equal equip erase error essay ether evade event every evict exact exalt exert exile exist extra fable faced facet faint fairy faith false fancy fatal fault feast fence ferry fetch fever fiber field fiend fifth fifty fight final finch first fixed flair flake flame flank flare flash flask fleet flesh flick flier fling flint flirt float flock flood floor flora flour flown fluid flush flute foamy focal focus foggy force forge forte forth forty forum found frame frank fraud freak fresh fried frill frock front frost froth frown fruit fudge fully funny furry fussy gaily gamer gamma gauge gaunt gavel gazer gecko genie genre ghost ghoul giant giddy girth given giver glade gland glare glass glaze gleam glide globe gloom glory gloss glove glyph gnome going golem goner good grace grade grain grand grant grape graph grasp grass grave gravy graze great greed green greet grief grill grime grind groan groom grope gross group grout grove growl grown gruff grunt guard guava guess guest guide guild guile guilt guise gulch gully gumbo gummy gusto habit hairy halve handy happy hardy harsh haste hatch haunt haven havoc hazel heart heath heave heavy hedge hefty hello hence herbs heron hider hinge hippo hippy hoard hobby hoist holly homer honey honor horde horse hotel hound house hover human humid humor hutch hydra hyena ideal idiom idiot igloo image imply inbox incur index inept inert infer ingot inlet inner input inter intro ionic irate irons irony issue ivory jaded jazzy jelly jerky jetty jewel joint joist joker jolly jumbo jumpy junta juror kayak kebab ketch khaki kinky kiosk kitty knack kneel knelt knife knock knoll known koala label labor laden lance lapse larger larva laser lasso latch later lathe layer leach leafy leaky leant leapt learn lease leash least leave ledge leech leery lefty legal lemon lemur level lever light liken lilac limbo limit linen liner lingo liver livid llama loath lobby local lodge lofty logic loner loose lorry loser lotus lousy lover lower loyal lucid lucky lumen lump lumpy lunar lunch lunge lurch lured lurid lyric macaw macho madam madly magic magma maids major maker mamba mango mania manor maple march marsh mason match mauve maxim maybe mayor mealy meant meaty medal media melon mercy merge merit merry metal meter micro midst might milky mimic mince miner minor minus mirth mixed mixer modal model modem moist molar moldy money month moose moral moron moth motive motor motto mound mount mourn mouse mousy mouth moved mover movie mower mucky muddy mulch mummy mural murky mushy music musky musty nadir naive naked named nanny nasal nasty natal naval navel needy neigh nerdy nerve never newer newly niche niece night ninja ninth noble nobly noise noisy nomad noose north notch noted novel nudge nurse nutty nylon nymph oasis occur ocean octal oddly offer often olden olive omega onion onset opera optic orbit order organ other otter ought ounce outer oval owing owner ozone packet paddy pagan paint paler panda panel panic pansy paper parka party pasta paste patch paten patio pause peace peach pearl pedal penal pence penny peony perch peril pesky petal petty phase phone phony photo piano picky piece piety piggy pilaf pilot pinch pious piper pique pitch pivot pixel pizza place plaid plain plait plane plank plant plate plaza plead pleat plied pluck plumb plume plump plush poach point poise poker polar polka polyp pooch poppy porch pose posse pouch pound power prank prawn preen press price prick pride pried prime print prior prism privy prize probe prone prong proof prose proud prove prowl proxy prune psalm pudgy puffy pulpy pulse punch pupil puppy puree purge purse pushy putty quack quail quake qualm quark quart quash queen query quest queue quick quiet quill quilt quirk quite quota quote rabbi radar radio rainy raise rally ramen ranch range rapid raspy ratio raven rayon razor reach react ready realm rearm rebar rebel rebut recap recur redid refer regal reign relax relay relic remit renal renew repay repel reply rerun reset resin retch retro reuse rhino rhyme rider ridge rifle right rigid rinse ripen riser risky rival river roach roast robin robot rocky rodeo rogue roman roomy roost roots roper roses rotor rouge rough round rouse route rover rowdy royal ruddy ruler rumor rural rusty saber sable sadly safer saint salad sally salon salsa salty salve sandy sappy sassy satin sauce saucy sauna saved saver savor savvy scald scale scalp scaly scamp scant scare scarf scary scene scent scoff scold scone scoop scoot scope score scorn scour scout scowl scram scrap scrub scrum scuba seamy sedan sedge seedy seize sense sepia serif serum serve setup seven sever sewer shack shade shady shaft shake shaky shale shall shame shank shape shard share shark sharp shave shawl sheaf shear sheen sheep sheer sheet shelf shell shied shift shine shiny shire shirk shirt shoal shock shone shook shoot shore short shout shove shown showy shrew shrub shrug shuck shun shunt shush shyly siege sieve sight sigma silky silly since sinew singe siren sissy sixth sixty sized skate skiff skill skimp skirt skulk skull skunk slack slain slang slant slash slate sleek sleep sleet slept slice slick slide slime slimy sling slink slope slosh sloth slump slung slunk slush small smart smash smear smell smelt smile smirk smith smoke smoky snack snail snake snaky snare snarl sneak sneer snide sniff snipe snoop snore snort snout snowy snuck snuff soapy sober soggy solar solid solve sonar sonic sooth sooty sorry sound south space spade spank spare spark spasm spawn speak spear speck speed spell spend spent sperm spice spicy spied spike spiky spill spilt spine spiny spire spite splat split spoil spoke spoof spook spool spoon spore sport spout spray spree sprig spunk spurn spurt squad squat squib stack staff stage staid stain stair stake stale stalk stall stamp stand stank stare stark start stash state stave stead steak steal steam steed steel steep steer stein stern stick stiff still stilt sting stink stint stock stoic stoke stole stomp stone stony stood stool stoop store stork storm story stout stove strap straw stray strew strip strut stuck study stuff stump stung stunk stunt style suave sugar suite sulky sumac sunny super surge sushi swami swamp swank swarm swash swath swear sweat sweep sweet swell swept swift swill swine swing swipe swirl swish swoon swoop sword swore sworn swung syrup table taboo tacit tacky taffy taint taken tally talon tamer tango tangy taper tapir tardy tarot tasty taunt tawny teach tease teddy teeth tempo tempt tenor tense tenth tepee tepid terse testy thank theft their theme there these thick thief thigh thing think third thong thorn those three threw throb throw thrum thumb thump thyme tiara tibia tidal tiger tight tilde timer timid tipsy titan toast today token tonal tonic tooth topaz topic torch torso total totem touch tough towel tower toxic toxin trace track tract trade trail train trait tramp trash trawl tread treat trend triad trial tribe trice trick tried tripe troll troop trope trout truce truck truly trump trunk trust truth tubby tulip tummy tumor tunic turbo tutor twang tweak tweed tweet twice twine twirl twist tying udder ulcer ultra umbra uncle under undid undue unfit unify union unite unity unlit unmet unset until unwed unzip upper uproar upturn urban urged urine usage usher using usual utter vague valet valid valor value valve vapid vapor vault vaunt vegan venom venue verge verse vexed vicar video vigil vigor villa vinyl viola viper viral virus visit visor vista vital vivid vocal vodka vogue voice voila vomit voter vouch vowel wacky wafer wager wagon waist waltz warty waste watch water waver waxen weary weave wedge weedy weigh weird whack whale wharf wheat wheel whelp where which whiff while whine whiny whirl whisk white whole whoop whose widen widow width wield wimpy wince winch windy wiper wired wiser witch witty woken woman women woody woozy world worms worry worse worst worth would wound woven wrack wrath wreak wreck wrest wring wrist write wrong wrote wrung wryly yacht yearn yeast yield yodel yokel young youth yummy zebra zesty zonal zoned";
+  const DICT=new Set(DICT_STR.split(/\s+/).filter(w=>w.length>=3&&w.length<=8));
+  function buildTrie(){
+    const root={};
+    for(const w of DICT){ let n=root; for(const ch of w){ if(!n[ch]) n[ch]={}; n=n[ch]; } n._=true; }
+    return root;
+  }
+  const TRIE=buildTrie();
+
+  // letter bag with vowel bias
+  const WEIGHTS={a:9,b:2,c:2,d:4,e:13,f:2,g:3,h:3,i:9,j:1,k:1,l:5,m:3,n:7,o:8,p:3,q:1,r:7,s:5,t:7,u:5,v:1,w:2,x:1,y:2,z:1};
+  const BAG=[]; for(const k in WEIGHTS){ for(let i=0;i<WEIGHTS[k];i++) BAG.push(k); }
+  function randLetter(){ if(Math.random()<0.04) return 'qu'; return BAG[(Math.random()*BAG.length)|0]; }
+
+  const NB=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  function idx(r,c){ return r*GRID+c; }
+  function rc(i){ return [ (i/GRID)|0, i%GRID ]; }
+
+  let grid, allWords, selPath, found, foundList, score, best=0, timeLeft, over, won, auto, autoIdx, autoTimer, autoFlash, flashMsg, flashT;
+  try{ best=parseInt(localStorage.getItem('words_best')||'0',10)||0; }catch(e){best=0;}
+  if(elTarget) elTarget.textContent=TARGET;
+
+  function genGrid(){
+    const g=new Array(GRID*GRID);
+    for(let i=0;i<g.length;i++) g[i]=randLetter();
+    return g;
+  }
+  function findAll(g){
+    const res=[];
+    const visited=new Array(g.length).fill(false);
+    function dfs(i, str, path){
+      visited[i]=true; str+=g[i]; path=path.concat(i);
+      if(str.length>=3 && DICT.has(str)) res.push({word:str, path:path.slice()});
+      if(str.length<8){
+        const [r,c]=rc(i);
+        for(const [dr,dc] of NB){ const nr=r+dr, nc=c+dc; if(nr<0||nc<0||nr>=GRID||nc>=GRID) continue; const ni=idx(nr,nc); if(visited[ni]) continue; let n=TRIE; for(const ch of str){ if(!n[ch]) break; n=n[ch]; } if(!n) continue; dfs(ni,str,path); }
+      }
+      visited[i]=false;
+    }
+    for(let i=0;i<g.length;i++){ let n=TRIE; if(n[g[i]]) dfs(i,'',[]); }
+    // dedup by word (keep first path)
+    const seen=new Set(); const out=[];
+    for(const w of res){ if(seen.has(w.word)) continue; seen.add(w.word); out.push(w); }
+    return out;
+  }
+  function newGame(){
+    let bestG=null, bestN=-1;
+    for(let t=0;t<80;t++){ const g=genGrid(); const w=findAll(g); if(w.length>bestN){ bestN=w.length; bestG=g; } if(w.length>=MIN_WORDS) break; }
+    grid=bestG;
+    allWords=findAll(grid).sort((a,b)=>b.word.length-a.word.length);
+    selPath=[]; found=new Set(); foundList=[]; score=0; timeLeft=TIME;
+    over=false; won=false; auto=false; autoIdx=0; autoTimer=0; autoFlash=null; flashMsg=''; flashT=0;
+    elOverlay.classList.remove('show');
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+  }
+
+  function wordScore(w){ const L=w.length; return SCORE_T[L]||(L>8?11:1); }
+
+  function addWord(entry){
+    if(found.has(entry.word)) return false;
+    found.add(entry.word); foundList.push(entry.word);
+    score+=wordScore(entry.word);
+    autoFlash={cells:entry.path.slice(), t:0.6};
+    flashMsg=entry.word.toUpperCase()+' +'+wordScore(entry.word);
+    flashT=1.1;
+    return true;
+  }
+
+  function winGame(){
+    over=true; won=true;
+    if(score>best){ best=score; try{localStorage.setItem('words_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='找到 '+foundList.length+' 个词 · 分数 '+score+' · 继续下一局…'; autoTimer=1.0; }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='找到 '+foundList.length+' 个词 · 分数 '+score; elOverlay.classList.add('show'); }
+  }
+  function loseGame(){
+    over=true; won=false;
+    elOvTitle.textContent='⏱ 时间到'; elOvText.textContent='找到 '+foundList.length+' 个词 · 分数 '+score; elOverlay.classList.add('show');
+  }
+
+  // ---- manual input ----
+  function tileAt(clientX, clientY){
+    let x=0,y=0; try{ const r=cv.getBoundingClientRect(); x=(clientX-r.left)/r.width*bw; y=(clientY-r.top)/r.height*bh; }catch(e){}
+    for(let i=0;i<grid.length;i++){ const [r,c]=rc(i); const x0=PAD+c*(CELL+GAP), y0=PAD+r*(CELL+GAP); if(x>=x0&&x<=x0+CELL&&y>=y0&&y<=y0+CELL) return i; }
+    return -1;
+  }
+  function inPath(i){ return selPath.indexOf(i)>=0; }
+  function adjacent(a,b){ const [ar,ac]=rc(a),[br,bc]=rc(b); return Math.abs(ar-br)<=1&&Math.abs(ac-bc)<=1&&a!==b; }
+  function onTap(e){
+    if(over||auto) return;
+    let cx=0,cy=0; if(e.touches&&e.touches[0]){cx=e.touches[0].clientX;cy=e.touches[0].clientY;} else {cx=e.clientX;cy=e.clientY;}
+    const i=tileAt(cx,cy); if(i<0) return;
+    if(selPath.length===0){ selPath.push(i); }
+    else if(i===selPath[selPath.length-1]){ submitWord(); }
+    else if(!inPath(i) && adjacent(i, selPath[selPath.length-1])){ selPath.push(i); }
+    else { selPath=[i]; }
+    e.preventDefault&&e.preventDefault();
+  }
+  function submitWord(){
+    if(selPath.length<1){ return; }
+    const w=selPath.map(i=>grid[i]).join('');
+    if(w.length>=3 && DICT.has(w)){ const entry={word:w, path:selPath.slice()}; if(addWord(entry)){ if(foundList.length>=TARGET) winGame(); } }
+    selPath=[];
+  }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onTap,{passive:false});
+    cv.addEventListener('touchstart',onTap,{passive:false});
+  }
+  btnClear&&btnClear.addEventListener('click',()=>{ if(over||auto) return; selPath=[]; });
+  btnSubmit&&btnSubmit.addEventListener('click',()=>{ if(over||auto) return; submitWord(); });
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  let autoAcc=0;
+  function update(dt){
+    if(over){
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      if(flashT>0) flashT-=dt;
+      if(autoFlash){ autoFlash.t-=dt; if(autoFlash.t<=0) autoFlash=null; }
+      return;
+    }
+    timeLeft-=dt;
+    if(flashT>0) flashT-=dt;
+    if(autoFlash){ autoFlash.t-=dt; if(autoFlash.t<=0) autoFlash=null; }
+    if(auto){
+      autoAcc+=dt;
+      if(autoAcc>=0.30 && autoIdx<allWords.length){
+        autoAcc=0; const e=allWords[autoIdx++]; addWord(e);
+        if(foundList.length>=TARGET){ winGame(); return; }
+      }
+    }
+    if(timeLeft<=0){ timeLeft=0; if(foundList.length>=TARGET) winGame(); else loseGame(); return; }
+    if(elFound) elFound.textContent=foundList.length;
+    if(elTime) elTime.textContent=Math.ceil(timeLeft);
+    if(elScore) elScore.textContent=score;
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    ctx.strokeStyle='rgba(255,107,138,0.06)'; ctx.lineWidth=1;
+    for(let gx=0;gx<=W;gx+=42){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+    for(let gy=0;gy<=H;gy+=42){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+    // tiles
+    for(let i=0;i<grid.length;i++){
+      const [r,c]=rc(i); const x0=PAD+c*(CELL+GAP), y0=PAD+r*(CELL+GAP);
+      const sel=inPath(i)||(autoFlash&&autoFlash.cells.indexOf(i)>=0);
+      const hue=sel?'#ffd23f':'#ff6b8a';
+      ctx.save(); ctx.shadowColor=hue; ctx.shadowBlur=sel?22:10; ctx.strokeStyle=hue; ctx.fillStyle=sel?'rgba(255,210,63,0.18)':'rgba(255,255,255,0.04)'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.roundRect(x0,y0,CELL,CELL,10); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur=sel?16:0; ctx.fillStyle=sel?'#ffd23f':'#eaf2ff'; ctx.font='bold '+(CELL*0.46|0)+'px Segoe UI,system-ui,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(grid[i].toUpperCase(), x0+CELL/2, y0+CELL/2+1);
+      ctx.restore();
+    }
+    // path line
+    if(selPath.length>1){
+      ctx.save(); ctx.strokeStyle='#ffd23f'; ctx.lineWidth=4; ctx.shadowColor='#ffd23f'; ctx.shadowBlur=12; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.beginPath();
+      for(let k=0;k<selPath.length;k++){ const [r,c]=rc(selPath[k]); const cx=PAD+c*(CELL+GAP)+CELL/2, cy=PAD+r*(CELL+GAP)+CELL/2; if(k===0) ctx.moveTo(cx,cy); else ctx.lineTo(cx,cy); }
+      ctx.stroke(); ctx.restore();
+    }
+    // current word preview
+    if(selPath.length>0){ const w=selPath.map(i=>grid[i]).join(''); ctx.fillStyle='#ffd23f'; ctx.font='bold 22px Segoe UI,system-ui,sans-serif'; ctx.textAlign='center'; ctx.fillText(w.toUpperCase(), W/2, H-14); }
+    // flash message
+    if(flashT>0){ ctx.save(); ctx.globalAlpha=Math.min(1,flashT); ctx.fillStyle='#5dffa6'; ctx.font='bold 26px Segoe UI,system-ui,sans-serif'; ctx.textAlign='center'; ctx.fillText(flashMsg, W/2, H/2); ctx.restore(); }
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){return score;}, get best(){return best;}, get found(){return foundList.length;}, get total(){return allWords.length;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){return score;}, get found(){return foundList.length;}, get total(){return allWords.length;}
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0f1f" />
+<title>霓虹跳跃 · Neon Hop</title>
+<style>
+  :root{
+    --bg:#0a0f1f; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#7c8cff; --accent2:#46e0c8; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#7c8cff55; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #1a2540 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #0a1a30 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.t .value{color:var(--accent);}
+  .score-card.p .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#07101e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹跳跃 · NEON HOP</h1>
+      <div class="sub">Jump · Climb · Survive</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card t"><div class="label">高度</div><div class="value" id="height">0</div></div>
+      <div class="score-card p"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">通关！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">拖动 / <b>← →</b> 移动，踩到平台自动弹跳 · 不断向上攀登 · 登顶 <b>1000</b> 高度通关 · 自动模式护航带你登顶</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elHeight=$('height'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const W=420, H=560, bw=W, bh=H;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  const TARGET=1000;
+  const PR=14;
+  const GRAV=1500, JUMP=760, MOVE=360;
+  const PLAT_W=64, PLAT_H=12, SPACING=72;
+  let px, py, vy, onPlat, score, best=0;
+  let plats, spawnY, over, won, auto, autoTarget, keyL, keyR, pointerActive, pointerX, trail, squash, autoTimer, shieldFlash, lastFeet;
+  try{ best=parseInt(localStorage.getItem('hop_best')||'0',10)||0; }catch(e){best=0;}
+
+  const HUES=['#7c8cff','#46e0c8','#ffd23f','#ff6b8a','#5dffa6','#ff9f43'];
+
+  function rand(a,b){ return a+Math.random()*(b-a); }
+
+  function makePlat(y, x, spring){
+    return { x:x, y:y, w:PLAT_W, h:PLAT_H, hue:HUES[(Math.random()*HUES.length)|0], spring:!!spring };
+  }
+
+  function newGame(){
+    px=W/2; py=H-70; vy=0; onPlat=true; score=0;
+    plats=[]; spawnY=H-30;
+    // seed initial platforms from bottom up
+    let y=H-30;
+    plats.push(makePlat(y, W/2, false));
+    while(y>40){ y-=SPACING; const nx=Math.max(PLAT_W/2+8, Math.min(W-PLAT_W/2-8, (plats.length? plats[plats.length-1].x:W/2)+rand(-110,110))); plats.push(makePlat(y, nx, Math.random()<0.12)); }
+    spawnY=y;
+    over=false; won=false; auto=false; autoTarget=px; keyL=false; keyR=false; pointerActive=false; pointerX=px;
+    trail=[]; squash=0; autoTimer=0; shieldFlash=0;
+    elOverlay.classList.remove('show');
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+  }
+
+  function winGame(){
+    over=true; won=true;
+    if(score>best){ best=Math.floor(score); try{localStorage.setItem('hop_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⚡ 自动登顶！'; elOvText.textContent='高度 '+Math.floor(score)+' · 继续下一局…'; autoTimer=1.0; }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='登顶高度 '+Math.floor(score); elOverlay.classList.add('show'); }
+  }
+  function loseGame(){
+    if(auto){ shieldRespawn(); return; } // auto shield: never die, just respawn and continue
+    over=true; won=false;
+    elOvTitle.textContent='💥 坠落'; elOvText.textContent='高度 '+Math.floor(score); elOverlay.classList.add('show');
+  }
+  function shieldRespawn(){
+    // auto shield: put player back on a fresh platform just below its feet, never die
+    shieldFlash=1;
+    px=W/2; py=H*0.45; vy=0; onPlat=false;
+    // platform center placed so its top sits just under the player's feet -> lands via crossing detection
+    plats.push(makePlat(py + PR + PLAT_H, W/2, false));
+    autoTarget=W/2; // fall straight onto the respawn platform, then re-chain upward
+    lastFeet = py + PR;
+  }
+
+    // autopilot: commit to ONE target platform per jump (chosen at landing), then
+    // steer toward it for the whole arc. Re-picking every frame during ascent made
+    // the target flip-flop between left/right platforms and the auto player miss.
+  function pickTarget(){
+    let best=null;
+    for(const p of plats){ if(p.y < py-PR-2){ if(!best || p.y>best.y) best=p; } }
+    autoTarget = best ? best.x : W/2;
+  }
+  function autoControl(){
+    // target is committed at each landing (see pickTarget call in the landing code);
+    // while airborne we just keep steering toward it.
+    if(autoTarget===null || autoTarget===undefined) pickTarget();
+  }
+
+  function moveToward(tx){
+    const step=MOVE*lastDt;
+    if(Math.abs(tx-px)<=step) px=tx; else px += (tx>px?1:-1)*step;
+    if(px<PR) px=PR; if(px>W-PR) px=W-PR;
+  }
+
+  // ---- input ----
+  function ptrX(e){ let x=px; try{ const r=cv.getBoundingClientRect(); const cx=(e.clientX!==undefined?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0)); x=(cx-r.left)/r.width*bw; }catch(err){} return x; }
+  function onDown(e){ if(over||auto) return; pointerActive=true; pointerX=ptrX(e); e.preventDefault&&e.preventDefault(); }
+  function onMove(e){ if(over||auto) return; if(pointerActive) pointerX=ptrX(e); e.preventDefault&&e.preventDefault(); }
+  function onUp(e){ if(over||auto) return; pointerActive=false; e.preventDefault&&e.preventDefault(); }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('pointermove',onMove,{passive:false});
+    cv.addEventListener('pointerup',onUp,{passive:false});
+    cv.addEventListener('pointercancel',onUp,{passive:false});
+    cv.addEventListener('touchstart',onDown,{passive:false});
+    cv.addEventListener('touchmove',onMove,{passive:false});
+    cv.addEventListener('touchend',onUp,{passive:false});
+  }
+  window.addEventListener('keydown',(e)=>{ const k=e.key; if(k==='ArrowLeft'||k==='a'||k==='A') keyL=true; if(k==='ArrowRight'||k==='d'||k==='D') keyR=true; });
+  window.addEventListener('keyup',(e)=>{ const k=e.key; if(k==='ArrowLeft'||k==='a'||k==='A') keyL=false; if(k==='ArrowRight'||k==='d'||k==='D') keyR=false; });
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  let lastDt=0.016;
+  function update(dt){
+    lastDt=dt;
+    if(over){
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      if(shieldFlash>0) shieldFlash=Math.max(0,shieldFlash-dt*3);
+      if(squash>0) squash=Math.max(0,squash-dt*4);
+      return;
+    }
+    // horizontal control
+    if(auto){ autoControl(); moveToward(autoTarget); }
+    else if(keyL){ px-=MOVE*dt; if(px<PR) px=PR; }
+    else if(keyR){ px+=MOVE*dt; if(px>W-PR) px=W-PR; }
+    else if(pointerActive){ moveToward(pointerX); }
+
+    // capture foot position BEFORE this frame's motion, for crossing-based landing
+    const prevFeet = py + PR;
+    // gravity + jump
+    vy += GRAV*dt; py += vy*dt;
+    if(squash>0) squash=Math.max(0,squash-dt*4);
+
+    // landing — crossing detection (vy-independent): player was above the platform
+    // top last frame and is at/below it this frame, while horizontally over it.
+    if(vy>0){
+      const feet=py+PR;
+      for(const p of plats){
+        const top=p.y-p.h/2;
+        if(px > p.x-p.w/2-PR*0.4 && px < p.x+p.w/2+PR*0.4){
+          if(prevFeet <= top+2 && feet >= top){
+            py=top-PR; vy = p.spring? -JUMP*1.55 : -JUMP; squash=1;
+            if(auto) pickTarget(); // commit to the next platform above for the next arc
+            break;
+          }
+        }
+      }
+    }
+    // scroll up
+    const SL=H*0.32;
+    if(py<SL){ const d=SL-py; py+=d; for(const p of plats) p.y+=d; score+=d;
+      plats=plats.filter(p=>p.y<H+40);
+      // keep a buffer of platforms above the screen so the player can always climb
+      spawnY = Math.min.apply(null, plats.map(p=>p.y));
+      let lastX = W/2; for(const p of plats){ if(p.y===spawnY){ lastX=p.x; break; } }
+      while(spawnY > -180){ spawnY-=SPACING; const nx=Math.max(PLAT_W/2+8, Math.min(W-PLAT_W/2-8, lastX+rand(-110,110))); lastX=nx; plats.push(makePlat(spawnY, nx, Math.random()<0.12)); }
+    }
+    // fell off bottom
+    if(py-PR>H){ if(auto){ loseGame(); } else { loseGame(); } }
+
+    if(score>=TARGET){ winGame(); return; }
+
+    trail.push({x:px,y:py}); if(trail.length>14) trail.shift();
+    if(elHeight) elHeight.textContent=Math.floor(score);
+    if(elBest) elBest.textContent=best;
+    if(shieldFlash>0) shieldFlash=Math.max(0,shieldFlash-dt*3);
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    // grid
+    ctx.strokeStyle='rgba(124,140,255,0.06)'; ctx.lineWidth=1;
+    for(let gx=0;gx<=W;gx+=42){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+    for(let gy=0;gy<=H;gy+=42){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+    // progress
+    const prog=Math.min(1,score/TARGET);
+    ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(12,10,W-24,6);
+    ctx.fillStyle='#7c8cff'; ctx.fillRect(12,10,(W-24)*prog,6);
+
+    // platforms
+    for(const p of plats){
+      ctx.save(); ctx.shadowColor=p.hue; ctx.shadowBlur=12; ctx.strokeStyle=p.hue; ctx.fillStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=3;
+      const x=p.x-p.w/2, y=p.y-p.h/2;
+      ctx.beginPath(); ctx.roundRect(x,y,p.w,p.h,6); ctx.fill(); ctx.stroke();
+      if(p.spring){ ctx.fillStyle='#5dffa6'; ctx.shadowColor='#5dffa6'; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,6.28); ctx.fill(); }
+      ctx.restore();
+    }
+    // trail
+    for(let i=0;i<trail.length;i++){ const t=trail[i]; const a=i/trail.length*0.35; ctx.fillStyle='rgba(70,224,200,'+a+')'; ctx.beginPath(); ctx.arc(t.x,t.y,PR*(0.4+0.4*i/trail.length),0,6.28); ctx.fill(); }
+    // player
+    const sx=1+squash*0.35, sy=1-squash*0.4;
+    ctx.save(); ctx.translate(px,py); ctx.scale(sx,sy);
+    ctx.shadowColor='#7c8cff'; ctx.shadowBlur=18; ctx.fillStyle=(shieldFlash>0&&!over)?'#5dffa6':'#7c8cff';
+    ctx.beginPath(); ctx.arc(0,0,PR,0,6.28); ctx.fill();
+    ctx.fillStyle='rgba(6,18,29,0.85)'; ctx.beginPath(); ctx.arc(0,0,PR*0.42,0,6.28); ctx.fill();
+    ctx.restore();
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
+    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){return Math.floor(score);}, get height(){return Math.floor(score);}, get best(){return best;},
+    get px(){return px;}, get py(){return py;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){return Math.floor(score);}, get height(){return Math.floor(score);}, get px(){return px;}, get py(){return py;}
+  };
+})();
+</script>
+</body>
+</html>
