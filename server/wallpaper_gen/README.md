@@ -45,6 +45,38 @@ ssh ubuntu@dki.beanee.eu.org "
 curl https://dki.beanee.eu.org/wallpaper/
 ```
 
+## Usage
+
+```bash
+# 列出所有主题预设
+curl https://dki.beanee.eu.org/wallpaper/api/presets
+
+# 生成壁纸（GET，参数全在URL）
+curl -o wallpaper.png \
+  "https://dki.beanee.eu.org/wallpaper/api/generate?resolution=1920x1080&watermark=true&seed=42"
+
+# 生成壁纸（POST，JSON body）
+curl -X POST https://dki.beanee.eu.org/wallpaper/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resolution": "1920x1080",
+    "watermark": true,
+    "seed": 42
+  }' \
+  -o wallpaper.png
+
+# 可选参数
+#   resolution  - 图片尺寸, 默认 1920x1080
+#   theme       - 主题预设 (见 /api/presets), 不传则随机
+#   watermark   - 是否加水印, 默认 true
+#   watermark_text - 自定义水印文字
+#   model       - Pollinations 图片模型, 默认 flux
+#   custom_prompt - 自定义提示词, 跳过 LLM
+#   seed        - 随机种子, 不传则随机
+```
+
+API 文档: https://dki.beanee.eu.org/wallpaper/docs
+
 ## Notes
 
 - All credentials are in `/opt/wallpaper_gen/.env` — never committed to git.
