@@ -62,7 +62,7 @@ function updateFrequencyFromSlider() {
     
     // Update oscillator frequency if playing
     if (oscillator && audioContext && audioContext.state === 'running') {
-        oscillator.frequency.value = frequency;
+        oscillator.frequency.value = frequencyInput.value;
     }
 }
 
@@ -75,7 +75,7 @@ function updateFrequencyFromInput() {
         
         // Update oscillator frequency if playing
         if (oscillator && audioContext && audioContext.state === 'running') {
-            oscillator.frequency.value = frequency;
+            oscillator.frequency.value = frequencyInput.value;
         }
     }
 }
@@ -98,21 +98,26 @@ function validateFrequencyInput() {
     
     // Update oscillator frequency if playing
     if (oscillator && audioContext && audioContext.state === 'running') {
-        oscillator.frequency.value = frequency;
+        oscillator.frequency.value = frequencyInput.value;
     }
 }
 
 
 // Set frequency to specific value
 function setFrequency(frequency) {
-    frequency = Math.max(0.5, Math.min(20000, frequency));
+    // Clamp to the currently effective range (default 20-20000, or a custom
+    // range applied via the range limiter) so the displayed value can always
+    // be represented by the slider and played by the oscillator.
+    const minF = parseFloat(frequencySlider.min);
+    const maxF = parseFloat(frequencySlider.max);
+    frequency = Math.max(minF, Math.min(maxF, frequency));
     frequencyInput.value = frequency;
     frequencySlider.value = frequency;
     frequencyValue.textContent = `${frequency} Hz`;
     
     // Update oscillator frequency if playing
     if (oscillator && audioContext && audioContext.state === 'running') {
-        oscillator.frequency.value = frequency;
+        oscillator.frequency.value = frequencyInput.value;
     }
 }
 
@@ -232,7 +237,7 @@ function playTone() {
     
     // Set oscillator properties
     oscillator.type = waveformSelect.value;
-    oscillator.frequency.value = frequencySlider.value;
+    oscillator.frequency.value = frequencyInput.value;
     
     // Set gain (volume)
     const volume = volumeSlider.value / 100;
@@ -389,6 +394,49 @@ function stopStopTimeCountdown() {
 
 
 
+// Single, consolidated keyboard handler (attached once).
+// Previously the page had several duplicate `keydown` listeners, which made
+// Enter trigger play 3x and caused arrow-key frequency adjustments to also
+// stop the tone (a "any other key stops" listener collided with the arrows).
+function handleKeydown(event) {
+    // Ignore when a form control is focused so typing works normally.
+    if (event.target.matches('input, textarea, select, button')) return;
+
+    switch (event.code) {
+        case 'Enter':
+            event.preventDefault();
+            if (playBtn) playBtn.click();
+            break;
+        case 'Escape':
+            event.preventDefault();
+            if (stopBtn) stopBtn.click();
+            break;
+        case 'Space':
+            event.preventDefault();
+            if (refreshBtn) refreshBtn.click();
+            break;
+        case 'ArrowLeft':
+            event.preventDefault();
+            setFrequency(parseFloat(frequencyInput.value) - 10);
+            break;
+        case 'ArrowRight':
+            event.preventDefault();
+            setFrequency(parseFloat(frequencyInput.value) + 10);
+            break;
+        case 'ArrowUp':
+            event.preventDefault();
+            volumeSlider.value = Math.min(100, parseFloat(volumeSlider.value) + 5);
+            updateVolume();
+            break;
+        case 'ArrowDown':
+            event.preventDefault();
+            volumeSlider.value = Math.max(0, parseFloat(volumeSlider.value) - 5);
+            updateVolume();
+            break;
+    }
+}
+
+
 // Initialize the application
 function initializeApp() {
     updateFrequencyFromSlider();
@@ -396,31 +444,8 @@ function initializeApp() {
     updateDuration();
     console.log('Tone Generator initialized with real-time frequency updates');
     
-    // Add keyboard event listener for Enter key to play tone and ESC key to stop
-    document.addEventListener('keydown', function(event) {
-        // Check if no input element is focused
-        if (!event.target.matches('input, textarea, select, button')) {
-            // Enter key - play tone
-            if (event.code === 'Enter') {
-                event.preventDefault();
-                // Trigger the play button click
-                if (playBtn) {
-                    playBtn.click();
-                    console.log('Enter key pressed - playing tone');
-                }
-            }
-            // ESC key - stop tone
-            else if (event.code === 'Escape') {
-                event.preventDefault();
-                // Trigger the stop button click
-                if (stopBtn) {
-                    stopBtn.click();
-                    console.log('ESC key pressed - stopping tone');
-                }
-            }
-        }
-    });
-
+    // Attach the keyboard shortcuts exactly once.
+    document.addEventListener('keydown', handleKeydown);
 }
 
 
@@ -441,133 +466,3 @@ document.addEventListener('visibilitychange', function() {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', initializeApp);
-
-
-
-// Add keyboard event listener for Enter key to play tone
-document.addEventListener('keydown', function(event) {
-    // Check if no input element is focused
-    if (!event.target.matches('input, textarea, select, button')) {
-        // Enter key - play tone
-        if (event.code === 'Enter') {
-            event.preventDefault();
-            // Trigger the play button click
-            if (playBtn) {
-                playBtn.click();
-                console.log('Enter key pressed - playing tone');
-            }
-        }
-    }
-});
-
-
-// Add keyboard event listener for arrow keys
-document.addEventListener('keydown', function(event) {
-    // Check if no input element is focused
-    if (!event.target.matches('input, textarea, select, button')) {
-        let frequency = parseFloat(frequencyInput.value);
-        let volume = parseFloat(volumeSlider.value);
-        
-        switch(event.code) {
-            case 'ArrowLeft':
-                // Left arrow - decrease frequency by 10Hz
-                event.preventDefault();
-                frequency -= 10;
-                if (frequency < 0.5) frequency = 0.5;
-                setFrequency(frequency);
-                console.log(`Left arrow pressed - frequency decreased to ${frequency}Hz`);
-                break;
-                
-            case 'ArrowRight':
-                // Right arrow - increase frequency by 10Hz
-                event.preventDefault();
-                frequency += 10;
-                if (frequency > 20000) frequency = 20000;
-                setFrequency(frequency);
-                console.log(`Right arrow pressed - frequency increased to ${frequency}Hz`);
-                break;
-                
-            case 'ArrowUp':
-                // Up arrow - increase volume by 5%
-                event.preventDefault();
-                volume += 5;
-                if (volume > 100) volume = 100;
-                volumeSlider.value = volume;
-                updateVolume();
-                console.log(`Up arrow pressed - volume increased to ${volume}%`);
-                break;
-                
-            case 'ArrowDown':
-                // Down arrow - decrease volume by 5%
-                event.preventDefault();
-                volume -= 5;
-                if (volume < 0) volume = 0;
-                volumeSlider.value = volume;
-                updateVolume();
-                console.log(`Down arrow pressed - volume decreased to ${volume}%`);
-                break;
-        }
-    }
-});
-
-
-// Add keyboard event listener for Enter key to play tone
-document.addEventListener('keydown', function(event) {
-    // Check if no input element is focused
-    if (!event.target.matches('input, textarea, select, button')) {
-        // Enter key - play tone
-        if (event.code === 'Enter') {
-            event.preventDefault(); // Prevent default behavior
-            
-            // Trigger the play button click
-            if (playBtn) {
-                playBtn.click();
-                console.log('Enter key pressed - playing tone');
-            }
-        }
-    }
-});
-
-
-// Add keyboard event listener for spacebar to extend stop time and other keys to stop
-document.addEventListener('keydown', function(event) {
-    // Check if no input element is focused
-    if (!event.target.matches('input, textarea, select, button')) {
-        // Spacebar - extend stop time
-        if (event.code === 'Space') {
-            event.preventDefault(); // Prevent default spacebar behavior (scrolling)
-            
-            // Trigger the extend stop time button click
-            if (refreshBtn) {
-                refreshBtn.click();
-                console.log('Spacebar pressed - extending stop time');
-            }
-        }
-        // Any other key - stop tone
-        else {
-            event.preventDefault(); // Prevent default behavior
-            
-            // Trigger the stop button click
-            if (stopBtn) {
-                stopBtn.click();
-                console.log(`Key '${event.key}' pressed - stopping tone`);
-            }
-        }
-    }
-});
-
-
-// Add keyboard event listener for spacebar to extend stop time
-document.addEventListener('keydown', function(event) {
-    // Check if spacebar is pressed and no input element is focused
-    if (event.code === 'Space' && 
-        !event.target.matches('input, textarea, select, button')) {
-        event.preventDefault(); // Prevent default spacebar behavior (scrolling)
-        
-        // Trigger the extend stop time button click
-        if (refreshBtn) {
-            refreshBtn.click();
-            console.log('Spacebar pressed - extending stop time');
-        }
-    }
-});
