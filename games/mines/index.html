@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#08111e" />
+<title>霓虹扫雷 · Neon Mines</title>
+<style>
+  :root{
+    --bg:#08111e; --surface:#0f1b2e; --text:#eaf6ff; --muted:#7e96b8;
+    --accent:#36e0ff; --accent2:#ff5db1; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#36e0ff55; --dim:#1b2c45; --board:#06101d;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #122942 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #1a0f2e 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:480px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.m .value{color:var(--bad);}
+  .score-card.s .value{color:var(--accent);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.flag.on{background:linear-gradient(135deg,var(--gold),var(--bad));color:#1a0f0a;border-color:transparent;box-shadow:0 0 16px #ffd23f55;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.8);font-size:2.2rem;font-weight:900;
+    color:var(--gold);text-shadow:0 0 20px var(--gold);opacity:0;pointer-events:none;z-index:6;}
+  .toast.pop{animation:pop .7s ease forwards;}
+  @keyframes pop{0%{opacity:0;transform:translate(-50%,-50%) scale(.6);}30%{opacity:1;transform:translate(-50%,-50%) scale(1.1);}100%{opacity:0;transform:translate(-50%,-60%) scale(1);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹扫雷 · NEON MINES</h1>
+      <div class="sub">Reveal · Every · Safe</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card m"><div class="label">地雷</div><div class="value" id="mines">10</div></div>
+      <div class="score-card s"><div class="label">已开</div><div class="value" id="safe">0</div></div>
+      <div class="score-card"><div class="label">最佳</div><div class="value" id="best">–</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="toast" id="toast">💥</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">胜利！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="flag" id="flagBtn">🚩 标记</button>
+    <button class="ghost" id="restartBtn" style="background:transparent;">重开</button>
+  </div>
+  <div class="hint"><b>点击</b>翻开格子 · 开启<b>标记</b>后点击插旗 · 翻开所有安全格即通关 · 自动模式演示安全解法</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elMines=$('mines'), elSafe=$('safe'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnFlag=$('flagBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn'), elToast=$('toast');
+
+  const N=9, W=432, H=432, bw=W, bh=H, CELL=W/N, MINE_COUNT=10;
+  const NUMCOL=['','#7ec8ff','#5dffa6','#ff8db0','#ffd23f','#ff9d5c','#9d7bff','#46e0ff','#ff6b8a','#ffffff'];
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=bw*dpr; cv.height=bh*dpr;
+    cv.style.width=bw+'px'; cv.style.height=bh+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  let grid;            // array of cell objects
+  let flagged, revealedSafe, totalSafe, exploded;
+  let over, won, auto, flagMode, autoReplay, autoIdx, autoAccum, firstClick;
+  let elapsed, best, winPulse, losePulse, minesLeft, toastTimer;
+
+  try{ best=parseFloat(localStorage.getItem('neonmines_best')); if(!(best>0)) best=0; }catch(e){best=0;}
+
+  function idx(r,c){ return r*N+c; }
+  function neighbors(r,c){ const out=[]; for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ if(dr===0&&dc===0) continue; const nr=r+dr,nc=c+dc; if(nr<0||nc<0||nr>=N||nc>=N) continue; out.push(idx(nr,nc)); } return out; }
+
+  function genMines(safeSet){
+    let m=new Set();
+    let guard=0;
+    while(m.size<MINE_COUNT && guard<2000){
+      guard++;
+      const i=Math.floor(Math.random()*N*N);
+      if(safeSet && safeSet.has(i)) continue;
+      m.add(i);
+    }
+    return m;
+  }
+  function buildNumbers(mineSet){
+    for(let i=0;i<N*N;i++) grid[i].mine=mineSet.has(i);
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      const i=idx(r,c); if(grid[i].mine){ grid[i].adj=0; continue; }
+      let n=0; for(const nb of neighbors(r,c)) if(grid[nb].mine) n++; grid[i].adj=n;
+    }
+  }
+  function newGame(){
+    grid=[]; for(let i=0;i<N*N;i++) grid.push({mine:false,adj:0,revealed:false,flag:false,anim:0});
+    flagged=0; revealedSafe=0; exploded=false;
+    totalSafe=N*N-MINE_COUNT;
+    over=false; won=false; auto=false; flagMode=false; autoReplay=false; autoIdx=0; autoAccum=0; firstClick=true;
+    elapsed=0; winPulse=0; losePulse=0; minesLeft=MINE_COUNT; toastTimer=0;
+    if(btnFlag){ btnFlag.classList.remove('on'); btnFlag.textContent='🚩 标记'; }
+    if(btnAuto){ btnAuto.classList.remove('on'); btnAuto.textContent='自动游玩'; }
+    if(elBadge) elBadge.classList.remove('show');
+    elOverlay.classList.remove('show');
+    elMines.textContent=MINE_COUNT; elSafe.textContent=0;
+    elBest.textContent = best>0 ? best.toFixed(1)+'s' : '–';
+  }
+
+  function revealCell(i){
+    const cell=grid[i];
+    if(cell.revealed||cell.flag) return;
+    cell.revealed=true; cell.anim=1;
+    if(cell.mine){ exploded=true; return; }
+    revealedSafe++;
+    if(cell.adj===0){
+      for(const nb of neighbors((i/N)|0,i%N)) if(!grid[nb].revealed && !grid[nb].flag) revealCell(nb);
+    }
+  }
+
+  function doFirstClick(i){
+    if(!firstClick) return;
+    firstClick=false;
+    const safe=new Set([i]); for(const nb of neighbors((i/N)|0,i%N)) safe.add(nb);
+    const ms=genMines(safe); buildNumbers(ms);
+  }
+
+  function humanReveal(i){
+    if(over||auto) return;
+    if(flagMode){ toggleFlag(i); return; }
+    if(grid[i].flag) return;
+    if(firstClick) doFirstClick(i);
+    if(grid[i].mine){ exploded=true; revealCell(i); loseGame(); return; }
+    revealCell(i);
+    checkWin();
+  }
+  function toggleFlag(i){
+    const cell=grid[i]; if(cell.revealed) return;
+    cell.flag=!cell.flag; flagged+=cell.flag?1:-1; minesLeft=MINE_COUNT-flagged; elMines.textContent=Math.max(0,minesLeft);
+  }
+
+  function checkWin(){
+    if(over) return;
+    if(revealedSafe>=totalSafe){ winGame(); }
+  }
+  function winGame(){
+    if(over) return; over=true; won=true; winPulse=1;
+    if(best===0||elapsed<best){ best=elapsed; try{localStorage.setItem('neonmines_best',String(best));}catch(e){} }
+    elBest.textContent=best.toFixed(1)+'s';
+    if(auto){ elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用 '+elapsed.toFixed(1)+'s 扫清全场地雷'; autoTimer=1.0; elToast.textContent='⚡'; popToast(); }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用 '+elapsed.toFixed(1)+'s 扫清地雷'; elOverlay.classList.add('show'); }
+  }
+  function loseGame(){
+    over=true; won=false; losePulse=1;
+    elOvTitle.textContent='💥 踩雷了'; elOvText.textContent='再接再厉，试试自动模式'; elOverlay.classList.add('show');
+    elToast.textContent='💥'; popToast();
+  }
+  let autoTimer=0;
+  function popToast(){ if(!elToast) return; elToast.classList.remove('pop'); void elToast.offsetWidth; elToast.classList.add('pop'); }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v){
+      autoReplay=true; autoIdx=0; autoAccum=0; flagMode=false;
+      if(btnFlag){ btnFlag.classList.remove('on'); btnFlag.textContent='🚩 标记'; }
+      // place mines now so auto reveal order is well defined
+      if(firstClick){ firstClick=false; buildNumbers(genMines(null)); }
+    }
+  }
+
+  // list of safe cells in row-major order for auto replay
+  function safeList(){ const out=[]; for(let i=0;i<N*N;i++) if(!grid[i].mine) out.push(i); return out; }
+  let autoSafe=null;
+  function autoStep(){
+    if(autoSafe===null) autoSafe=safeList();
+    if(autoIdx<autoSafe.length){ revealCell(autoSafe[autoIdx]); autoIdx++; checkWin(); }
+  }
+
+  // ---- input ----
+  function cellAt(e){
+    let x=0,y=0;
+    try{
+      const rect=cv.getBoundingClientRect();
+      const cx=(typeof e.clientX==='number')?e.clientX:0;
+      const cy=(typeof e.clientY==='number')?e.clientY:0;
+      x=((cx-rect.left)/rect.width)*W; y=((cy-rect.top)/rect.height)*H;
+    }catch(err){ return -1; }
+    const c=Math.floor(x/CELL), r=Math.floor(y/CELL);
+    if(r<0||c<0||r>=N||c>=N) return -1;
+    return idx(r,c);
+  }
+  function onDown(e){ const i=cellAt(e); if(i<0) return; humanReveal(i); e.preventDefault&&e.preventDefault(); }
+  function onContext(e){ const i=cellAt(e); if(i>=0) toggleFlag(i); e.preventDefault&&e.preventDefault(); }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('mousedown',onDown,{passive:false});
+    cv.addEventListener('contextmenu',onContext,{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnFlag&&btnFlag.addEventListener('click',()=>{ if(auto) return; flagMode=!flagMode; btnFlag.classList.toggle('on',flagMode); btnFlag.textContent=flagMode?'🚩 取消':'🚩 标记'; });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(over){
+      if(winPulse>0) winPulse=Math.max(0,winPulse-dt*1.4);
+      if(losePulse>0) losePulse=Math.max(0,losePulse-dt*1.4);
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      return;
+    }
+    elapsed+=dt;
+    if(auto && autoReplay){
+      autoAccum+=dt;
+      if(autoAccum>=0.035){ autoAccum=0; autoStep(); }
+    }
+    if(winPulse>0) winPulse=Math.max(0,winPulse-dt*2);
+    if(toastTimer>0) toastTimer-=dt;
+    for(let i=0;i<grid.length;i++){ if(grid[i].anim>0) grid[i].anim=Math.max(0,grid[i].anim-dt*4); }
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,bw,bh);
+    // grid lines
+    ctx.strokeStyle='rgba(54,224,255,0.08)'; ctx.lineWidth=1;
+    for(let k=0;k<=N;k++){ ctx.beginPath(); ctx.moveTo(k*CELL,0); ctx.lineTo(k*CELL,H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,k*CELL); ctx.lineTo(W,k*CELL); ctx.stroke(); }
+    for(let i=0;i<grid.length;i++){
+      const r=(i/N)|0, c=i%N; const x=c*CELL, y=r*CELL; const cell=grid[i];
+      const pop=1+cell.anim*0.12;
+      if(cell.revealed){
+        if(cell.mine){
+          ctx.save(); ctx.shadowColor='#ff6b8a'; ctx.shadowBlur=18; ctx.fillStyle='#ff6b8a';
+          ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,CELL*0.28,0,6.28); ctx.fill(); ctx.restore();
+        } else {
+          ctx.fillStyle='rgba(20,40,66,0.65)';
+          ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+          if(cell.adj>0){
+            ctx.save(); ctx.fillStyle=NUMCOL[cell.adj]; ctx.shadowColor=NUMCOL[cell.adj]; ctx.shadowBlur=8;
+            ctx.font='bold '+(CELL*0.5)+'px Segoe UI,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(cell.adj, x+CELL/2, y+CELL/2+1); ctx.restore();
+          }
+        }
+      } else {
+        // hidden tile with subtle neon
+        const s=(CELL-4)*pop;
+        ctx.save();
+        ctx.translate(x+CELL/2,y+CELL/2); ctx.scale(pop,pop); ctx.translate(-(x+CELL/2),-(y+CELL/2));
+        ctx.fillStyle=cell.flag?'rgba(255,210,63,0.16)':'rgba(40,70,110,0.30)';
+        ctx.fillRect(x+2,y+2,CELL-4,CELL-4);
+        ctx.strokeStyle=cell.flag?'#ffd23f':'rgba(54,224,255,0.22)'; ctx.lineWidth=1.5;
+        ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+        if(cell.flag){ ctx.fillStyle='#ffd23f'; ctx.font='bold '+(CELL*0.46)+'px Segoe UI,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🚩', x+CELL/2, y+CELL/2+1); }
+        ctx.restore();
+      }
+    }
+    if(winPulse>0){ ctx.save(); ctx.globalAlpha=winPulse*0.45; ctx.fillStyle='#5dffa6'; ctx.fillRect(0,0,bw,bh); ctx.restore(); }
+    if(losePulse>0){ ctx.save(); ctx.globalAlpha=losePulse*0.4; ctx.fillStyle='#ff6b8a'; ctx.fillRect(0,0,bw,bh); ctx.restore(); }
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?(ts!==undefined?ts:performance.now()):Date.now());
+    let dt=(now-last)/1000; if(!(dt>0)||dt>0.05) dt=0.016; last=now;
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){return revealedSafe;},
+    get remaining(){return totalSafe-revealedSafe;},
+    get best(){return best;}, get elapsed(){return elapsed;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){return revealedSafe;}, get remaining(){return totalSafe-revealedSafe;}, get best(){return best;}, get exploded(){return exploded;}
+  };
+})();
+</script>
+</body>
+</html>
