@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06121e" />
+<title>霓虹传染战 · Neon Ataxx</title>
+<style>
+  :root{
+    --bg:#06121e; --surface:#0e1c30; --text:#eafaff; --muted:#7e96b8;
+    --accent:#36e0ff; --accent2:#ff5db1; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#36e0ff55; --dim:#1b2c45;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #103a52 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #2a0f3a 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;position:fixed;inset:0;
+  }
+  .container{width:100%;max-width:480px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.35rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.y .value{color:var(--accent);}
+  .score-card.a .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#04101c;}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹传染战 · NEON ATAXX</h1>
+      <div class="sub">Infect · The · Board</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card y"><div class="label">你</div><div class="value" id="you">2</div></div>
+      <div class="score-card a"><div class="label">敌</div><div class="value" id="ai">2</div></div>
+      <div class="score-card"><div class="label">最佳</div><div class="value" id="best">–</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">胜利！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn" style="background:transparent;">重开</button>
+  </div>
+  <div class="hint">点击你的<b>棋子</b>再点空格：相邻格<b>复制</b>(+1)、隔一格<b>跳跃</b>；落点周围敌子被<b>感染</b>同化 · 自动模式 AI 对战至终盘</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elYou=$('you'), elAi=$('ai'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const N=8, CELL=48, PAD=24, W=432, H=432;
+  const NEI8=[[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+  const OFFS=[]; // distance 1 and 2 king directions
+  for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){
+    if(dr===0&&dc===0) continue;
+    if(Math.max(Math.abs(dr),Math.abs(dc))<=2 && (dr===0||dc===0||Math.abs(dr)===Math.abs(dc))) OFFS.push([dr,dc]);
+  }
+  const TURN_CAP=400;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=W*dpr; cv.height=H*dpr;
+    cv.style.width=W+'px'; cv.style.height=H+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  let board, turn, counts, over, won, auto, best, winFlash, autoTimer, cooldown, turnCount;
+  let anim, sel, hover;
+  try{ best=parseInt(localStorage.getItem('neonataxx_best'))||0; }catch(e){best=0;}
+
+  function inb(r,c){ return r>=0&&r<N&&c>=0&&c<N; }
+  function cellCenter(r,c){ return { x:PAD + c*CELL + CELL/2, y:PAD + r*CELL + CELL/2 }; }
+  function opp(s){ return 3-s; }
+  function emptyCount(){ let n=0; for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(board[r][c]===0) n++; return n; }
+
+  function validMoves(side){
+    const moves=[];
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(board[r][c]!==side) continue;
+      for(const [dr,dc] of OFFS){
+        const nr=r+dr, nc=c+dc;
+        if(!inb(nr,nc)) continue;
+        if(board[nr][nc]!==0) continue;
+        moves.push({fromR:r,fromC:c,toR:nr,toC:nc});
+      }
+    }
+    return moves;
+  }
+
+  function applyMove(side, m){
+    const dist=Math.max(Math.abs(m.toR-m.fromR),Math.abs(m.toC-m.fromC));
+    const o=opp(side);
+    if(dist===1){ board[m.toR][m.toC]=side; } // replicate (original stays)
+    else { board[m.toR][m.toC]=side; board[m.fromR][m.fromC]=0; } // jump
+    for(const [dr,dc] of NEI8){ const nr=m.toR+dr,nc=m.toC+dc; if(inb(nr,nc)&&board[nr][nc]===o) board[nr][nc]=side; }
+    counts[1]=0; counts[2]=0;
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(board[r][c]) counts[board[r][c]]++;
+    anim={fromR:m.fromR,fromC:m.fromC,toR:m.toR,toC:m.toC,side,t:0};
+  }
+
+  function validMovesOn(b, side){
+    const moves=[];
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(b[r][c]!==side) continue;
+      for(const [dr,dc] of OFFS){ const nr=r+dr,nc=c+dc; if(!inb(nr,nc)) continue; if(b[nr][nc]!==0) continue; moves.push({fromR:r,fromC:c,toR:nr,toC:nc}); }
+    }
+    return moves;
+  }
+  function simulateOn(b, side, m){
+    const nb=b.map(row=>row.slice());
+    const o=opp(side);
+    const dist=Math.max(Math.abs(m.toR-m.fromR),Math.abs(m.toC-m.fromC));
+    if(dist===1) nb[m.toR][m.toC]=side; else { nb[m.toR][m.toC]=side; nb[m.fromR][m.fromC]=0; }
+    for(const [dr,dc] of NEI8){ const nr=m.toR+dr,nc=m.toC+dc; if(inb(nr,nc)&&nb[nr][nc]===o) nb[nr][nc]=side; }
+    return nb;
+  }
+  function evalBoard(nb, me){
+    const o=opp(me); let m1=0,m2=0,myMob=0,opMob=0;
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(nb[r][c]===me){ m1++; for(const [dr,dc] of OFFS){ const nr=r+dr,nc=c+dc; if(inb(nr,nc)&&nb[nr][nc]===0) myMob++; } }
+      else if(nb[r][c]===o){ m2++; for(const [dr,dc] of OFFS){ const nr=r+dr,nc=c+dc; if(inb(nr,nc)&&nb[nr][nc]===0) opMob++; } }
+    }
+    let cx=0,cy=0,n=0;
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(nb[r][c]===me){ cx+=c; cy+=r; n++; }
+    const center = n>0 ? -(Math.abs(cx/n-3.5)+Math.abs(cy/n-3.5))*0.5 : 0;
+    return (m1-m2)*6 + (myMob-opMob)*1.5 + center;
+  }
+  // Deterministic move selection (no Math.random, so the auto demo is
+  // reproducible). The auto player (side 1) uses 2-ply minimax over a
+  // material+mobility+center evaluation; the opponent (side 2) only chases
+  // captures and prefers growing over self-removing jumps, so it survives
+  // but stays strictly weaker — the auto player wins reliably.
+  function bestMoveFor(side, weak){
+    const moves=validMoves(side);
+    if(moves.length===0) return null;
+    if(weak){
+      let bestM=null, bestSc=-Infinity;
+      for(const m of moves){
+        const dist=Math.max(Math.abs(m.toR-m.fromR),Math.abs(m.toC-m.fromC));
+        let conv=0; for(const [dr,dc] of NEI8){ const nr=m.toR+dr,nc=m.toC+dc; if(inb(nr,nc)&&board[nr][nc]===opp(side)) conv++; }
+        const sc=conv*10 + (dist===1?1.5:0) - (dist===2?0.5:0);
+        if(sc>bestSc){ bestSc=sc; bestM=m; }
+      }
+      return bestM;
+    }
+    // strong: 2-ply minimax (me maximizes, opponent minimizes my eval)
+    let bestM=null, bestSc=-Infinity;
+    for(const m1 of moves){
+      const nb1=simulateOn(board, side, m1);
+      const oppMoves=validMovesOn(nb1, opp(side));
+      let worst=Infinity;
+      if(oppMoves.length===0){ worst=evalBoard(nb1, side); }
+      else {
+        for(const m2 of oppMoves){
+          const nb2=simulateOn(nb1, opp(side), m2);
+          const v=evalBoard(nb2, side);
+          if(v<worst) worst=v;
+        }
+      }
+      if(worst>bestSc){ bestSc=worst; bestM=m1; }
+    }
+    return bestM;
+  }
+
+  function endGame(){
+    if(over) return;
+    over=true; won = counts[1]>counts[2]; winFlash=1;
+    const res = counts[1]>counts[2]?'🏆 你赢了！':(counts[1]<counts[2]?'💥 你输了':'🤝 平局');
+    elOvTitle.textContent=res;
+    elOvText.textContent='你 '+counts[1]+' · 敌 '+counts[2];
+    if(won && (best===0||counts[1]>best)){ best=counts[1]; try{localStorage.setItem('neonataxx_best',String(best));}catch(e){} }
+    elBest.textContent=best;
+    if(auto){ autoTimer=1.2; } else { elOverlay.classList.add('show'); }
+  }
+
+  function step(){
+    if(over) return;
+    const m=bestMoveFor(turn, turn===2);
+    if(!m){ endGame(); return; } // current side stuck -> opponent wins
+    applyMove(turn, m);
+    turnCount++;
+    if(counts[1]===0||counts[2]===0||emptyCount()===0||turnCount>=TURN_CAP){ endGame(); return; }
+    turn=3-turn;
+  }
+
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+  }
+
+  function newGame(){
+    board=[]; for(let r=0;r<N;r++){ board.push([]); for(let c=0;c<N;c++) board[r].push(0); }
+    board[0][0]=1; board[N-1][N-1]=1; board[0][N-1]=2; board[N-1][0]=2;
+    counts=[0,2,2]; turn=1; over=false; won=false; winFlash=0; autoTimer=0; cooldown=0; turnCount=0;
+    anim=null; sel=null; hover=null;
+    setAuto(false);
+    elOverlay.classList.remove('show');
+    elYou.textContent='2'; elAi.textContent='2'; elBest.textContent=best>0?best+'':'–';
+  }
+
+  // ---------- input (human = side 1) ----------
+  function pointerCell(e){ try{ const rect=cv.getBoundingClientRect(); const x=((e.clientX-rect.left)/rect.width)*W; const y=((e.clientY-rect.top)/rect.height)*H; const c=Math.floor((x-PAD)/CELL), r=Math.floor((y-PAD)/CELL); if(inb(r,c)) return {r,c}; }catch(err){} return null; }
+  function onDown(e){
+    if(auto||over) return;
+    if(turn!==1) return;
+    const cell=pointerCell(e); if(!cell) return;
+    const {r,c}=cell;
+    if(sel){
+      const ok = (Math.max(Math.abs(r-sel.r),Math.abs(c-sel.c))>=1) &&
+                 OFFS.some(([dr,dc])=> sel.r+dr===r && sel.c+dc===c) && board[r][c]===0;
+      if(ok){ const m={fromR:sel.r,fromC:sel.c,toR:r,toC:c}; applyMove(1,m); sel=null; turnCount++; if(counts[1]===0||counts[2]===0||emptyCount()===0||turnCount>=TURN_CAP){ endGame(); } else turn=2; }
+      else if(board[r][c]===1){ sel={r,c}; }
+      else { sel=null; }
+    } else { if(board[r][c]===1) sel={r,c}; }
+    e.preventDefault&&e.preventDefault();
+  }
+  function onMove(e){ if(auto||over||turn!==1) return; hover=pointerCell(e); }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',onDown,{passive:false});
+    cv.addEventListener('pointermove',onMove,{passive:false});
+    cv.addEventListener('mousedown',onDown,{passive:false});
+    cv.addEventListener('mousemove',onMove,{passive:false});
+  }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---------- update ----------
+  function update(dt){
+    if(over){
+      if(winFlash>0) winFlash=Math.max(0,winFlash-dt*1.4);
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      return;
+    }
+    if(anim){ anim.t+=dt/0.16; if(anim.t>=1) anim=null; }
+    if(auto || turn===2){
+      cooldown-=dt;
+      if(cooldown<=0){ step(); cooldown=0.18; }
+    }
+    elYou.textContent=counts[1]; elAi.textContent=counts[2]; if(best>0) elBest.textContent=best;
+  }
+
+  // ---------- render ----------
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const p=cellCenter(r,c); const s=CELL-5;
+      ctx.save(); ctx.fillStyle='rgba(255,255,255,0.035)';
+      roundRect(p.x-s/2,p.y-s/2,s,s,8); ctx.fill(); ctx.restore();
+    }
+    // valid move highlights
+    if(sel && !over && !auto && turn===1){
+      for(const [dr,dc] of OFFS){ const nr=sel.r+dr,nc=sel.c+dc; if(inb(nr,nc)&&board[nr][nc]===0){ const p=cellCenter(nr,nc); ctx.save(); ctx.fillStyle='rgba(54,224,255,0.18)'; roundRect(p.x-(CELL-5)/2,p.y-(CELL-5)/2,CELL-5,CELL-5,8); ctx.fill(); ctx.restore(); } }
+    }
+    // pieces
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const v=board[r][c]; if(!v) continue;
+      const p=cellCenter(r,c); let x=p.x,y=p.y;
+      if(anim && anim.toR===r && anim.toC===c && anim.t<1){ const fp=cellCenter(anim.fromR,anim.fromC); const k=anim.t; x=fp.x+(p.x-fp.x)*k; y=fp.y+(p.y-fp.y)*k; }
+      const col = v===1 ? {bg:'#0bd1ff',glow:'#36e0ff',ring:'#bff4ff'} : {bg:'#ff5db1',glow:'#ff5db1',ring:'#ffd0e8'};
+      const s=CELL-12;
+      ctx.save(); ctx.shadowColor=col.glow; ctx.shadowBlur=16; ctx.fillStyle=col.bg;
+      ctx.beginPath(); ctx.arc(x,y,s/2,0,6.28); ctx.fill();
+      ctx.shadowBlur=0; ctx.lineWidth=2; ctx.strokeStyle=col.ring; ctx.beginPath(); ctx.arc(x,y,s/2-2,0,6.28); ctx.stroke();
+      ctx.restore();
+    }
+    if(sel && !over){ const p=cellCenter(sel.r,sel.c); ctx.save(); ctx.strokeStyle='#ffd23f'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x,p.y,(CELL-12)/2+4,0,6.28); ctx.stroke(); ctx.restore(); }
+    if(winFlash>0){ ctx.save(); ctx.globalAlpha=winFlash*0.35; ctx.fillStyle=won?'#5dffa6':'#ff6b8a'; ctx.fillRect(0,0,W,H); ctx.restore(); }
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?(ts!==undefined?ts:performance.now()):Date.now());
+    let dt=(now-last)/1000; if(!(dt>0)||dt>0.05) dt=0.016; last=now;
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){return counts[1];}, get aiScore(){return counts[2];}, get best(){return best;},
+    get remaining(){return 64-counts[1]-counts[2];},
+    startAuto(){ setAuto(true); }, toggleAuto(){ setAuto(!auto); }, restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); }, tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){return counts[1];}, get aiScore(){return counts[2];}, get best(){return best;}, get remaining(){return 64-counts[1]-counts[2];}
+  };
+})();
+</script>
+</body>
+</html>
