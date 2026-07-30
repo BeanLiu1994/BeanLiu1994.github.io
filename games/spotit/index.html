@@ -4,19 +4,19 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <meta name="theme-color" content="#0a0f1f" />
-<title>霓虹汉诺塔 · Neon Hanoi</title>
+<title>霓虹找相同 · Neon Spot</title>
 <style>
   :root{
     --bg:#080b18; --surface:#121a30; --text:#eaf2ff; --muted:#7e90b3;
-    --accent:#46e0ff; --accent2:#b46bff; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
-    --glow:#46e0ff55; --dim:#243352;
+    --accent:#ff7ad9; --accent2:#46e0ff; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#ff7ad955; --dim:#243352;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;overflow:hidden;}
   body{
     background:var(--bg);
-    background-image:radial-gradient(ellipse at 50% 0%, #18304a 0%, transparent 60%),
-                     radial-gradient(ellipse at 50% 100%, #20103a 0%, transparent 60%);
+    background-image:radial-gradient(ellipse at 50% 0%, #2a1840 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #10243a 0%, transparent 60%);
     color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
     display:flex;align-items:center;justify-content:center;
     user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
@@ -63,13 +63,13 @@
 <div class="container">
   <div class="header">
     <div class="title-block">
-      <h1>霓虹汉诺塔 · HANOI</h1>
-      <div class="sub">Move · Stack · Win</div>
+      <h1>霓虹找相同 · SPOT</h1>
+      <div class="sub">Find · The · Match</div>
     </div>
     <div class="score-panel">
-      <div class="score-card s"><div class="label">步数</div><div class="value" id="moves">0</div></div>
-      <div class="score-card t"><div class="label">最佳</div><div class="value" id="best">--</div></div>
-      <div class="score-card"><div class="label">目标</div><div class="value" id="target">柱③</div></div>
+      <div class="score-card s"><div class="label">已对</div><div class="value" id="solved">0</div></div>
+      <div class="score-card t"><div class="label">目标</div><div class="value" id="total">12</div></div>
+      <div class="score-card"><div class="label">连击</div><div class="value" id="combo">0</div></div>
     </div>
   </div>
   <div class="board-wrap">
@@ -85,18 +85,21 @@
     <button class="auto" id="autoBtn">自动游玩</button>
     <button class="ghost" id="restartBtn">重开</button>
   </div>
-  <div class="hint">点<b>起始柱</b>再点<b>目标柱</b>移动顶部圆盘 · 大盘不能压小盘 · <b>自动模式</b>会用最优步数流畅搬运通关</div>
+  <div class="hint">两张牌里<b>只有一个</b>相同图案 · 点中它即可过关 · <b>自动模式</b>会流畅帮你找出相同并通关</div>
 </div>
 <script>
 (function(){
   "use strict";
   const $=(id)=>document.getElementById(id);
-  const cv=$('cv'), elMoves=$('moves'), elBest=$('best'), elBadge=$('badge'),
-        elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+  const cv=$('cv'), elSolved=$('solved'), elTotal=$('total'), elCombo=$('combo'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
         btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
 
-  const W=420, H=360, N=4, TARGET=2;
-  const COLORS=['#ff5db1','#ffd23f','#5dffa6','#46e0ff','#b46bff','#ff8a3f'];
+  const EMOJI=['🌟','🔥','💧','🌿','🌸','⚡','🌈','☀️','🌙','🌊','🍎','🍊','🍋','🍉','🍇','🍓','🍒','🍑','🥝','🍍','🌵','🐱','🐶','🐭','🐰','🦊','🐻','🐼','🐨','🦁','🐮'];
+  const DECK=[[0,1,2,3,4,5],[0,6,11,16,21,26],[0,7,12,17,22,27],[0,8,13,18,23,28],[0,9,14,19,24,29],[0,10,15,20,25,30],[1,6,12,18,24,30],[1,7,13,19,25,26],[1,8,14,20,21,27],[1,9,15,16,22,28],[1,10,11,17,23,29],[2,6,13,20,22,29],[2,7,14,16,23,30],[2,8,15,17,24,26],[2,9,11,18,25,27],[2,10,12,19,21,28],[3,6,14,17,25,28],[3,7,15,18,21,29],[3,8,11,19,22,30],[3,9,12,20,23,26],[3,10,13,16,24,27],[4,6,15,19,23,27],[4,7,11,20,24,28],[4,8,12,16,25,29],[4,9,13,17,21,30],[4,10,14,18,22,26],[5,6,7,8,9,10],[5,11,12,13,14,15],[5,16,17,18,19,20],[5,21,22,23,24,25],[5,26,27,28,29,30]];
+  const TARGET=12;
+
+  const W=420, H=330;
   let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
   function setupCanvas(){
     if(!cv||!cv.getContext) return;
@@ -106,71 +109,93 @@
   setupCanvas();
   const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
 
-  let pegs, selected, anim, moves, best, auto, over, won, autoQueue, autoTimer, autoDelay, invalidT, invalidPeg;
-  try{ best=parseInt(localStorage.getItem('hanoi_best')||'0',10)||0; }catch(e){best=0;}
+  // ---- state ----
+  let cardA, cardB, common, state, flashT, flashSym, wrongT, wrongSym, completed, combo, best, auto, over, won, autoTimer, autoDelay, roundDelay, flashDelay;
+  let bestCombo=0;
+  try{ bestCombo=parseInt(localStorage.getItem('spot_best_combo')||'0',10)||0; }catch(e){bestCombo=0;}
 
-  function diskW(size){ const minW=46, maxW=128; return minW + (size-1)/(N-1)*(maxW-minW); }
-  const DISKH=22, BASEY=H-26, PEGTOP=70, PEGX=[W*0.2, W*0.5, W*0.8];
-
+  function randInt(n){ return Math.floor(Math.random()*n); }
+  function pickPair(){
+    let a=randInt(DECK.length), b=randInt(DECK.length);
+    while(b===a) b=randInt(DECK.length);
+    cardA=DECK[a].slice(); cardB=DECK[b].slice();
+    let com=-1;
+    const set=new Set(cardA);
+    for(const s of cardB) if(set.has(s)){ com=s; break; }
+    common=com;
+  }
+  function newRound(){
+    pickPair(); state='play'; flashT=0; wrongT=0;
+  }
   function newGame(){
-    pegs=[[],[],[]];
-    for(let s=N;s>=1;s--) pegs[0].push(s); // bottom..top
-    selected=-1; anim=null; moves=0; over=false; won=false; autoQueue=[]; autoTimer=0; autoDelay=0; invalidT=0; invalidPeg=-1;
+    completed=0; combo=0; over=false; won=false; autoTimer=0; autoDelay=0;
     elOverlay.classList.remove('show');
+    newRound();
   }
   function setAuto(v){
     auto=v;
     if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
     if(elBadge) elBadge.classList.toggle('show',v);
-    if(v){ selected=-1; buildAutoQueue(); autoTimer=0; }
-  }
-  function buildAutoQueue(){
-    autoQueue=[];
-    (function h(n,from,to,aux){ if(n===0) return; h(n-1,from,aux,to); autoQueue.push([from,to]); h(n-1,aux,to,from); })(N,0,TARGET,1);
+    if(v){ autoTimer=0; }
   }
 
-  function topDisk(peg){ return pegs[peg].length?pegs[peg][pegs[peg].length-1]:0; }
-  function restY(peg, k){ return BASEY - k*DISKH - DISKH/2; } // k = stack index from bottom
-
-  function startMove(from,to){
-    if(anim) return false;
-    const d=pegs[from].pop();
-    anim={disk:d, from, to, t:0, dur:0.42};
-    return true;
+  // geometry of two discs + symbol positions
+  function geo(){
+    const discR=Math.min(98, (W/2-14)/1.0*0.98);
+    const cx1=W*0.27, cx2=W*0.73, cy=H*0.5;
+    const ringR=discR*0.6;
+    return {discR,cx1,cx2,cy,ringR};
   }
+  function symbolPos(card, idx, side){
+    const g=geo(); const cx= side===0?g.cx1:g.cx2;
+    const ang = -Math.PI/2 + idx*(Math.PI*2/card.length);
+    return { x: cx + Math.cos(ang)*g.ringR, y: g.cy + Math.sin(ang)*g.ringR };
+  }
+  function symbolRadius(){ return geo().discR*0.26; }
 
-  function tryManualMove(to){
-    if(anim||over||auto) return;
-    if(selected<0){
-      if(pegs[to].length>0){ selected=to; }
-      return;
+  function doCorrect(sym){
+    if(state!=='play') return;
+    if(sym!==common){ // wrong
+      wrongT=0.4; wrongSym=sym; combo=0; return;
     }
-    if(to===selected){ selected=-1; return; }
-    const d=topDisk(selected);
-    if(d>0 && (pegs[to].length===0 || d<topDisk(to))){
-      if(startMove(selected,to)){ moves++; selected=-1; }
-    } else {
-      invalidT=0.4; invalidPeg=to; selected=-1;
-    }
+    state='flash'; flashT=0; flashSym=sym; completed++; combo++;
+    if(combo>bestCombo){ bestCombo=combo; try{localStorage.setItem('spot_best_combo',String(bestCombo));}catch(e){} }
+    if(completed>=TARGET) winGame();
+  }
+  function autoTap(){
+    if(state==='play') doCorrect(common);
   }
 
   function winGame(){
     over=true; won=true;
-    if(!auto){ if(best===0||moves<best){ best=moves; try{localStorage.setItem('hanoi_best',String(best));}catch(e){} } }
-    if(auto){ autoDelay=1.0; elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='最优 '+moves+' 步'; }
-    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用了 '+moves+' 步（最优 '+(Math.pow(2,N)-1)+'）'; elOverlay.classList.add('show'); }
+    if(auto){ autoDelay=0.9; elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='完成 '+TARGET+' 对 · 最高连击 '+bestCombo; }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='完成 '+TARGET+' 对 · 最高连击 '+bestCombo; elOverlay.classList.add('show'); }
   }
 
   // ---- input ----
-  function pointerToPeg(e){
-    let x=PEGX[0];
-    try{ const rect=cv.getBoundingClientRect(); const px=(typeof e.clientX==='number'?e.clientX:0); x=((px-rect.left)/rect.width)*W; }catch(err){}
-    let bestP=0,bd=1e9; for(let p=0;p<3;p++){ const d=Math.abs(x-PEGX[p]); if(d<bd){bd=d;bestP=p;} }
-    return bestP;
+  function pointerToSym(e){
+    let sx=-1,sy=-1,side=-1,idx=-1;
+    try{
+      const rect=cv.getBoundingClientRect();
+      const px=(typeof e.clientX==='number'?e.clientX:0), py=(typeof e.clientY==='number'?e.clientY:0);
+      sx=((px-rect.left)/rect.width)*W; sy=((py-rect.top)/rect.height)*H;
+    }catch(err){}
+    const sr=symbolRadius()*1.25;
+    // check both cards
+    for(let s=0;s<2;s++){
+      const card = s===0?cardA:cardB;
+      for(let i=0;i<card.length;i++){
+        const p=symbolPos(card,i,s);
+        const d=Math.hypot(sx-p.x, sy-p.y);
+        if(d<sr) return {side:s,idx:i,sym:card[i]};
+      }
+    }
+    return null;
   }
   function onDown(e){
     if(over||auto) return;
-    const p=pointerToPeg(e); tryManualMove(p);
+    const hit=pointerToSym(e);
+    if(hit) doCorrect(hit.sym);
     e.preventDefault&&e.preventDefault();
   }
   if(cv&&cv.addEventListener){
@@ -185,85 +210,65 @@
   function update(dt){
     if(over){
       if(auto){ autoDelay-=dt; if(autoDelay<=0){ newGame(); setAuto(true);} }
-      if(invalidT>0) invalidT=Math.max(0,invalidT-dt*2.5);
       return;
     }
-    if(invalidT>0) invalidT=Math.max(0,invalidT-dt*2.5);
-    if(anim){
-      anim.t += dt/anim.dur;
-      if(anim.t>=1){ pegs[anim.to].push(anim.disk); anim=null; checkWin(); }
+    if(wrongT>0) wrongT=Math.max(0,wrongT-dt*2.5);
+    if(state==='flash'){
+      flashT+=dt;
+      if(flashT>=0.42){ newRound(); }
       return;
     }
-    if(auto && autoQueue.length>0){
+    if(auto){
       autoTimer+=dt;
-      if(autoTimer>=0.18){ autoTimer=0; const [f,t]=autoQueue.shift(); if(startMove(f,t)) moves++; }
+      const delay = (autoTimer<0.5)?0.55:0.6;
+      if(autoTimer>=delay){ autoTimer=0; autoTap(); }
     }
-    if(elMoves) elMoves.textContent=moves;
-    if(elBest) elBest.textContent= best>0?best:'--';
-  }
-  function checkWin(){
-    if(pegs[TARGET].length===N){ winGame(); }
+    if(elSolved) elSolved.textContent=completed;
+    if(elTotal) elTotal.textContent=TARGET;
+    if(elCombo) elCombo.textContent=combo;
   }
 
   // ---- render ----
-  function ease(x){ return x<0.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2; }
   function render(){
     if(!ctx) return;
     ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.clearRect(0,0,W,H);
-    // bg grid
-    ctx.strokeStyle='rgba(70,224,255,0.05)'; ctx.lineWidth=1;
-    for(let gx=0;gx<=W;gx+=42){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
-    for(let gy=0;gy<=H;gy+=42){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
-    // pegs
-    for(let p=0;p<3;p++){
-      const x=PEGX[p];
-      const hot = (selected===p) || (invalidPeg===p && invalidT>0);
-      ctx.save();
-      ctx.strokeStyle= hot ? (invalidT>0?'#ff6b8a':'#ffd23f') : '#2a3a5e';
-      ctx.lineWidth= hot?5:4; ctx.shadowColor= hot?(invalidT>0?'#ff6b8a':'#ffd23f'):'#46e0ff'; ctx.shadowBlur= hot?16:6;
-      ctx.beginPath(); ctx.moveTo(x,BASEY); ctx.lineTo(x,PEGTOP-10); ctx.stroke();
-      ctx.restore();
-      // base
-      ctx.fillStyle='#16294d'; ctx.fillRect(x-70,BASEY,140,8);
-      // target marker
-      if(p===TARGET){ ctx.fillStyle='rgba(93,255,166,0.5)'; ctx.font='bold 13px system-ui'; ctx.textAlign='center'; ctx.fillText('目标',x,BASEY+22); }
-    }
-    // disks on pegs
-    for(let p=0;p<3;p++){
-      for(let k=0;k<pegs[p].length;k++){
-        const size=pegs[p][k];
-        const lifted = (selected===p && k===pegs[p].length-1);
-        const y = restY(p,k) - (lifted?14:0);
-        drawDisk(PEGX[p], y, size, (selected===p));
-      }
-    }
-    // animating disk
-    if(anim){
-      const x0=PEGX[anim.from], x1=PEGX[anim.to];
-      const yBot0=restY(anim.from, pegs[anim.from].length), yBot1=restY(anim.to, pegs[anim.to].length);
-      const yTop=PEGTOP-6;
-      const e=ease(Math.min(1,anim.t));
-      let x,y;
-      if(anim.t<0.33){ const u=ease(anim.t/0.33); x=x0; y=yBot0+(yTop-yBot0)*u; }
-      else if(anim.t<0.66){ const u=ease((anim.t-0.33)/0.33); x=x0+(x1-x0)*u; y=yTop; }
-      else { const u=ease((anim.t-0.66)/0.34); x=x1; y=yTop+(yBot1-yTop)*u; }
-      drawDisk(x,y,anim.disk,true);
-    }
+    const g=geo();
+    // bg dots
+    ctx.fillStyle='rgba(255,122,217,0.05)';
+    for(let i=0;i<40;i++){ const x=(i*53)%W, y=(i*97)%H; ctx.beginPath(); ctx.arc(x,y,1.5,0,6.28); ctx.fill(); }
+    drawDisc(cardA,0,'#ff7ad9');
+    drawDisc(cardB,1,'#46e0ff');
   }
-  function drawDisk(x,y,size,glow){
-    const w=diskW(size), h=DISKH-3;
-    const col=COLORS[(size-1)%COLORS.length];
+  function drawDisc(card, side, col){
+    const g=geo(); const cx= side===0?g.cx1:g.cx2;
+    // disc
     ctx.save();
-    if(glow){ ctx.shadowColor=col; ctx.shadowBlur=16; }
-    const g=ctx.createLinearGradient(x-w/2,0,x+w/2,0);
-    g.addColorStop(0,col+'55'); g.addColorStop(0.5,col); g.addColorStop(1,col+'55');
-    ctx.fillStyle=g;
-    roundRect(x-w/2,y-h/2,w,h,7); ctx.fill();
-    ctx.strokeStyle='#ffffff'; ctx.globalAlpha=0.45; ctx.lineWidth=1.2; roundRect(x-w/2,y-h/2,w,h,7); ctx.stroke();
+    ctx.shadowColor=col; ctx.shadowBlur=18;
+    ctx.fillStyle='#0c1430'; ctx.beginPath(); ctx.arc(cx,g.cy,g.discR,0,6.28); ctx.fill();
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.shadowBlur=10; ctx.beginPath(); ctx.arc(cx,g.cy,g.discR,0,6.28); ctx.stroke();
     ctx.restore();
+    const sr=symbolRadius();
+    for(let i=0;i<card.length;i++){
+      const p=symbolPos(card,i,side);
+      const isCommon = (card[i]===common);
+      const isFlash = (state==='flash' && isCommon);
+      const isWrong = (wrongT>0 && wrongSym===card[i]);
+      ctx.save();
+      if(isFlash){ ctx.shadowColor='#5dffa6'; ctx.shadowBlur=22; ctx.fillStyle='rgba(93,255,166,0.18)'; }
+      else if(isWrong){ ctx.shadowColor='#ff6b8a'; ctx.shadowBlur=18; ctx.fillStyle='rgba(255,107,138,0.18)'; }
+      else { ctx.shadowColor=col; ctx.shadowBlur=8; ctx.fillStyle='rgba(255,255,255,0.05)'; }
+      ctx.beginPath(); ctx.arc(p.x,p.y,sr*1.05,0,6.28); ctx.fill();
+      ctx.strokeStyle= isFlash?'#5dffa6':(isWrong?'#ff6b8a':col+'88'); ctx.lineWidth=1.4; ctx.beginPath(); ctx.arc(p.x,p.y,sr*1.05,0,6.28); ctx.stroke();
+      ctx.restore();
+      // emoji
+      ctx.save();
+      ctx.font=(sr*1.15)+'px system-ui';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(EMOJI[card[i]]||'?', p.x, p.y+1);
+      ctx.restore();
+    }
   }
-  function roundRect(x,y,w,h,r){ if(!ctx) return; ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 
   function frame(ts){
     const now=(typeof performance!=='undefined'?(ts!==undefined?ts:performance.now()):Date.now());
@@ -279,17 +284,16 @@
   window.game={
     get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
     get over(){return over;}, get won(){return won;},
-    get score(){return moves;}, get remaining(){return N-pegs[TARGET].length;},
-    get best(){return best;}, get moves(){return moves;},
+    get score(){return completed;}, get remaining(){return TARGET-completed;},
+    get combo(){return combo;}, get best(){return bestCombo;},
     startAuto(){ setAuto(true); }, toggleAuto(){ setAuto(!auto); }, restart(){ newGame(); setAuto(false); }
   };
   window.__test={
     setAuto(v){ setAuto(!!v); },
     tick(dt){ update(dt); render(); },
     get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
-    get score(){return moves;}, get remaining(){return N-pegs[TARGET].length;}, get best(){return best;}, get moves(){return moves;},
-    move(from,to){ tryManualMove(to); /* selects then moves in two calls */ },
-    selectPeg(p){ tryManualMove(p); }
+    get score(){return completed;}, get remaining(){return TARGET-completed;}, get combo(){return combo;}, get best(){return bestCombo;},
+    tapSym(sym){ doCorrect(sym); }, getCommon(){ return common; }, getState(){ return state; }
   };
 })();
 </script>
