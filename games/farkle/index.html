@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a0f2e" />
+<title>霓虹骰子 · Neon Farkle</title>
+<style>
+  :root { --bg:#1a0f2e; --surface:#241640; --board:#1d1236; --text:#f3ecff; --muted:#a98fd6; --accent:#c46bff; --accent-glow:#c46bff55; --gold:#ffd23f; --red:#ff5d6a; --green:#4dffa0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #3a1f66 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #241040 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#e6b3ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .score-card.round .value { color:var(--green); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .bar-wrap { margin-top:10px; }
+  .bar-label { display:flex; justify-content:space-between; font-size:0.7rem; color:var(--muted); margin-bottom:4px; }
+  .bar { height:12px; background:var(--board); border-radius:8px; overflow:hidden; border:1px solid #ffffff0a; }
+  .bar-fill { height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--gold)); transition:width .35s; }
+  .overlay { position:absolute; inset:10px; display:flex; align-items:center; justify-content:center; border-radius:10px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#1a0f2eee; backdrop-filter:blur(4px); border-radius:10px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#1a0f2e; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0f2e; animation:pulse 1.6s infinite; }
+  .btn:disabled { opacity:0.4; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .hint { margin-top:6px; font-size:0.66rem; color:var(--muted); text-align:center; opacity:.8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹骰子</h1>
+      <div class="sub">N E O N &nbsp; F A R K L E</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card"><div class="label">总分</div><div class="value" id="score">0</div></div>
+      <div class="score-card round"><div class="label">本轮</div><div class="value" id="round">0</div></div>
+      <div class="score-card best"><div class="label">最高</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="board-wrap">
+      <canvas id="game" width="380" height="300"></canvas>
+      <div class="overlay" id="overlay-end">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2 id="end-title">胜利!</h2>
+          <p id="end-msg"></p>
+          <button class="btn primary" onclick="game.restart()">再来一局</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bar-wrap">
+    <div class="bar-label"><span>进度</span><span id="bar-text">0 / 10000</span></div>
+    <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="btn-roll" onclick="game.roll()">投掷</button>
+    <button class="btn" id="btn-bank" onclick="game.bank()">收分</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 投掷中…</span>
+  </div>
+  <div class="status" id="status">点「投掷」掷出 6 颗骰子，得分骰高亮；再投有风险，归零即 Farkle</div>
+  <div class="hint">目标 10000 分 · 1/5 各计 100/50，三同 100×面，顺子/三对 1500</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const TARGET=10000;
+  const PIPS={1:[[.5,.5]],2:[[.25,.25],[.75,.75]],3:[[.25,.25],[.5,.5],[.75,.75]],4:[[.25,.25],[.75,.25],[.25,.75],[.75,.75]],5:[[.25,.25],[.75,.25],[.5,.5],[.25,.75],[.75,.75]],6:[[.25,.25],[.75,.25],[.25,.5],[.75,.5],[.25,.75],[.75,.75]]};
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const scoreEl=document.getElementById('score'), roundEl=document.getElementById('round'), bestEl=document.getElementById('best');
+  const barFill=document.getElementById('bar-fill'), barText=document.getElementById('bar-text');
+  const statusEl=document.getElementById('status'), btnRoll=document.getElementById('btn-roll'), btnBank=document.getElementById('btn-bank');
+  const overlayEnd=document.getElementById('overlay-end'), endTitle=document.getElementById('end-title'), endMsg=document.getElementById('end-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  function evalRoll(values){
+    const idxByFace={}; values.forEach((v,i)=>{ (idxByFace[v]=idxByFace[v]||[]).push(i); });
+    const counts={}; values.forEach(v=>counts[v]=(counts[v]||0)+1);
+    let pts=0; const scoring=new Set();
+    if(values.length===6 && [1,2,3,4,5,6].every(v=>counts[v]===1)){ values.forEach((_,i)=>scoring.add(i)); return {points:1500, scoring, allScored:true}; }
+    if(values.length===6 && Object.values(counts).filter(c=>c===2).length===3){ values.forEach((_,i)=>scoring.add(i)); return {points:1500, scoring, allScored:true}; }
+    for(let f=1;f<=6;f++){
+      const c=counts[f]||0;
+      if(c>=3){
+        let p = f===1?1000:f*100;
+        if(c===4) p=1000; else if(c===5) p=2000; else if(c===6) p=3000;
+        pts+=p; (idxByFace[f]||[]).forEach(i=>scoring.add(i));
+      }
+    }
+    for(const f of [1,5]){
+      for(const i of (idxByFace[f]||[])){ if(scoring.has(i)) continue; pts += (f===1?100:50); scoring.add(i); }
+    }
+    return {points:pts, scoring, allScored: scoring.size===values.length};
+  }
+  function rndDie(){ return 1+Math.floor(Math.random()*6); }
+
+  class Game {
+    constructor(){
+      this.autoPlay=false; this.won=false; this.score=0;
+      this.best=parseInt(localStorage.getItem('farkleBest')||'0'); bestEl.textContent=this.best;
+      this.dice=[]; this.particles=[]; this.floaters=[]; this.rollAnim=0; this._flick=-1;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.newTurn(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const r=canvas.getBoundingClientRect();
+      const w=Math.max(260,Math.min(r.width||380,420));
+      const d=window.devicePixelRatio||1; this.W=w; this.H=w*300/380;
+      canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0);
+    }
+    newTurn(){
+      this.roundTotal=0; this.state='idle'; this.lastPoints=0; this.lastAllScored=false;
+      this.dice=Array.from({length:6},()=>({value:rndDie(), scoring:false, glow:0}));
+      this.updateHud(); this.updateButtons();
+      if(this.autoPlay){ statusEl.textContent='AI 思考中…'; setTimeout(()=>{ if(this.autoPlay) this.roll(); }, 500); }
+      else statusEl.textContent='点「投掷」掷出 6 颗骰子';
+    }
+    updateHud(){
+      scoreEl.textContent=this.score; roundEl.textContent=this.roundTotal;
+      const pct=Math.min(100, this.score/TARGET*100); barFill.style.width=pct+'%'; barText.textContent=this.score+' / '+TARGET;
+      if(this.score>this.best){ this.best=this.score; localStorage.setItem('farkleBest',String(this.best)); bestEl.textContent=this.best; }
+    }
+    updateButtons(){
+      const canRoll = (this.state==='idle'||this.state==='scored') && !this.autoPlay && !this.won;
+      const canBank = this.state==='scored' && !this.autoPlay && !this.won;
+      btnRoll.disabled=!canRoll; btnBank.disabled=!canBank;
+    }
+    roll(){
+      if(this.won) return;
+      if(!(this.state==='idle'||this.state==='scored')) return;
+      this.state='rolling'; this.rollAnim=0; this._flick=-1; this.lastPoints=0;
+      this.pending=Array.from({length:6},rndDie);
+      this.dice=this.dice.map(()=>({value:rndDie(), scoring:false, glow:0}));
+      this.updateButtons(); statusEl.textContent='投掷中…';
+    }
+    finalizeRoll(){
+      this.dice=this.pending.map(v=>({value:v, scoring:false, glow:0}));
+      const res=evalRoll(this.pending);
+      this.lastPoints=res.points; this.lastAllScored=res.allScored;
+      if(res.points===0){
+        this.state='farkle'; this.farkled=true;
+        statusEl.textContent='Farkle! 本轮 '+this.roundTotal+' 分清零';
+        this.spawnFloat('FARKLE!', '#ff5d6a');
+        this.updateButtons();
+        if(this.autoPlay){ setTimeout(()=>{ if(this.autoPlay){ this.roundTotal=0; this.newTurn(); } }, 900); }
+        return;
+      }
+      this.roundTotal+=res.points;
+      this.dice.forEach((d,i)=>{ if(res.scoring.has(i)){ d.scoring=true; d.glow=1; } });
+      this.state='scored';
+      this.spawnFloat('+'+res.points, '#4dffa0');
+      this.updateHud(); this.updateButtons();
+      statusEl.textContent='得 '+res.points+' 分 · 可再投或收分';
+      if(this.autoPlay){ setTimeout(()=>{ if(this.autoPlay) this.autoDecide(); }, 600); }
+    }
+    autoDecide(){
+      if(this.state==='won'||this.won) return;
+      if(this.state==='scored'){
+        const wouldWin=this.score+this.roundTotal>=TARGET;
+        if(wouldWin){ this.bank(); return; }
+        if(this.lastAllScored){ this.roll(); return; }
+        if(this.roundTotal>=450){ this.bank(); return; }
+        this.roll();
+      } else if(this.state==='idle'){ this.roll(); }
+    }
+    bank(){
+      if(this.won) return;
+      if(this.state!=='scored') return;
+      this.score+=this.roundTotal; this.updateHud();
+      this.spawnFloat('收分 +'+this.roundTotal, '#ffd23f');
+      if(this.score>=TARGET){ this.win(); return; }
+      this.roundTotal=0; this.newTurn();
+    }
+    win(){
+      this.won=true; this.state='won';
+      endTitle.textContent='胜利!'; endTitle.style.color='#ffd23f';
+      endMsg.textContent='达到 '+TARGET+' 分 · 总分 '+this.score;
+      overlayEnd.classList.add('active');
+      this.spawnConfetti();
+      this.updateButtons();
+      if(this.autoPlay){ setTimeout(()=>{ if(this.autoPlay) this.restart(); }, 2200); }
+    }
+    restart(){
+      this.stopAuto(false); this.won=false; this.score=0; this.roundTotal=0;
+      overlayEnd.classList.remove('active'); this.particles=[]; this.floaters=[];
+      this.newTurn();
+      if(this.autoPlay) this.startAuto();
+    }
+    spawnFloat(text,color){ this.floaters.push({text,color,x:this.W/2,y:this.H/2,life:1}); }
+    spawnConfetti(){
+      for(let i=0;i<70;i++) this.particles.push({x:this.W/2,y:this.H/3,vx:(Math.random()*2-1)*200,vy:(Math.random()*2-1)*200-80,life:1,color:Math.random()<0.5?'#ffd23f':'#c46bff',size:3+Math.random()*4});
+    }
+    update(dt){
+      if(this.state==='rolling'){
+        this.rollAnim+=dt;
+        if(this.rollAnim>=0.5) this.finalizeRoll();
+        else { const f=Math.floor(this.rollAnim*22); if(f!==this._flick){ this._flick=f; this.dice=this.dice.map(d=>({...d,value:rndDie()})); } }
+      }
+      for(let i=this.dice.length-1;i>=0;i--){ if(this.dice[i].glow>0) this.dice[i].glow=Math.max(0,this.dice[i].glow-dt*1.5); }
+      for(let i=this.floaters.length-1;i>=0;i--){ const f=this.floaters[i]; f.y-=40*dt; f.life-=dt*1.1; if(f.life<=0) this.floaters.splice(i,1); }
+      for(let i=this.particles.length-1;i>=0;i--){ const p=this.particles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=420*dt; p.life-=dt*0.9; if(p.life<=0) this.particles.splice(i,1); }
+    }
+    roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    drawDie(x,y,s,d){
+      ctx.save();
+      if(d.scoring){ ctx.shadowColor='#4dffa0'; ctx.shadowBlur=18; ctx.fillStyle='#2a1f4d'; }
+      else { ctx.fillStyle='#f3ecff'; }
+      this.roundRect(x,y,s,s,s*0.18); ctx.fill();
+      ctx.shadowBlur=0;
+      const col=d.scoring?'#1a0f2e':'#2a1f4d';
+      const pip=PIPS[d.value]||[];
+      for(const [px,py] of pip){ ctx.beginPath(); ctx.arc(x+px*s,y+py*s,s*0.09,0,7); ctx.fillStyle=col; ctx.fill(); }
+      ctx.restore();
+    }
+    draw(){
+      ctx.clearRect(0,0,this.W,this.H);
+      const n=6, cols=3, rows=2, pad=10;
+      const gw=(this.W-pad*(cols+1))/cols, gh=(this.H-pad*(rows+1))/rows;
+      const s=Math.min(gw,gh);
+      for(let i=0;i<n;i++){
+        const cx=pad+(i%cols)*(gw+pad)+(gw-s)/2, cy=pad+Math.floor(i/cols)*(gh+pad)+(gh-s)/2;
+        const d=this.dice[i];
+        if(d.scoring){ const pulse=0.5+0.5*Math.sin(performance.now()/140); ctx.save(); ctx.globalAlpha=0.25+0.2*pulse; ctx.fillStyle='#4dffa0'; this.roundRect(cx-4,cy-4,s+8,s+8,s*0.22); ctx.fill(); ctx.restore(); }
+        this.drawDie(cx,cy,s,d);
+      }
+      for(const f of this.floaters){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life); ctx.fillStyle=f.color; ctx.font='bold 28px Segoe UI, sans-serif'; ctx.textAlign='center'; ctx.fillText(f.text,f.x,f.y); ctx.restore(); }
+      for(const p of this.particles){ ctx.save(); ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size); ctx.restore(); }
+    }
+    loop(ts){
+      requestAnimationFrame(this.loop);
+      try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }
+      catch(err){ console.error('LOOP', err); }
+    }
+    bindInput(){ document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false}); }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){
+      this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
+      aiInd.style.display='flex'; this.newTurn();
+    }
+    stopAuto(silent){ this.autoPlay=false; const b=document.getElementById('btn-auto'); if(b){ b.textContent='自动: 关'; b.classList.remove('auto-on'); } aiInd.style.display='none'; if(!silent) this.updateButtons(); }
+  }
+  window.game=new Game();
+})();
+</script>
+</body>
+</html>

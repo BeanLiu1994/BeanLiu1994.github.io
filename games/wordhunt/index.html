@@ -151,7 +151,7 @@
     solve(){
       const res={}; const g=this.grid;
       const dfs=(r,c,str,vis,path)=>{
-        str+=g[r][c]; path.push([r,c]);
+        str+=g[r][c]; path.push({r,c});
         if(str.length>=3 && DSET.has(str) && !res[str]) res[str]=path.slice();
         if(str.length<7){ for(const [dr,dc] of NB){ const nr=r+dr,nc=c+dc; if(nr>=0&&nr<N&&nc>=0&&nc<N&&!vis.has(nr+','+nc)){ vis.add(nr+','+nc); dfs(nr,nc,str,vis,path); vis.delete(nr+','+nc); } } }
         path.pop();
@@ -217,7 +217,7 @@
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoPath=null; this.autoCD=0.4; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
-    restart(){ this.stopAuto(); this.over=false; this.score=0; scoreEl.textContent='0'; foundEl.textContent='0'; this.timeLeft=90; this.maxTime=90; timeFill.style.width='100%'; this.foundSet=new Set(); wordList.innerHTML=''; this.path=[]; this.drag=false; this.autoPath=null; this.autoCD=0; this.genGrid(); overlayLose.classList.remove('active'); statusEl.textContent='滑动连接相邻字母组成单词（可斜向），松手提交'; if(this.autoPlay) this.autoTick(); }
+    restart(){ const wasAuto=this.autoPlay; this.stopAuto(); this.over=false; this.score=0; scoreEl.textContent='0'; foundEl.textContent='0'; this.timeLeft=90; this.maxTime=90; timeFill.style.width='100%'; this.foundSet=new Set(); wordList.innerHTML=''; this.path=[]; this.drag=false; this.autoPath=null; this.autoCD=0; this.genGrid(); overlayLose.classList.remove('active'); statusEl.textContent='滑动连接相邻字母组成单词（可斜向），松手提交'; if(wasAuto) this.startAuto(); }
   }
   window.game=new Hunt();
 })();

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a1a14" />
+<title>霓虹点球 · Neon Penalty</title>
+<style>
+  :root { --bg:#0a1a14; --surface:#0f2a20; --board:#0c2018; --text:#eaffe9; --muted:#6fbfa0; --accent:#27e0a8; --accent-glow:#27e0a855; --gold:#ffd23f; --red:#ff5d6a; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #114a36 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #08221a 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:440px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#9affd9); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:64px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.you .value { color:var(--accent); }
+  .score-card.ai .value { color:var(--red); }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:10px; display:flex; align-items:center; justify-content:center; border-radius:10px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#0a1a14ee; backdrop-filter:blur(4px); border-radius:10px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#0a1a14; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a1a14; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .hint { margin-top:6px; font-size:0.66rem; color:var(--muted); text-align:center; opacity:.8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹点球</h1>
+      <div class="sub">N E O N &nbsp; P E N A L T Y</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card you"><div class="label">我方</div><div class="value" id="you">0</div></div>
+      <div class="score-card ai"><div class="label">对手</div><div class="value" id="ai">0</div></div>
+      <div class="score-card"><div class="label">回合</div><div class="value" id="round">1</div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="board-wrap">
+      <canvas id="game" width="380" height="420"></canvas>
+      <div class="overlay" id="overlay-end">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2 id="end-title">比赛结束</h2>
+          <p id="end-msg"></p>
+          <button class="btn primary" onclick="game.restart()">再来一局</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新比赛</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 攻防演示中…</span>
+  </div>
+  <div class="status" id="status">点击球门选择射门角度，躲开门将封堵</div>
+  <div class="hint">5 轮制，平局进入突然死亡 · 自动模式下双方均由 AI 对决</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const KEEPER_SKILL=0.5;
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const youEl=document.getElementById('you'), aiEl=document.getElementById('ai'), roundEl=document.getElementById('round');
+  const statusEl=document.getElementById('status');
+  const overlayEnd=document.getElementById('overlay-end'), endTitle=document.getElementById('end-title'), endMsg=document.getElementById('end-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  // 6 zones: columns L/C/R (0,1,2), rows low/high (0,1)
+  function zones(){
+    const gw=this.W*0.62, gh=this.H*0.34, gx=(this.W-gw)/2, gy=this.H*0.12;
+    this.goal={x:gx,y:gy,w:gw,h:gh};
+    const cols=[gx+gw*0.22, gx+gw*0.5, gx+gw*0.78];
+    const rows=[gy+gh*0.68, gy+gh*0.30];
+    this.zones=[]; for(let r=0;r<2;r++) for(let c=0;c<3;c++) this.zones.push({x:cols[c], y:rows[r], col:c, row:r});
+    this.spot={x:this.W/2, y:this.H*0.82};
+  }
+
+  class Game {
+    constructor(){
+      this.autoPlay=false; this.matchOver=false; this.winner=null;
+      this.particles=[]; this.floaters=[]; this.trail=[];
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.startMatch(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const r=canvas.getBoundingClientRect();
+      const w=Math.max(260,Math.min(r.width||380,440));
+      const d=window.devicePixelRatio||1; this.W=w; this.H=w*420/380;
+      canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0);
+      zones.call(this);
+    }
+    startMatch(){
+      this.ourGoals=0; this.theirGoals=0; this.round=1; this.turn='shoot';
+      this.matchOver=false; this.winner=null; this.ball=null; this.keeper={zone:4,dive:0};
+      this.phase='idle'; this.saved=false; this.ballT=0; this.resultTimer=0;
+      overlayEnd.classList.remove('active'); this.particles=[]; this.floaters=[]; this.trail=[];
+      this.updateHud(); this.beginShot();
+    }
+    restart(){ this.stopAuto(false); this.startMatch(); if(this.autoPlay) this.startAuto(); }
+    updateHud(){ youEl.textContent=this.ourGoals; aiEl.textContent=this.theirGoals; roundEl.textContent=this.round; }
+    beginShot(){
+      this.phase='aim'; this.ballT=0; this.saved=false; this.trail=[];
+      this.shooterZone = (this.autoPlay || this.turn==='defend') ? this.aiShooterPick() : null;
+      this.keeperZone = this.aiKeeperPick(this.shooterZone);
+      this.ball = { x:this.spot.x, y:this.spot.y };
+      this.keeper.dive=0;
+      const autoShot = this.autoPlay || this.turn==='defend';
+      if(autoShot){ statusEl.textContent = this.turn==='shoot' ? '我方 AI 主罚…' : '对手主罚，我方 AI 扑救…'; setTimeout(()=>{ if(!this.matchOver && (this.autoPlay||this.turn==='defend')) this.doShot(this.shooterZone); }, 420); }
+      else { statusEl.textContent='点击球门选择射门角度'; }
+    }
+    aiShooterPick(){ return Math.floor(Math.random()*6); }
+    aiKeeperPick(shooterZone){
+      if(shooterZone==null) return Math.floor(Math.random()*6);
+      if(Math.random()<KEEPER_SKILL) return shooterZone;
+      let z; do { z=Math.floor(Math.random()*6); } while(z===shooterZone); return z;
+    }
+    doShot(zone){
+      if(zone==null) return;
+      this.shooterZone=zone; this.phase='shoot'; this.ballT=0; this.trail=[];
+    }
+    resolveShot(){
+      this.saved = (this.keeperZone===this.shooterZone);
+      this.phase='result'; this.resultTimer=0;
+      const who = this.turn==='shoot' ? 'our' : 'their';
+      if(this.saved){
+        this.spawnFloat('SAVE!', '#ff5d6a');
+        if(who==='our') statusEl.textContent='被扑出！';
+        else statusEl.textContent='我方门将扑出！';
+        // deflect ball
+        const z=this.zones[this.shooterZone];
+        this.ball={x:z.x, y:z.y, vx:(z.x<this.W/2?-1:1)*180, vy:-120};
+      } else {
+        this.spawnFloat('GOAL!', '#27e0a8');
+        if(who==='our'){ this.ourGoals++; statusEl.textContent='进球！'; } else { this.theirGoals++; statusEl.textContent='对手进球'; }
+      }
+      this.updateHud();
+      setTimeout(()=>{ if(!this.matchOver) this.nextTurn(); }, 900);
+    }
+    nextTurn(){
+      if(this.turn==='shoot'){ this.turn='defend'; this.beginShot(); }
+      else {
+        this.turn='shoot'; this.round++;
+        if(this.round>5 && this.ourGoals!==this.theirGoals){ this.endMatch(); return; }
+        if(this.round>5) statusEl.textContent='突然死亡！';
+        this.beginShot();
+      }
+    }
+    endMatch(){
+      this.matchOver=true;
+      this.winner = this.ourGoals>this.theirGoals ? 'you' : (this.theirGoals>this.ourGoals ? 'ai' : 'draw');
+      const youWin = this.winner==='you';
+      endTitle.textContent = this.winner==='draw'?'平局':(youWin?'我方胜!':'对手胜');
+      endTitle.style.color = this.winner==='draw'?'#fff':(youWin?'#27e0a8':'#ff5d6a');
+      endMsg.textContent = `我方 ${this.ourGoals} - ${this.theirGoals} 对手`;
+      overlayEnd.classList.add('active');
+      this.spawnConfetti(youWin?'#27e0a8':'#ff5d6a');
+      if(this.autoPlay){ setTimeout(()=>{ if(this.autoPlay) this.restart(); }, 2200); }
+    }
+    spawnFloat(text,color){ this.floaters.push({text,color,x:this.W/2,y:this.H*0.5,life:1}); }
+    spawnConfetti(color){
+      for(let i=0;i<70;i++) this.particles.push({x:this.W/2,y:this.H*0.4,vx:(Math.random()*2-1)*200,vy:(Math.random()*2-1)*200-80,life:1,color:Math.random()<0.5?color:'#ffd23f',size:3+Math.random()*4});
+    }
+    update(dt){
+      if(this.phase==='shoot'){
+        this.ballT+=dt/0.62;
+        const z=this.zones[this.shooterZone];
+        if(this.ballT>=1){ this.ballT=1; this.resolveShot(); }
+        else {
+          const t=this.ballT;
+          const x=this.spot.x+(z.x-this.spot.x)*t;
+          const arc=Math.sin(t*Math.PI)*this.H*0.18;
+          const y=this.spot.y+(z.y-this.spot.y)*t - arc;
+          this.ball={x,y};
+          this.trail.push({x,y}); if(this.trail.length>10) this.trail.shift();
+        }
+        this.keeper.dive=Math.min(1,this.keeper.dive+dt/0.35);
+      } else if(this.phase==='result'){
+        this.resultTimer+=dt;
+        if(this.saved && this.ball){ this.ball.x+=(this.ball.vx||0)*dt; this.ball.y+=(this.ball.vy||0)*dt; this.ball.vy=(this.ball.vy||0)+400*dt; }
+        this.keeper.dive=Math.min(1,this.keeper.dive+dt/0.35);
+      } else { this.keeper.dive=Math.max(0,this.keeper.dive-dt/0.4); }
+      for(let i=this.floaters.length-1;i>=0;i--){ const f=this.floaters[i]; f.y-=40*dt; f.life-=dt*1.1; if(f.life<=0) this.floaters.splice(i,1); }
+      for(let i=this.particles.length-1;i>=0;i--){ const p=this.particles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=420*dt; p.life-=dt*0.9; if(p.life<=0) this.particles.splice(i,1); }
+    }
+    drawGoal(){
+      const g=this.goal;
+      ctx.save();
+      // net
+      ctx.strokeStyle='#ffffff14'; ctx.lineWidth=1;
+      for(let x=g.x; x<=g.x+g.w; x+=14){ ctx.beginPath(); ctx.moveTo(x,g.y); ctx.lineTo(x,g.y+g.h); ctx.stroke(); }
+      for(let y=g.y; y<=g.y+g.h; y+=14){ ctx.beginPath(); ctx.moveTo(g.x,y); ctx.lineTo(g.x+g.w,y); ctx.stroke(); }
+      // frame
+      ctx.strokeStyle='#eafff7'; ctx.lineWidth=5; ctx.shadowColor='#27e0a8'; ctx.shadowBlur=14;
+      ctx.beginPath(); ctx.moveTo(g.x,g.y+g.h); ctx.lineTo(g.x,g.y); ctx.lineTo(g.x+g.w,g.y); ctx.lineTo(g.x+g.w,g.y+g.h); ctx.stroke();
+      ctx.restore();
+      // zone hints (aim feedback)
+      if(!this.autoPlay && this.phase==='aim' && this.turn==='shoot'){
+        for(const z of this.zones){ ctx.save(); ctx.strokeStyle='#27e0a855'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(z.x,z.y,12,0,7); ctx.stroke(); ctx.restore(); }
+      }
+    }
+    drawKeeper(){
+      const g=this.goal;
+      const baseX=g.x+g.w/2, baseY=g.y+g.h-6;
+      const kz=this.zones[this.keeperZone];
+      const dx=(kz.x-baseX)*this.keeper.dive, dy=(kz.y-baseY)*this.keeper.dive;
+      const x=baseX+dx, y=baseY+dy;
+      ctx.save(); ctx.shadowColor='#ff5d6a'; ctx.shadowBlur=12; ctx.fillStyle='#ff5d6a';
+      ctx.beginPath(); ctx.arc(x,y-22,11,0,7); ctx.fill(); // head
+      ctx.fillRect(x-14,y-12,28,30); // body
+      ctx.restore();
+    }
+    drawBall(){
+      if(!this.ball) return;
+      for(let i=0;i<this.trail.length;i++){ const t=this.trail[i]; ctx.save(); ctx.globalAlpha=i/this.trail.length*0.4; ctx.fillStyle='#ffd23f'; ctx.beginPath(); ctx.arc(t.x,t.y,5,0,7); ctx.fill(); ctx.restore(); }
+      ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=14; ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,8,0,7); ctx.fill(); ctx.restore();
+    }
+    draw(){
+      ctx.clearRect(0,0,this.W,this.H);
+      // pitch
+      ctx.fillStyle='#0e261c'; ctx.fillRect(0,this.goal.y+this.goal.h, this.W, this.H-(this.goal.y+this.goal.h));
+      this.drawGoal(); this.drawKeeper(); this.drawBall();
+      for(const f of this.floaters){ ctx.save(); ctx.globalAlpha=Math.max(0,f.life); ctx.fillStyle=f.color; ctx.font='bold 34px Segoe UI, sans-serif'; ctx.textAlign='center'; ctx.fillText(f.text,f.x,f.y); ctx.restore(); }
+      for(const p of this.particles){ ctx.save(); ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size); ctx.restore(); }
+    }
+    loop(ts){
+      requestAnimationFrame(this.loop);
+      try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }
+      catch(err){ console.error('LOOP', err); }
+    }
+    bindInput(){
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.autoPlay||this.matchOver) return; if(this.phase!=='aim'||this.turn!=='shoot') return;
+        const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height);
+        // pick nearest zone
+        let best=0,bd=1e9; for(let i=0;i<6;i++){ const z=this.zones[i]; const d=(z.x-x)**2+(z.y-y)**2; if(d<bd){bd=d;best=i;} }
+        this.doShot(best);
+      });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.startMatch(); }
+    stopAuto(silent){ this.autoPlay=false; const b=document.getElementById('btn-auto'); if(b){ b.textContent='自动: 关'; b.classList.remove('auto-on'); } aiInd.style.display='none'; }
+  }
+  window.game=new Game();
+})();
+</script>
+</body>
+</html>

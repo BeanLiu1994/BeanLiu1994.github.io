@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#06121a" />
+<title>霓虹双蛇 · Serpent Duel</title>
+<style>
+  :root { --bg:#06121a; --surface:#0c2030; --board:#08161f; --text:#eafff7; --muted:#6fb8a8; --accent:#27e0a8; --accent2:#ff5d8f; --accent-glow:#27e0a855; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { background:var(--bg); background-image:radial-gradient(ellipse at 50% 0%, #0e3a44 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #08222b 0%, transparent 60%); color:var(--text); font-family:'Segoe UI', system-ui, -apple-system, sans-serif; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; touch-action:none; }
+  .container { width:100%; max-width:460px; padding:14px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+  .title-block h1 { font-size:1.6rem; font-weight:800; letter-spacing:-1px; background:linear-gradient(135deg,var(--accent),#9affff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1; }
+  .title-block .sub { font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:2px; }
+  .score-panel { display:flex; gap:8px; }
+  .score-card { background:var(--surface); border:1px solid #ffffff0a; border-radius:10px; padding:5px 12px; text-align:center; min-width:54px; }
+  .score-card .label { font-size:0.5rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+  .score-card .value { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score-card.best .value { color:var(--gold); }
+  .score-card.p1 .value { color:var(--accent); }
+  .score-card.p2 .value { color:var(--accent2); }
+  .main { position:relative; }
+  .board-wrap { position:relative; background:var(--surface); border:1px solid #ffffff0a; border-radius:14px; padding:10px; box-shadow:0 0 40px #00000030, 0 0 70px var(--accent-glow); }
+  .board-wrap, .board-wrap * { touch-action:none; -webkit-touch-callout:none; }
+  canvas { display:block; width:100%; border-radius:10px; background:var(--board); }
+  .overlay { position:absolute; inset:10px; display:flex; align-items:center; justify-content:center; border-radius:10px; z-index:10; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .overlay.active { opacity:1; pointer-events:auto; }
+  .overlay-bg { position:absolute; inset:0; background:#06121aee; backdrop-filter:blur(4px); border-radius:10px; }
+  .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
+  .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
+  .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .controls { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
+  .btn:hover { background:#ffffff10; }
+  .btn:active { transform:scale(0.97); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#06121a; }
+  .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06121a; animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
+  .ai-indicator { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:0.75rem; color:var(--muted); justify-content:center; min-height:20px; }
+  .ai-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:blink .8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
+  .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+  .hint { margin-top:6px; font-size:0.66rem; color:var(--muted); text-align:center; opacity:.8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹双蛇</h1>
+      <div class="sub">S E R P E N T &nbsp; D U E L</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card p1"><div class="label">青蛇</div><div class="value" id="p1">0</div></div>
+      <div class="score-card p2"><div class="label">粉蛇</div><div class="value" id="p2">0</div></div>
+      <div class="score-card best"><div class="label">最长</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="board-wrap">
+      <canvas id="game" width="420" height="420"></canvas>
+      <div class="overlay" id="overlay-end">
+        <div class="overlay-bg"></div>
+        <div class="overlay-content">
+          <h2 id="end-title">回合结束</h2>
+          <p id="end-msg"></p>
+          <button class="btn primary" onclick="game.restart()">再来一局</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" onclick="game.restart()">新对局</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
+  </div>
+  <div class="ai-indicator" id="ai-indicator" style="display:none">
+    <div class="ai-dot"></div><span id="ai-status">AI 双蛇博弈中…</span>
+  </div>
+  <div class="status" id="status">方向键 / 滑动控制青蛇，吃光点变长，撞墙或撞身即出局</div>
+  <div class="hint">自动模式下双蛇均由 AI 对弈，直至一方出局</div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const COLS=21, ROWS=21, STEP=0.12;
+  const COL1='#27e0a8', COL2='#ff5d8f';
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  const p1El=document.getElementById('p1'), p2El=document.getElementById('p2'), bestEl=document.getElementById('best');
+  const statusEl=document.getElementById('status');
+  const overlayEnd=document.getElementById('overlay-end'), endTitle=document.getElementById('end-title'), endMsg=document.getElementById('end-msg');
+  const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  const key=(c,r)=>c+','+r;
+  function lerp(a,b,t){ return a+(b-a)*t; }
+
+  class Snake {
+    constructor(body, dir, color, ai){ this.cells=body; this.dir=dir; this.color=color; this.ai=ai; this.alive=true; this.prev=body.map(c=>({c:c.c,r:c.r})); this.pendingDir=dir; }
+  }
+
+  class Game {
+    constructor(){
+      this.autoPlay=false; this.over=false; this.roundOver=false; this.winner=null;
+      this.p1=0; this.p2=0; this.best=parseInt(localStorage.getItem('serpBest')||'0'); bestEl.textContent=this.best;
+      this.particles=[]; this.animT=0; this.celebrateUntil=0;
+      this.fit(); window.addEventListener('resize',()=>this.fit());
+      this.bindInput();
+      this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
+    }
+    fit(){
+      const r=canvas.getBoundingClientRect();
+      const w=Math.max(260,Math.min(r.width||420,440));
+      const d=window.devicePixelRatio||1;
+      this.W=w; this.H=w; canvas.width=w*d; canvas.height=w*d; ctx.setTransform(d,0,0,d,0,0);
+      this.T=this.W/COLS;
+    }
+    occupiedSet(exceptGrow){
+      const s=new Set();
+      for(const sn of this.snakes){
+        const keep = (sn.willGrow? sn.cells.length : sn.cells.length-1);
+        for(let i=0;i<keep;i++) s.add(key(sn.cells[i].c,sn.cells[i].r));
+      }
+      return s;
+    }
+    emptyCells(){
+      const occ=new Set();
+      for(const sn of this.snakes) for(const c of sn.cells) occ.add(key(c.c,c.r));
+      const out=[];
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(!occ.has(key(c,r))) out.push({c,r});
+      return out;
+    }
+    placeFood(){ const e=this.emptyCells(); if(e.length) this.food=e[Math.floor(Math.random()*e.length)]; else this.food=null; }
+    buildSnakes(){
+      const b1=[{c:5,r:10},{c:4,r:10},{c:3,r:10}];
+      const b2=[{c:COLS-6,r:10},{c:COLS-5,r:10},{c:COLS-4,r:10}];
+      this.snakes=[ new Snake(b1,{x:1,y:0},COL1,true), new Snake(b2,{x:-1,y:0},COL2,true) ];
+      // manual: player controls snake 1
+      if(!this.autoPlay) this.snakes[0].ai=false;
+    }
+    restart(){
+      this.stopAuto(false); this.over=false; this.roundOver=false; this.winner=null;
+      this.particles=[]; this.animT=0; this.celebrateUntil=0;
+      overlayEnd.classList.remove('active');
+      this.buildSnakes(); this.placeFood();
+      statusEl.textContent='方向键 / 滑动控制青蛇，吃光点变长，撞墙或撞身即出局';
+      this.updateScore();
+      if(this.autoPlay) this.startAuto();
+    }
+    updateScore(){
+      p1El.textContent=this.p1; p2El.textContent=this.p2;
+      const longest=Math.max(this.best, ...this.snakes.map(s=>s.cells.length));
+      if(longest>this.best){ this.best=longest; localStorage.setItem('serpBest',String(this.best)); }
+      bestEl.textContent=this.best;
+    }
+    neighbors(c,r){ return [ {c:c+1,r:r}, {c:c-1,r:r}, {c:c,r:r+1}, {c:c,r:r-1} ]; }
+    isReverse(a,b){ return a.x===-b.x && a.y===-b.y; }
+    bfs(start, goal, occ){
+      const q=[start]; const prev=new Map(); prev.set(key(start.c,start.r),null);
+      while(q.length){
+        const cur=q.shift();
+        if(cur.c===goal.c && cur.r===goal.r){
+          const path=[]; let k=key(cur.c,cur.r); let node=cur;
+          while(node){ path.unshift(node); const p=prev.get(key(node.c,node.r)); node=p; }
+          return path;
+        }
+        for(const n of this.neighbors(cur.c,cur.r)){
+          if(n.c<0||n.c>=COLS||n.r<0||n.r>=ROWS) continue;
+          const kk=key(n.c,n.r);
+          if(prev.has(kk)) continue;
+          if(occ.has(kk) && !(n.c===goal.c&&n.r===goal.r)) continue;
+          prev.set(kk,cur); q.push(n);
+        }
+      }
+      return null;
+    }
+    floodSpace(start, occ){
+      if(start.c<0||start.c>=COLS||start.r<0||start.r>=ROWS||occ.has(key(start.c,start.r))) return 0;
+      const seen=new Set([key(start.c,start.r)]); const q=[start]; let cnt=0;
+      while(q.length && cnt<160){ const cur=q.shift(); cnt++;
+        for(const n of this.neighbors(cur.c,cur.r)){
+          if(n.c<0||n.c>=COLS||n.r<0||n.r>=ROWS) continue;
+          const kk=key(n.c,n.r); if(seen.has(kk)||occ.has(kk)) continue;
+          seen.add(kk); q.push(n);
+        }
+      }
+      return cnt;
+    }
+    chooseDir(sn, other){
+      const head=sn.cells[0];
+      const occ=this.occupiedSet();
+      // BFS to food
+      if(this.food){
+        const path=this.bfs(head,this.food,occ);
+        if(path && path.length>1){
+          const nxt=path[1]; const d={x:nxt.c-head.c, y:nxt.r-head.r};
+          if(!this.isReverse(d,sn.dir)) return d;
+        }
+      }
+      // safety: pick non-reverse safe neighbor with max open space
+      let best=sn.dir, bestSpace=-1;
+      for(const n of this.neighbors(head.c,head.r)){
+        const d={x:n.c-head.c, y:n.r-head.r};
+        if(this.isReverse(d,sn.dir)) continue;
+        if(n.c<0||n.c>=COLS||n.r<0||n.r>=ROWS) continue;
+        if(occ.has(key(n.c,n.r))) continue;
+        const sp=this.floodSpace(n, occ);
+        if(sp>bestSpace){ bestSpace=sp; best=d; }
+      }
+      return best;
+    }
+    step(){
+      const [A,B]=this.snakes;
+      const alive=[A,B].filter(s=>s.alive);
+      if(alive.length<=1) return;
+      // choose directions
+      for(const s of alive){
+        if(s.ai){ s.dir=this.chooseDir(s, s===A?B:A); }
+        else { if(!this.isReverse(s.pendingDir,s.dir)) s.dir=s.pendingDir; }
+      }
+      // next heads
+      for(const s of alive) s.nextHead={c:s.cells[0].c+s.dir.x, r:s.cells[0].r+s.dir.y};
+      // will grow
+      for(const s of alive) s.willGrow = this.food && s.nextHead.c===this.food.c && s.nextHead.r===this.food.r;
+      const occ=this.occupiedSet();
+      const deaths=new Map();
+      for(const s of alive){
+        const h=s.nextHead;
+        if(h.c<0||h.c>=COLS||h.r<0||h.r>=ROWS) deaths.set(s,true);
+        else if(occ.has(key(h.c,h.r))) deaths.set(s,true);
+      }
+      // head-to-head
+      if(A.alive && B.alive && key(A.nextHead.c,A.nextHead.r)===key(B.nextHead.c,B.nextHead.r)){
+        if(A.cells.length>B.cells.length) deaths.set(B,true);
+        else if(B.cells.length>A.cells.length) deaths.set(A,true);
+        else { if(Math.random()<0.5) deaths.set(A,true); else deaths.set(B,true); }
+      }
+      // apply
+      for(const s of alive){
+        if(deaths.get(s)){ s.alive=false; continue; }
+        s.cells.unshift(s.nextHead);
+        if(!s.willGrow) s.cells.pop();
+      }
+      // food eaten?
+      if(!this.roundOver){
+        for(const s of alive){ if(s.alive && this.food && s.cells[0].c===this.food.c && s.cells[0].r===this.food.r){ this.placeFood(); break; } }
+      }
+      const aliveCount=this.snakes.filter(s=>s.alive).length;
+      if(aliveCount<=1){
+        this.roundOver=true;
+        if(aliveCount===0) this.winner='draw';
+        else this.winner = (A.alive? 'A':'B');
+        if(this.winner==='A') this.p1++; else if(this.winner==='B') this.p2++;
+        this.endRound();
+      }
+      this.updateScore();
+    }
+    endRound(){
+      this.celebrateUntil=performance.now()+1800;
+      const winName = this.winner==='draw' ? '平局' : (this.winner==='A' ? (this.autoPlay?'青蛇胜':'你赢了!') : (this.autoPlay?'粉蛇胜':'AI 获胜'));
+      endTitle.textContent = winName;
+      endTitle.style.color = this.winner==='A'?COL1:(this.winner==='B'?COL2:'#fff');
+      const reason = this.winner==='draw' ? '两条蛇同归于尽' : (this.winner==='A'?'粉蛇撞毁，青蛇存活':'青蛇出局，粉蛇存活');
+      endMsg.textContent = reason + ` · 比分 ${this.p1} : ${this.p2}`;
+      this.spawnConfetti(this.winner==='A'?COL1:(this.winner==='B'?COL2:'#fff'));
+      overlayEnd.classList.add('active');
+      if(this.autoPlay){ setTimeout(()=>{ if(this.autoPlay && !this.over) this.restart(); }, 2000); }
+    }
+    spawnConfetti(color){
+      for(let i=0;i<70;i++){
+        this.particles.push({ x:this.W/2, y:this.H/2, vx:(Math.random()*2-1)*180, vy:(Math.random()*2-1)*180-60,
+          life:1, color: Math.random()<0.5?color:(Math.random()<0.5?COL1:COL2), size:3+Math.random()*4 });
+      }
+    }
+    update(dt){
+      if(this.roundOver){ this.animT=1; }
+      else {
+        this.animT+=dt;
+        while(this.animT>=STEP){ this.animT-=STEP; for(const s of this.snakes) s.prev=s.cells.map(c=>({c:c.c,r:c.r})); this.step(); if(this.roundOver) break; }
+      }
+      for(let i=this.particles.length-1;i>=0;i--){
+        const p=this.particles[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=420*dt; p.life-=dt*0.9;
+        if(p.life<=0) this.particles.splice(i,1);
+      }
+    }
+    roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    drawCell(c,r,color,alpha,scale){
+      const t=this.T; const cx=(c+0.5)*t, cy=(r+0.5)*t; const s=t*0.46*scale;
+      ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=color; ctx.shadowBlur=12; ctx.fillStyle=color;
+      this.roundRect(cx-s,cy-s,s*2,s*2,s*0.5); ctx.fill();
+      ctx.shadowBlur=0; ctx.fillStyle='#ffffff55'; this.roundRect(cx-s*0.5,cy-s*0.5,s,s,s*0.3); ctx.fill(); ctx.restore();
+    }
+    draw(){
+      const t=this.T, T=this.T; ctx.clearRect(0,0,this.W,this.H);
+      // grid
+      ctx.strokeStyle='#ffffff08'; ctx.lineWidth=1;
+      for(let i=1;i<COLS;i++){ ctx.beginPath(); ctx.moveTo(i*T,0); ctx.lineTo(i*T,this.H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0,i*T); ctx.lineTo(this.W,i*T); ctx.stroke(); }
+      // food
+      if(this.food){
+        const fx=(this.food.c+0.5)*T, fy=(this.food.r+0.5)*T; const pulse=0.6+0.4*Math.sin(this.animT*30+performance.now()/120);
+        ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=18; ctx.fillStyle='#ffd23f'; ctx.globalAlpha=pulse;
+        ctx.beginPath(); ctx.arc(fx,fy,T*0.28,0,7); ctx.fill(); ctx.restore();
+      }
+      // AI target lines (visual feedback)
+      if(this.autoPlay){
+        ctx.save(); ctx.setLineDash([4,6]); ctx.lineWidth=1.5;
+        for(const s of this.snakes){ if(!s.alive) continue; const h=s.cells[0];
+          const tx=(s.nextHead? s.nextHead.c : h.c)+0.5, ty=(s.nextHead? s.nextHead.r : h.r)+0.5;
+          ctx.strokeStyle=s.color+'66'; ctx.beginPath(); ctx.moveTo((h.c+0.5)*T,(h.r+0.5)*T); ctx.lineTo(tx*T,ty*T); ctx.stroke();
+        }
+        ctx.restore();
+      }
+      // snakes (interpolated)
+      const tt=this.roundOver?1:Math.min(1,Math.max(0,this.animT/STEP));
+      for(const s of this.snakes){
+        if(!s.alive){
+          // draw faded death
+          for(let i=0;i<s.cells.length;i++) this.drawCell(s.cells[i].c,s.cells[i].r,s.color,0.18,0.9);
+          continue;
+        }
+        for(let i=0;i<s.cells.length;i++){
+          const from=s.prev[Math.min(i,s.prev.length-1)]||s.cells[i];
+          const c=lerp(from.c, s.cells[i].c, tt), r=lerp(from.r, s.cells[i].r, tt);
+          const head=i===0;
+          this.drawCell(c,r,s.color, head?1:Math.min(1,1-i/s.cells.length+0.25), head?1.05:0.92);
+        }
+      }
+      // confetti
+      for(const p of this.particles){ ctx.save(); ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size); ctx.restore(); }
+    }
+    loop(ts){
+      requestAnimationFrame(this.loop);
+      try{
+        const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts;
+        this.update(dt); this.draw();
+      }catch(err){ console.error('LOOP', err); }
+    }
+    bindInput(){
+      const setDir=(dx,dy)=>{ if(this.autoPlay||this.over) return; const s=this.snakes[0]; if(!(dx===-s.dir.x&&dy===-s.dir.y)) s.pendingDir={x:dx,y:dy}; };
+      window.addEventListener('keydown',e=>{
+        if(this.autoPlay||this.over||this.roundOver) return;
+        if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') setDir(-1,0);
+        else if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') setDir(1,0);
+        else if(e.key==='ArrowUp'||e.key==='w'||e.key==='W') setDir(0,-1);
+        else if(e.key==='ArrowDown'||e.key==='s'||e.key==='S') setDir(0,1);
+      });
+      let sx=0,sy=0;
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); const r=canvas.getBoundingClientRect(); sx=e.clientX-r.left; sy=e.clientY-r.top; });
+      canvas.addEventListener('pointerup',e=>{ if(this.autoPlay||this.over||this.roundOver) return; const r=canvas.getBoundingClientRect(); const dx=e.clientX-r.left-sx, dy=e.clientY-r.top-sy;
+        if(Math.abs(dx)<12&&Math.abs(dy)<12) return;
+        if(Math.abs(dx)>Math.abs(dy)) setDir(dx>0?1:-1,0); else setDir(0,dy>0?1:-1);
+      });
+      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+    }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){
+      this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
+      aiInd.style.display='flex'; aiStatus.textContent='AI 双蛇博弈中…';
+      this.snakes[0].ai=true; this.snakes[1].ai=true;
+      if(this.roundOver||this.over) this.restart();
+      else { statusEl.textContent='自动对弈中：青蛇 vs 粉蛇'; }
+    }
+    stopAuto(silent){
+      this.autoPlay=false; const b=document.getElementById('btn-auto'); if(b){ b.textContent='自动: 关'; b.classList.remove('auto-on'); }
+      aiInd.style.display='none';
+      if(!silent && this.snakes){ this.snakes[0].ai=false; if(!this.roundOver&&!this.over) statusEl.textContent='你来控制青蛇（方向键 / 滑动）'; }
+    }
+  }
+  window.game=new Game();
+})();
+</script>
+</body>
+</html>

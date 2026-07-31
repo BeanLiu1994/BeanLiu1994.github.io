@@ -139,11 +139,12 @@
       }
       this.virusLeft=placed; virusEl.textContent=placed;
     }
+    restY(c,rot){ let py=-2; while(this.canPlace(this.grid,py+1,c,rot)) py++; return py; }
     spawn(){
       this.piece={ c:Math.floor(COLS/2)-1, rot:0, py:-2, vy:0, a:this.next.a, b:this.next.b };
       this.next={ a:Math.floor(Math.random()*PAL.length), b:Math.floor(Math.random()*PAL.length) };
-      if(!this.canPlace(this.grid,this.piece.py,this.piece.c,this.piece.rot)){ this.gameOver(); return; }
       if(this.autoPlay) this.autoPlan();
+      if(this.restY(this.piece.c,this.piece.rot) < 0){ this.gameOver(); return; }
     }
     autoPlan(){
       let best=null, bestScore=-1;
@@ -154,8 +155,12 @@
       if(best){ this.piece.c=best.c; this.piece.rot=best.rot; this.autoCol=best.c; }
     }
     simScore(c,rot){
-      const g=this.grid.map(r=>r.slice()); let py=-2; while(this.canPlace(g,py+1,c,rot)) py++;
-      const o=this.off(rot); const cells=o.map(([dr,dc])=>[Math.round(py)+dr,c+dc]);
+      const py=this.restY(c,rot);
+      if(py<0) return -1;
+      const g=this.grid.map(r=>r.slice());
+      const o=this.off(rot);
+      const cells=o.map(([dr,dc])=>[py+dr,c+dc]);
+      for(const [r,cc] of cells){ if(r<0||r>=ROWS||cc<0||cc>=COLS) return -1; }
       g[cells[0][0]][cells[0][1]]=this.piece.a; g[cells[1][0]][cells[1][1]]=this.piece.b;
       return this.resolveClone(g);
     }
@@ -176,7 +181,7 @@
     }
     lock(){
       const o=this.off(this.piece.rot), p=this.piece; const cells=o.map(([dr,dc])=>[Math.round(p.py)+dr,p.c+dc]); const cols=[p.a,p.b];
-      for(let i=0;i<cells.length;i++){ const [r,c]=cells[i]; if(r>=0) this.grid[r][c]=cols[i]; }
+      for(let i=0;i<cells.length;i++){ const [r,c]=cells[i]; if(r>=0 && r<ROWS) this.grid[r][c]=cols[i]; }
       this.resolve();
     }
     resolve(){

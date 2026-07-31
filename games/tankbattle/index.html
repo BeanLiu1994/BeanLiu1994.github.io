@@ -110,9 +110,9 @@
       else { this.inputControl(this.you); this.aiControl(this.foe,this.you); }
       this.moveTank(this.you,dt); this.moveTank(this.foe,dt);
       for(const t of [this.you,this.foe]) if(t.cd>0) t.cd-=dt;
-      for(let i=this.bullets.length-1;i>=0;i--){ const b=this.bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt;
+      for(let i=this.bullets.length-1;i>=0;i--){ const b=this.bullets[i]; if(!b) break; b.x+=b.vx*dt; b.y+=b.vy*dt;
         if(this.isWall(b.x,b.y)){ this.bullets.splice(i,1); continue; }
-        for(const t of [this.you,this.foe]){ if(t!==b.owner && Math.hypot(t.x-b.x,t.y-b.y)<this.cell*0.45){ t.hp--; this.bullets.splice(i,1); if(t.hp<=0) this.endRound(t===this.foe); break; } }
+        for(const t of [this.you,this.foe]){ if(!t) continue; if(t!==b.owner && Math.hypot(t.x-b.x,t.y-b.y)<this.cell*0.45){ t.hp--; this.bullets.splice(i,1); if(t.hp<=0) this.endRound(t===this.foe); break; } }
       }
     }
     endRound(youWon){ this.round++; this._autoProgress++; progEl.textContent=this.round;
