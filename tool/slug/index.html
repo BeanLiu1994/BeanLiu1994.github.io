@@ -77,7 +77,7 @@
     const lower=ws.map(w=>w.toLowerCase());
     const upper=ws.map(w=>w.toUpperCase());
     const cap=ws.map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase());
-    const title=ws.map(w=>{const c=[...w];return c[0].toUpperCase()+c.slice(1).toLowerCase();}).join(' ');
+    const title=ws.map(w=>{const c=[...w];return c[0].toUpperCase()+c.slice(1).join('').toLowerCase();}).join(' ');
     return {
       'camelCase': lower.map((w,i)=>i?cap[i]:w).join(''),
       'PascalCase': cap.join(''),
