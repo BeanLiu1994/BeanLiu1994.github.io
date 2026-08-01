@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#070b1c" />
+<title>霓虹双色 · Neon Binairo</title>
+<style>
+  :root{
+    --bg:#070b1c; --surface:#101830; --text:#eaf2ff; --muted:#7e90b3;
+    --accent:#46a0ff; --accent2:#ffd23f; --gold:#ffd23f; --ok:#5dffa6; --bad:#ff6b8a;
+    --glow:#46a0ff55; --dim:#243352;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(ellipse at 50% 0%, #1a2244 0%, transparent 60%),
+                     radial-gradient(ellipse at 50% 100%, #1a2030 0%, transparent 60%);
+    color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none;
+  }
+  .container{width:100%;max-width:460px;padding:12px;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+  .title-block h1{font-size:1.4rem;font-weight:800;letter-spacing:-1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .title-block .sub{font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:3px;}
+  .score-panel{display:flex;gap:6px;}
+  .score-card{background:var(--surface);border:1px solid #ffffff0d;border-radius:10px;padding:4px 9px;text-align:center;min-width:54px;}
+  .score-card .label{font-size:0.5rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+  .score-card .value{font-size:1.02rem;font-weight:700;font-variant-numeric:tabular-nums;}
+  .score-card.t .value{color:var(--accent);}
+  .score-card.p .value{color:var(--accent2);}
+  .board-wrap{position:relative;background:var(--surface);border:1px solid #ffffff0d;border-radius:14px;padding:8px;
+    box-shadow:0 0 40px #00000040,0 0 60px var(--glow);}
+  .board-wrap,.board-wrap *{touch-action:none;-webkit-touch-callout:none;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:var(--board,#070e1e);}
+  .toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;color:var(--text);
+    padding:10px 14px;font-size:0.85rem;background:var(--surface);border:1px solid #ffffff14;transition:transform .12s ease,background .2s ease,box-shadow .2s ease;}
+  button:active{transform:scale(.95);}
+  button.auto{flex:1;}
+  button.auto.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;border-color:transparent;box-shadow:0 0 18px var(--glow);}
+  button.ghost{background:transparent;}
+  .hint{text-align:center;color:var(--muted);font-size:0.72rem;margin-top:8px;line-height:1.5;}
+  .hint b{color:var(--accent);}
+  .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
+  .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .overlay p{color:var(--muted);font-size:0.9rem;}
+  .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06121d;opacity:0;transform:translateY(-6px);
+    transition:opacity .3s,transform .3s;z-index:4;}
+  .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title-block">
+      <h1>霓虹双色 · NEON BINAIRO</h1>
+      <div class="sub">0 / 1 · Balance</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card t"><div class="label">填入</div><div class="value" id="filled">0</div></div>
+      <div class="score-card p"><div class="label">总数</div><div class="value" id="total">0</div></div>
+      <div class="score-card"><div class="label">最佳</div><div class="value" id="best">–</div></div>
+    </div>
+  </div>
+  <div class="board-wrap">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">AUTO</div>
+    <div class="overlay" id="overlay">
+      <h2 id="ovTitle">胜利！</h2>
+      <p id="ovText"></p>
+      <button class="auto on" id="ovBtn">再来一局</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
+  <div class="hint">点格子在 <b>空 → 0 → 1</b> 间循环：每行每列 <b>0/1 各半</b>、<b>不得三连同</b>、行列互异 · 自动模式演示解法</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  const $=(id)=>document.getElementById(id);
+  const cv=$('cv'), elFilled=$('filled'), elTotal=$('total'), elBest=$('best'),
+        elBadge=$('badge'), elOverlay=$('overlay'), elOvTitle=$('ovTitle'), elOvText=$('ovText'),
+        btnAuto=$('autoBtn'), btnRestart=$('restartBtn'), btnOv=$('ovBtn');
+
+  const N=8, W=420, H=420, PAD=14, CELL=(W-2*PAD)/N;
+  let dpr=Math.min(2,(typeof devicePixelRatio!=='undefined'?devicePixelRatio||1:1));
+  function setupCanvas(){
+    if(!cv||!cv.getContext) return;
+    cv.width=W*dpr; cv.height=H*dpr;
+    cv.style.width=W+'px'; cv.style.height=H+'px'; cv.style.maxWidth='100%';
+  }
+  setupCanvas();
+  const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
+
+  // ---- generation ----
+  function validPartial(g,pos){
+    const r=Math.floor(pos/N), c=pos%N, v=g[pos], half=N/2;
+    // row r
+    let r0=0,r1=0,rf=0;
+    for(let i=0;i<N;i++){ const x=g[r*N+i]; if(x===-1) continue; rf++; if(x===0)r0++; else r1++; }
+    const rrem=N-rf;
+    if(r0>half||r1>half) return false;
+    if(r0<half-rrem||r1<half-rrem) return false;
+    for(let i=0;i<=N-3;i++){ const a=g[r*N+i],b=g[r*N+i+1],cc=g[r*N+i+2]; if(a!==-1&&b!==-1&&cc!==-1&&a===b&&b===cc) return false; }
+    // col c
+    let c0=0,c1=0,cf=0;
+    for(let i=0;i<N;i++){ const x=g[i*N+c]; if(x===-1) continue; cf++; if(x===0)c0++; else c1++; }
+    const crem=N-cf;
+    if(c0>half||c1>half) return false;
+    if(c0<half-crem||c1<half-crem) return false;
+    for(let i=0;i<=N-3;i++){ const a=g[i*N+c],b=g[(i+1)*N+c],cc=g[(i+2)*N+c]; if(a!==-1&&b!==-1&&cc!==-1&&a===b&&b===cc) return false; }
+    return true;
+  }
+  function genSolution(){
+    const g=new Array(N*N).fill(-1);
+    function rec(pos){
+      if(pos===N*N) return true;
+      const order=Math.random()<0.5?[0,1]:[1,0];
+      for(const v of order){ g[pos]=v; if(validPartial(g,pos)){ if(rec(pos+1)) return true; } }
+      g[pos]=-1; return false;
+    }
+    rec(0);
+    return g;
+  }
+  function rowsColsUnique(g){
+    const rows=new Set(), cols=new Set();
+    for(let r=0;r<N;r++){ let s=''; for(let c=0;c<N;c++) s+=g[r*N+c]; if(rows.has(s)) return false; rows.add(s); }
+    for(let c=0;c<N;c++){ let s=''; for(let r=0;r<N;r++) s+=g[r*N+c]; if(cols.has(s)) return false; cols.add(s); }
+    return true;
+  }
+  function makeSolution(){
+    for(let t=0;t<400;t++){ const g=genSolution(); if(rowsColsUnique(g)) return g; }
+    return genSolution();
+  }
+  // ---- solver (counts solutions up to limit) ----
+  function countSolutions(g, limit){
+    let pos=-1;
+    for(let i=0;i<N*N;i++) if(g[i]===-1){ pos=i; break; }
+    if(pos===-1) return 1;
+    let count=0;
+    for(const v of [0,1]){
+      g[pos]=v;
+      if(validPartial(g,pos)){ count+=countSolutions(g,limit); }
+      if(count>=limit){ g[pos]=-1; return count; }
+    }
+    g[pos]=-1;
+    return count;
+  }
+  function makePuzzle(sol){
+    const p=sol.slice();
+    const idxs=[...Array(N*N).keys()];
+    for(let i=idxs.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=idxs[i];idxs[i]=idxs[j];idxs[j]=t; }
+    let removed=0, target=Math.floor(N*N*0.42);
+    for(const i of idxs){
+      if(removed>=target) break;
+      const save=p[i]; p[i]=-1;
+      const test=p.slice();
+      if(countSolutions(test,2)===1){ removed++; } else { p[i]=save; }
+    }
+    return p;
+  }
+
+  // ---- state ----
+  let sol, board, over, won, auto, autoReplay, autoOrder, autoIdx, autoAccum, lastFill;
+  let elapsed, best, autoTimer, winPulse;
+  try{ best=parseFloat(localStorage.getItem('binairo_best')); if(!(best>0)) best=0; }catch(e){best=0;}
+
+  function newGame(){
+    sol=makeSolution();
+    board=makePuzzle(sol);
+    over=false; won=false; auto=false; autoReplay=false; autoIdx=0; autoAccum=0; lastFill=-1;
+    elapsed=0; autoTimer=0; winPulse=0;
+    autoOrder=[]; for(let i=0;i<N*N;i++) if(board[i]===-1) autoOrder.push(i);
+    if(elBadge) elBadge.classList.remove('show');
+    if(btnAuto){ btnAuto.classList.remove('on'); btnAuto.textContent='自动游玩'; }
+    elOverlay.classList.remove('show');
+    refreshHud();
+  }
+  function refreshHud(){
+    let f=0; for(let i=0;i<N*N;i++) if(board[i]!==-1) f++;
+    if(elFilled) elFilled.textContent=f;
+    if(elTotal) elTotal.textContent=N*N;
+    if(elBest) elBest.textContent=best>0?best.toFixed(1)+'s':'–';
+  }
+  function setAuto(v){
+    auto=v;
+    if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
+    if(elBadge) elBadge.classList.toggle('show',v);
+    if(v){ autoReplay=true; autoIdx=0; autoAccum=0; lastFill=-1; }
+  }
+  function checkWin(){
+    if(over||won) return;
+    for(let i=0;i<N*N;i++) if(board[i]===-1) return;
+    // valid binairo board
+    const half=N/2;
+    for(let r=0;r<N;r++){ let z=0,o=0; for(let c=0;c<N;c++){ if(board[r*N+c]===0)z++; else o++; }
+      if(z!==half||o!==half) return;
+      for(let i=0;i<=N-3;i++){ const a=board[r*N+i],b=board[r*N+i+1],cc=board[r*N+i+2]; if(a===b&&b===cc) return; } }
+    for(let c=0;c<N;c++){ let z=0,o=0; for(let r=0;r<N;r++){ if(board[r*N+c]===0)z++; else o++; }
+      if(z!==half||o!==half) return;
+      for(let i=0;i<=N-3;i++){ const a=board[i*N+c],b=board[(i+1)*N+c],cc=board[(i+2)*N+c]; if(a===b&&b===cc) return; } }
+    winGame();
+  }
+  function winGame(){
+    over=true; won=true; winPulse=1;
+    if(best===0||elapsed<best){ best=elapsed; try{localStorage.setItem('binairo_best',String(best));}catch(e){} }
+    if(auto){ elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用 '+elapsed.toFixed(1)+'s 填满 '+N+'×'+N; autoTimer=1.0; }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用 '+elapsed.toFixed(1)+'s 填满 '+N+'×'+N; elOverlay.classList.add('show'); }
+  }
+  function autoStep(){
+    if(autoIdx<autoOrder.length){
+      const i=autoOrder[autoIdx]; board[i]=sol[i]; lastFill=i; autoIdx++;
+      if(elFilled) elFilled.textContent=(N*N-autoOrder.length+autoIdx);
+    } else { checkWin(); }
+  }
+
+  // ---- input ----
+  function cellAt(x,y){
+    const gx=Math.floor((x-PAD)/CELL), gy=Math.floor((y-PAD)/CELL);
+    if(gx<0||gy<0||gx>=N||gy>=N) return -1;
+    return gy*N+gx;
+  }
+  function cycle(i){ const v=board[i]; board[i]=(v===-1)?0:(v===0)?1:-1; }
+  if(cv&&cv.addEventListener){
+    cv.addEventListener('pointerdown',(e)=>{ if(over||auto) return; const p=pt(e); const i=cellAt(p.x,p.y); if(i>=0){ cycle(i); refreshHud(); checkWin(); } e.preventDefault&&e.preventDefault(); },{passive:false});
+    cv.addEventListener('mousedown',(e)=>{ if(over||auto) return; const p=pt(e); const i=cellAt(p.x,p.y); if(i>=0){ cycle(i); refreshHud(); checkWin(); } e.preventDefault&&e.preventDefault(); },{passive:false});
+  }
+  function pt(e){ let x=0,y=0; try{ const rect=cv.getBoundingClientRect(); const cx=(typeof e.clientX==='number')?e.clientX:0, cy=(typeof e.clientY==='number')?e.clientY:0; x=((cx-rect.left)/rect.width)*W; y=((cy-rect.top)/rect.height)*H; }catch(err){} return {x,y}; }
+  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
+  btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
+
+  // ---- update ----
+  let last=(typeof performance!=='undefined'?performance.now():Date.now());
+  function update(dt){
+    if(over){
+      if(winPulse>0) winPulse=Math.max(0,winPulse-dt*1.5);
+      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      return;
+    }
+    elapsed+=dt;
+    if(auto && autoReplay){
+      autoAccum+=dt;
+      if(autoAccum>=0.05){ autoAccum=0; autoStep(); }
+    }
+    if(winPulse>0) winPulse=Math.max(0,winPulse-dt*2);
+  }
+
+  // ---- render ----
+  function render(){
+    if(!ctx) return;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      const x=PAD+c*CELL, y=PAD+r*CELL, i=r*N+c, v=board[i];
+      ctx.fillStyle='rgba(255,255,255,0.04)';
+      ctx.fillRect(x+2,y+2,CELL-4,CELL-4);
+      if(v!==-1){
+        const isLast=(i===lastFill);
+        const cx=x+CELL/2, cy=y+CELL/2;
+        ctx.save();
+        if(v===0){
+          ctx.strokeStyle=isLast?'#ffffff':'#46a0ff'; ctx.lineWidth=isLast?5:3; ctx.shadowColor='#46a0ff'; ctx.shadowBlur=isLast?20:10;
+          ctx.beginPath(); ctx.arc(cx,cy,CELL*0.30,0,6.28); ctx.stroke();
+        } else {
+          ctx.fillStyle=isLast?'#ffffff':'#ffd23f'; ctx.shadowColor='#ffd23f'; ctx.shadowBlur=isLast?20:10;
+          ctx.beginPath(); ctx.arc(cx,cy,CELL*0.32,0,6.28); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // grid lines + thick separators every 2
+    ctx.strokeStyle='rgba(124,140,255,0.12)'; ctx.lineWidth=1;
+    for(let i=0;i<=N;i++){
+      ctx.beginPath(); ctx.moveTo(PAD+i*CELL,PAD); ctx.lineTo(PAD+i*CELL,PAD+N*CELL); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PAD,PAD+i*CELL); ctx.lineTo(PAD+N*CELL,PAD+i*CELL); ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(124,140,255,0.4)'; ctx.lineWidth=2.5;
+    for(let i=0;i<=N;i+=2){
+      ctx.beginPath(); ctx.moveTo(PAD+i*CELL,PAD); ctx.lineTo(PAD+i*CELL,PAD+N*CELL); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PAD,PAD+i*CELL); ctx.lineTo(PAD+N*CELL,PAD+i*CELL); ctx.stroke();
+    }
+    if(auto && autoReplay && lastFill>=0){
+      const r=Math.floor(lastFill/N), c=lastFill%N, cx=PAD+c*CELL+CELL/2, cy=PAD+r*CELL+CELL/2;
+      ctx.save(); ctx.shadowColor='#ffd23f'; ctx.shadowBlur=20; ctx.fillStyle='#ffd23f';
+      ctx.beginPath(); ctx.arc(cx,cy,5,0,6.28); ctx.fill(); ctx.restore();
+    }
+    if(winPulse>0){ ctx.save(); ctx.globalAlpha=winPulse*0.5; ctx.fillStyle='#5dffa6'; ctx.fillRect(0,0,W,H); ctx.restore(); }
+  }
+
+  function frame(ts){
+    const now=(typeof performance!=='undefined'?(ts!==undefined?ts:performance.now()):Date.now());
+    let dt=(now-last)/1000; if(!(dt>0)||dt>0.05) dt=0.016; last=now;
+    update(dt); render();
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+  }
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
+
+  newGame();
+
+  window.game={
+    get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },
+    get over(){return over;}, get won(){return won;},
+    get score(){let f=0;for(let i=0;i<N*N;i++)if(board[i]!==-1)f++;return f;},
+    get total(){return N*N;}, get best(){return best;}, get elapsed(){return elapsed;},
+    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
+    toggleAuto(){ setAuto(!auto); },
+    restart(){ newGame(); setAuto(false); }
+  };
+  window.__test={
+    setAuto(v){ setAuto(!!v); },
+    tick(dt){ update(dt); render(); },
+    get over(){return over;}, get won(){return won;}, get autoPlay(){return auto;},
+    get score(){let f=0;for(let i=0;i<N*N;i++)if(board[i]!==-1)f++;return f;}, get total(){return N*N;}, get best(){return best;}
+  };
+})();
+</script>
+</body>
+</html>
