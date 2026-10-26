@@ -111,7 +111,7 @@
     let out;
     if(fmt==='json') out=JSON.stringify(rows,null,2);
     else if(fmt==='csv'){ const ks=[...active].map(f=>label[f]); out=[ks.join(',')].concat(rows.map(r=>ks.map(k=>r[k]).join(','))).join('\n'); }
-    else out=rows.map(r=>active.map(f=>r[label[f]]).join(' | ')).join('\n');
+    else out=rows.map(r=>[...active].map(f=>r[label[f]]).join(' | ')).join('\n');
     $('out').value=out;
     $('st').textContent='✓ 已生成 '+n+' 条 · '+active.size+' 个字段';
   }

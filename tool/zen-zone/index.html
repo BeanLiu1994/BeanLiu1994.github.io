@@ -297,6 +297,8 @@
   }
 
   function ringBell(){
+    if(!actx) ensureCtx();
+    if(!actx) return;
     const now = actx.currentTime;
     playBell(528, 1.5, now);
     playBell(660, 1.2, now+0.15);

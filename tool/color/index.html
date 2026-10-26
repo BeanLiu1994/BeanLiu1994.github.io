@@ -109,7 +109,7 @@
   }
   function render(source,val){
     let r,g,b;
-    if(source==='hex'){ const c=hexToRgb(val); r=c.r;g=c.g;b=c.b; }
+    if(source==='hex'){ let c; try{ c=hexToRgb(val); }catch(e){ setStatus('HEX 格式无效，请输入如 #4f9cff','err'); return; } r=c.r;g=c.g;b=c.b; }
     else if(source==='rgb'){ r=clamp(+$('rn').value,0,255);g=clamp(+$('gn').value,0,255);b=clamp(+$('bn').value,0,255); }
     else { const hsl=rgbToHsl; const c=hslToRgb(+$('hn').value,+$('sn').value,+$('ln').value); r=c.r;g=c.g;b=c.b; }
     const hex=rgbToHex(r,g,b); const hsl=rgbToHsl(r,g,b);

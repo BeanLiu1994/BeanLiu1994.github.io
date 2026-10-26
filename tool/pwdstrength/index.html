@@ -129,7 +129,7 @@
     if(r.weak.length) tips.push(r.weak.join('；'));
     if(!tips.length) tips.push('很棒！这是一个强度较高的密码。');
     $('tips').textContent='建议：'+tips.join('；')+'。';
-    setStatus('强度：'+r.map.t+'（'+r.bits+' bits）','ok');
+    $('st').textContent='强度：'+r.map.t+'（'+r.bits+' bits）'; $('st').className='status ok';
   }
   $('pw').oninput=update;
 })();
