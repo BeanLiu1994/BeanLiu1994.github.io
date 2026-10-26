@@ -120,7 +120,7 @@
     }
     _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
-    draw(){ const W=this.W; ctx.clearRect(0,0,W);
+    draw(){ const W=this.W; ctx.clearRect(0,0,W,W);
       // bridges
       for(const e of this.edges){ const k=ekey(e[0],e[1]); const cnt=this.bridges[k]||0; if(!cnt) continue; const a=e[0],b=e[1];
         ctx.strokeStyle='#4dff91'; ctx.lineWidth=4; ctx.lineCap='round'; ctx.shadowColor='#4dff91'; ctx.shadowBlur=8;

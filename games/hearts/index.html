@@ -59,7 +59,7 @@
   const penalty=c=>(isHeart(c)?1:0)+(isQS(c)?13:0);
   function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
   class Hearts {
-    constructor(){ this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.best=parseInt(localStorage.getItem('heartsBest')||'0');
+    constructor(){ this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.best=parseInt(localStorage.getItem('heartsBest')||'0'); this.round=1; this.pen=[0,0,0,0];
       this.fit(); window.addEventListener('resize',()=>this.fit()); canvas.addEventListener('pointerdown',e=>this.onTap(e)); this.newGame(); this.fit();
       this.loop=this.loop.bind(this); requestAnimationFrame(this.loop); }
     fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||430,470)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*1.16; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }

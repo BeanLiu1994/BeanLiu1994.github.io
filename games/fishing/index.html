@@ -267,7 +267,7 @@
 
   function frame(ts){
     const now=(typeof performance!=='undefined'?ts:(typeof performance!=='undefined'?performance.now():Date.now()));
-    const dt=Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000); last=(ts!==undefined?ts:now);
+    const dt=Math.max(0,Math.min(0.05,((ts!==undefined?ts:now)-(last))/1000)); last=(ts!==undefined?ts:now);
     update(dt); render();
     if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
   }
