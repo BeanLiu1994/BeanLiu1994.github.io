@@ -22,6 +22,7 @@
   }
 
   * { margin:0; padding:0; box-sizing:border-box; }
+  html { height:100%; overflow:hidden; }
 
   body {
     background: var(--bg);
@@ -31,11 +32,12 @@
       radial-gradient(ellipse at 50% 80%, #1a1040 0%, transparent 60%);
     color: var(--text);
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow-x: hidden;
+    overflow: hidden;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;

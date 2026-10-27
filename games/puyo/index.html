@@ -24,8 +24,9 @@
     box-shadow:0 6px 20px rgba(0,0,0,.4); cursor:pointer; touch-action:none; }
   .auto-toggle.on{ border-color:var(--ok); color:#06281c; background:linear-gradient(180deg,#5cf0b0,#2bd08a); box-shadow:0 0 22px rgba(52,232,158,.5); }
   .overlay{ position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
-    background:rgba(6,9,18,.72); backdrop-filter:blur(4px); padding:18px; }
-  .overlay.hidden{ display:none; }
+    background:rgba(6,9,18,.72); backdrop-filter:blur(4px); padding:18px;
+    opacity:1; visibility:visible; transition:opacity .32s ease, visibility 0s linear 0s; }
+  .overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition:opacity .32s ease, visibility 0s linear .32s; }
   .panel{ width:min(92vw,420px); background:linear-gradient(180deg,#1a1430,#0d1426); border:1px solid var(--border);
     border-radius:20px; padding:26px 22px; text-align:center; box-shadow:0 0 50px rgba(185,139,255,.16), inset 0 1px 0 rgba(255,255,255,.04); }
   .panel h1{ margin:0 0 2px; font-size:28px; letter-spacing:2px; background:linear-gradient(90deg,#b98bff,#5cc8ff,#34e89e); -webkit-background-clip:text; background-clip:text; color:transparent; }
