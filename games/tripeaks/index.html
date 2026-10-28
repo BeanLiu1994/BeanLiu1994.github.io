@@ -39,10 +39,10 @@ button:active{transform:scale(.96);}
 button.on{border-color:var(--ok); box-shadow:0 0 0 1px var(--ok), 0 0 14px rgba(62,207,142,.4); color:var(--ok);}
 .status{width:100%; max-width:760px; text-align:center; font-size:12px; color:var(--muted); padding:2px 0 2px; min-height:16px;}
 .banner{
-  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  position:fixed; inset:0; display:flex;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility .3s ease; align-items:center; justify-content:center;
   background:rgba(8,10,14,.72); backdrop-filter:blur(4px); z-index:20;
 }
-.banner.show{display:flex;}
+.banner.show{opacity:1;visibility:visible;pointer-events:auto;}
 .banner .box{
   background:var(--panel); border:1px solid var(--border); border-radius:16px;
   padding:26px 34px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.5);

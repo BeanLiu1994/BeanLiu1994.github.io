@@ -49,8 +49,8 @@
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
-  .end-banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:#0a0f1ad9;border-radius:14px;backdrop-filter:blur(3px);z-index:5;text-align:center;padding:12px;}
-  .end-banner.show{display:flex;animation:fade-in .3s ease;}
+  .end-banner{position:absolute;inset:0;display:flex;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility .3s ease;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:#0a0f1ad9;border-radius:14px;backdrop-filter:blur(3px);z-index:5;text-align:center;padding:12px;}
+  .end-banner.show{opacity:1;visibility:visible;pointer-events:auto;animation:fade-in .3s ease;}
   @keyframes fade-in{from{opacity:0;transform:scale(.96);}to{opacity:1;transform:scale(1);}}
   .end-banner .big{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#ffd79a,#ffb14d,#ff8a5c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .end-banner .sub{font-size:.8rem;color:var(--text);}
