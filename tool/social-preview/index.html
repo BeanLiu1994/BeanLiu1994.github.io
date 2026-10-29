@@ -81,6 +81,15 @@
 <script>
 const $=id=>document.getElementById(id);
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text));
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text){
+  try{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-9999px';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();const ok=document.execCommand('copy');document.body.removeChild(ta);return ok;}catch(e){return false;}
+}
 function render(){
   const site=$('site').value, title=$('title').value, desc=$('desc').value, img=$('img').value, url=$('url').value;
   $('tw').innerHTML=`<img src="${esc(img)}" alt=""><div class="body">
@@ -110,7 +119,7 @@ function render(){
 }
 ['site','title','desc','img','url'].forEach(id=>$(id).addEventListener('input',render));
 $('copy').addEventListener('click',()=>{
-  navigator.clipboard.writeText($('meta').textContent).then(()=>{const s=$('st');s.textContent='已复制 Meta 标签';s.className='status ok';});
+  copyText($('meta').textContent).then(ok=>{const s=$('st');s.textContent=ok?'已复制 Meta 标签':'复制失败，请手动选择文本复制';s.className='status '+(ok?'ok':'err');});
 });
 render();
 </script>

@@ -131,9 +131,18 @@
     $('st').textContent='✓ 已生成 '+lines.length+' 个标签';
   }
   function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function copyText(text){
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text));
+    }
+    return Promise.resolve(fallbackCopy(text));
+  }
+  function fallbackCopy(text){
+    try{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-9999px';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();const ok=document.execCommand('copy');document.body.removeChild(ta);return ok;}catch(e){return false;}
+  }
 
   ['title','desc','url','site','image','type','locale','tw','og','twc'].forEach(id=>$(id).addEventListener('input',build));
-  $('copy').addEventListener('click',()=>{ if(window.__html){ navigator.clipboard&&navigator.clipboard.writeText(window.__html); $('st').textContent='✓ 已复制'; } });
+  $('copy').addEventListener('click',()=>{ if(window.__html){ copyText(window.__html).then(ok=>{ $('st').textContent=ok?'✓ 已复制':'复制失败，可手动选择文本复制'; $('st').style.color=ok?'':'#ff5d6c'; }); } });
   $('download').addEventListener('click',()=>{ const b=new Blob(['<!DOCTYPE html>\n<html><head>\n'+window.__html+'\n</head><body></body></html>'],{type:'text/html'});
     const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='meta.html'; a.click(); URL.revokeObjectURL(u); $('st').textContent='✓ 已下载 meta.html'; });
   build();

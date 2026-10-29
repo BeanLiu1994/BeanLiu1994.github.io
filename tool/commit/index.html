@@ -95,6 +95,15 @@
 <script>
 const $=id=>document.getElementById(id);
 function setStatus(m,cls){const s=$('st');s.textContent=m;s.className='status '+(cls||'');}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text));
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text){
+  try{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='-9999px';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();const ok=document.execCommand('copy');document.body.removeChild(ta);return ok;}catch(e){return false;}
+}
 function generate(){
   const type=$('type').value;
   const scope=$('scope').value.trim();
@@ -126,7 +135,7 @@ function parse(){
 }
 ['type','scope','breaking','desc','body','footer'].forEach(id=>$(id).addEventListener('input',generate));
 $('parse').addEventListener('input',parse);
-$('copy').addEventListener('click',()=>navigator.clipboard.writeText($('out').textContent).then(()=>setStatus('已复制提交信息','ok')));
+$('copy').addEventListener('click',()=>copyText($('out').textContent).then(ok=>setStatus(ok?'已复制提交信息':'复制失败，请手动选择文本复制',ok?'ok':'err')));
 generate(); parse();
 </script>
 </body>
