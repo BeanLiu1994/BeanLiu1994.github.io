@@ -36,6 +36,10 @@
   .overlay-content h2 { font-size:1.9rem; font-weight:800; margin-bottom:6px; }
   .overlay-content p { color:var(--muted); margin-bottom:14px; font-size:0.9rem; }
   .overlay.win h2 { color:var(--gold); } .overlay.lose h2 { color:var(--danger); }
+  .ready-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:5; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .ready-hint.show { opacity:1; }
+  .ready-hint span { background:#0a0a1add; border:1px solid var(--accent-glow); color:var(--text); font-size:0.85rem; font-weight:600; letter-spacing:1px; padding:10px 22px; border-radius:999px; backdrop-filter:blur(3px); box-shadow:0 0 24px var(--accent-glow); animation:hint-pulse 1.6s ease-in-out infinite; }
+  @keyframes hint-pulse { 0%,100%{transform:scale(1);opacity:.85;} 50%{transform:scale(1.06);opacity:1;} }
   .controls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
   .btn { flex:1; min-width:80px; padding:10px 12px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all .2s; text-align:center; }
   .btn:hover { background:#ffffff10; } .btn:active { transform:scale(0.97); }
@@ -61,6 +65,7 @@
   </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="cv" width="420" height="520"></canvas>
+    <div class="ready-hint show" id="ready-hint"><span>移动挡板 开始</span></div>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">You Win!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
     <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
   </div>
@@ -95,6 +100,13 @@
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');
       this.reset();
+      this.setReady(true);
+    }
+    // Ready gate: the ball stays frozen until the player moves the paddle, so the
+    // match can never be lost before the player acts. Auto mode bypasses the gate.
+    setReady(v){
+      this.ready=v;
+      document.getElementById('ready-hint').classList.toggle('show',v);
     }
     updateUI(){ document.getElementById('score-you').textContent=this.youS; document.getElementById('score-ai').textContent=this.aiS; document.getElementById('rally-stat').textContent='Rally: '+this.rally; }
     aiMovePaddle(p,target,dt,spd){ const sp=(spd||7.2)*dt; if(p.y<target) p.y=Math.min(target,p.y+sp); else p.y=Math.max(target,p.y-sp); p.y=Math.max(PH/2,Math.min(H-PH/2,p.y)); }
@@ -177,7 +189,8 @@
     }
     loop(now){
       const dt=Math.max(0.3,Math.min(2.2,(now-this.last)/16.67)); this.last=now;
-      this.step(dt); this.draw();
+      if(!this.ready) this.step(dt);
+      this.draw();
       this.raf=requestAnimationFrame(this.loop);
     }
     draw(){
@@ -190,11 +203,11 @@
       ctx.shadowColor='#fff'; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(this.ball.x,this.ball.y,8,0,7); ctx.fill(); ctx.shadowBlur=0;
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI controls both paddles'; }
+    startAuto(){ this.autoPlay=true; this.setReady(false); const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI controls both paddles'; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bind(){
-      canvas.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over) return; const rect=canvas.getBoundingClientRect(); this.targetY=(e.clientY-rect.top)/rect.height*H; });
-      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; const rect=canvas.getBoundingClientRect(); this.targetY=(e.clientY-rect.top)/rect.height*H; });
+      canvas.addEventListener('pointermove',(e)=>{ if(this.autoPlay||this.over) return; if(this.ready) this.setReady(false); const rect=canvas.getBoundingClientRect(); this.targetY=(e.clientY-rect.top)/rect.height*H; });
+      canvas.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over) return; if(this.ready) this.setReady(false); const rect=canvas.getBoundingClientRect(); this.targetY=(e.clientY-rect.top)/rect.height*H; });
     }
   }
   window.game=new Pong();

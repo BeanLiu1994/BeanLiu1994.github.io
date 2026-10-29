@@ -58,6 +58,18 @@
   .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
   .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
   .overlay.lose h2 { color:var(--danger); }
+  .ready-hint {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    z-index:5; pointer-events:none; opacity:0; transition:opacity .35s;
+  }
+  .ready-hint.show { opacity:1; }
+  .ready-hint span {
+    background:#0a0a1add; border:1px solid var(--accent-glow); color:var(--text);
+    font-size:0.85rem; font-weight:600; letter-spacing:1px;
+    padding:10px 22px; border-radius:999px; backdrop-filter:blur(3px);
+    box-shadow:0 0 24px var(--accent-glow); animation:hint-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes hint-pulse { 0%,100%{transform:scale(1);opacity:.85;} 50%{transform:scale(1.06);opacity:1;} }
   .controls { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
   .btn { flex:1; min-width:90px; padding:12px 16px; border:1px solid #ffffff12; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:600; cursor:pointer; transition:all .2s; letter-spacing:.5px; text-align:center; }
   .btn:hover { background:#ffffff10; }
@@ -89,6 +101,7 @@
 
   <div class="board-wrap" id="board-wrap">
     <canvas id="game" width="400" height="400"></canvas>
+    <div class="ready-hint show" id="ready-hint"><span>滑动 或 方向键 开始</span></div>
     <div class="overlay lose" id="overlay-lose">
       <div class="overlay-bg"></div>
       <div class="overlay-content">
@@ -168,10 +181,18 @@
       this.nextDir = {x:1,y:0};
       this.score = 0;
       this.over = false;
+      this.setReady(true);
       this.placeFood();
       this.hideOverlays();
       this.updateUI();
       this.loop();
+    }
+
+    // Ready gate: physics stay frozen until the player's first input, so the game
+    // never dies before the player can react. Auto mode bypasses the gate.
+    setReady(v){
+      this.ready = v;
+      document.getElementById('ready-hint').classList.toggle('show', v);
     }
 
     placeFood(){
@@ -196,7 +217,7 @@
     }
 
     step(){
-      if(this.over) return;
+      if(this.over || this.ready) return;
       this.dir = this.nextDir;
       const head = {x:this.snake[0].x+this.dir.x, y:this.snake[0].y+this.dir.y};
       // wall
@@ -346,6 +367,7 @@
     }
     startAuto(){
       this.autoPlay=true;
+      this.setReady(false); // AI bypasses the ready gate
       const b=document.getElementById('btn-auto');
       b.textContent='Auto: ON'; b.classList.add('auto-on');
       document.getElementById('ai-indicator').style.display='flex';
@@ -429,6 +451,7 @@
 
     setDir(d){
       if(this.autoPlay||this.over) return;
+      if(this.ready) this.setReady(false); // any deliberate input starts the run
       if(this.isOpposite(d)) return;
       this.nextDir=d;
     }

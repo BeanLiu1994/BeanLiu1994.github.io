@@ -51,6 +51,10 @@
   .overlay-content{position:relative;text-align:center;z-index:1;padding:20px;}
   .overlay-content h2{font-size:2rem;font-weight:800;margin-bottom:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .overlay-content p{color:var(--muted);margin-bottom:14px;font-size:.85rem;}
+  .ready-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:4;pointer-events:none;opacity:0;transition:opacity .35s;}
+  .ready-hint.show{opacity:1;}
+  .ready-hint span{background:#0a0e1acc;border:1px solid #39ff9e44;color:var(--text);font-size:.85rem;font-weight:600;letter-spacing:1px;padding:10px 22px;border-radius:999px;backdrop-filter:blur(3px);box-shadow:0 0 24px #39ff9e33;animation:hint-pulse 1.6s ease-in-out infinite;}
+  @keyframes hint-pulse{0%,100%{transform:scale(1);opacity:.85;}50%{transform:scale(1.06);opacity:1;}}
   .hint{text-align:center;font-size:.64rem;color:var(--muted);line-height:1.5;}
   @media (max-width:400px){.title-block h1{font-size:1.3rem;}.btn{padding:10px;font-size:.76rem;}}
 </style>
@@ -67,6 +71,7 @@
   </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="game"></canvas>
+    <div class="ready-hint show" id="ready-hint"><span>滑动切水果 开始</span></div>
     <div class="overlay" id="overlay-over">
       <div class="overlay-bg"></div>
       <div class="overlay-content">
@@ -121,6 +126,14 @@
       scoreEl.textContent='0'; waveEl.textContent='1'; bestEl.textContent=this.best;
       overlay.classList.remove('active'); aiStatus.textContent='AI 自动挥刀切水果…';
       this.buildWave(this.wave);
+      this.setReady(!this.autoPlay); // freeze until first slice; AI bypasses
+    }
+    // Ready gate: no fruit spawns or falls until the player's first swipe, so the
+    // game can never be lost before the player acts. Auto mode bypasses the gate.
+    setReady(v){
+      this.ready=v;
+      document.getElementById('ready-hint').classList.toggle('show',v);
+      if(!v) this.buildWave(this.wave); // retime spawns from the current frame
     }
     buildWave(w){
       this.quota=4+w*2; this.spawned=0; this.waveCleared=false; this.spawnQueue=[];
@@ -155,7 +168,7 @@
     }
     lose(msg){ if(this.over) return; this.over=true; this.overFrame=this.frame; overTitle.textContent='游戏结束'; overMsg.textContent=msg; if(!this.autoPlay) overlay.classList.add('active'); }
     win(){ if(this.over) return; this.over=true; this.overFrame=this.frame; overTitle.textContent='通关！'; overMsg.textContent='全部 '+MAX_WAVE+' 关水果切完 🎉'; if(!this.autoPlay) overlay.classList.add('active'); }
-    startAuto(){ this.autoPlay=true; btnAuto.classList.add('auto-on'); btnAuto.textContent='自动中'; aiInd.classList.add('show'); }
+    startAuto(){ if(this.over) this.newGame(); this.autoPlay=true; this.setReady(false); btnAuto.classList.add('auto-on'); btnAuto.textContent='自动中'; aiInd.classList.add('show'); }
     stopAuto(){ this.autoPlay=false; btnAuto.classList.remove('auto-on'); btnAuto.textContent='自动游玩'; aiInd.classList.remove('show'); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
     bindInput(){
@@ -168,8 +181,8 @@
           else { const ddx=f.x-x,ddy=f.y-y; if(ddx*ddx+ddy*ddy<=(f.r+10)*(f.r+10)){ if(f.kind==='bomb') this.bombHit(f); else this.sliceFruit(f); } }
         }
       };
-      const onMove=(e)=>{ if(this.autoPlay||this.over) return; const p=getXY(e); this.blade.push({x:p.x,y:p.y}); if(this.blade.length>14) this.blade.shift(); this.bladeActive=6; trySlice(p.x,p.y); e.preventDefault(); };
-      const onDown=(e)=>{ if(this.autoPlay||this.over) return; const p=getXY(e); this.blade=[{x:p.x,y:p.y}]; this.bladeActive=6; e.preventDefault(); };
+      const onMove=(e)=>{ if(this.autoPlay||this.over) return; if(this.ready) this.setReady(false); const p=getXY(e); this.blade.push({x:p.x,y:p.y}); if(this.blade.length>14) this.blade.shift(); this.bladeActive=6; trySlice(p.x,p.y); e.preventDefault(); };
+      const onDown=(e)=>{ if(this.autoPlay||this.over) return; if(this.ready) this.setReady(false); const p=getXY(e); this.blade=[{x:p.x,y:p.y}]; this.bladeActive=6; e.preventDefault(); };
       canvas.addEventListener('pointermove',onMove); canvas.addEventListener('pointerdown',onDown);
       canvas.addEventListener('touchstart',onDown,{passive:false}); canvas.addEventListener('touchmove',onMove,{passive:false});
     }
@@ -184,7 +197,7 @@
       this.blade.push({x:this.bladeHead.x,y:this.bladeHead.y}); if(this.blade.length>14) this.blade.shift(); this.bladeActive=4;
       if(dist < target.r+12){ this.sliceFruit(target); }
     }
-    loop(now){ const dt=Math.min(40,now-this.last); this.last=now; this.frame++; this.update(dt); this.render(); requestAnimationFrame(this.loop); }
+    loop(now){ const dt=Math.min(40,now-this.last); this.last=now; this.frame++; if(!this.ready) this.update(dt); this.render(); requestAnimationFrame(this.loop); }
     update(dt){
       const f=dt/16.67;
       if(this.shake>0) this.shake-=f; if(this.flash>0) this.flash-=f;

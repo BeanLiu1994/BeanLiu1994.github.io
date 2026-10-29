@@ -31,6 +31,10 @@
   .overlay-content { position:relative; text-align:center; z-index:1; padding:20px; }
   .overlay-content h2 { font-size:2rem; font-weight:800; margin-bottom:6px; }
   .overlay-content p { color:var(--muted); margin-bottom:16px; font-size:0.9rem; }
+  .ready-hint { position:absolute; inset:10px; display:flex; align-items:center; justify-content:center; border-radius:10px; z-index:5; pointer-events:none; opacity:0; transition:opacity .35s; }
+  .ready-hint.show { opacity:1; }
+  .ready-hint span { background:#06121acc; border:1px solid #29d3a155; color:var(--text); font-size:0.85rem; font-weight:600; letter-spacing:1px; padding:10px 22px; border-radius:999px; backdrop-filter:blur(3px); box-shadow:0 0 24px #29d3a133; animation:hint-pulse 1.6s ease-in-out infinite; }
+  @keyframes hint-pulse { 0%,100%{transform:scale(1);opacity:.85;} 50%{transform:scale(1.06);opacity:1;} }
   .controls { display:flex; gap:8px; margin-top:10px; }
   .btn { flex:1; min-width:80px; padding:11px; border:1px solid #ffffff14; border-radius:10px; background:var(--surface); color:var(--text); font-size:0.85rem; font-weight:700; cursor:pointer; transition:all .2s; }
   .btn:hover { background:#ffffff10; }
@@ -61,6 +65,7 @@
   <div class="main">
     <div class="board-wrap">
       <canvas id="game" width="420" height="420"></canvas>
+      <div class="ready-hint show" id="ready-hint"><span>方向键 / 滑动 开始对局</span></div>
       <div class="overlay" id="overlay-end">
         <div class="overlay-bg"></div>
         <div class="overlay-content">
@@ -143,10 +148,18 @@
       this.particles=[]; this.animT=0; this.celebrateUntil=0;
       overlayEnd.classList.remove('active');
       this.buildSnakes(); this.placeFood();
+      this.setAwaitStart(!this.autoPlay); // freeze until first input; AI bypasses
       statusEl.textContent='方向键 / 滑动控制青蛇，吃光点变长，撞墙或撞身即出局';
       this.updateScore();
       if(this.autoPlay) this.startAuto();
     }
+    // Ready gate: snakes stay frozen until the player's first direction input, so
+    // the round can never be lost before the player acts. Auto mode bypasses.
+    setAwaitStart(v){
+      this.awaitStart=v;
+      document.getElementById('ready-hint').classList.toggle('show',v);
+    }
+    startIfWaiting(){ if(this.awaitStart) this.setAwaitStart(false); }
     updateScore(){
       p1El.textContent=this.p1; p2El.textContent=this.p2;
       const longest=Math.max(this.best, ...this.snakes.map(s=>s.cells.length));
@@ -274,7 +287,7 @@
     }
     update(dt){
       if(this.roundOver){ this.animT=1; }
-      else {
+      else if(!this.awaitStart){
         this.animT+=dt;
         while(this.animT>=STEP){ this.animT-=STEP; for(const s of this.snakes) s.prev=s.cells.map(c=>({c:c.c,r:c.r})); this.step(); if(this.roundOver) break; }
       }
@@ -336,7 +349,7 @@
       }catch(err){ console.error('LOOP', err); }
     }
     bindInput(){
-      const setDir=(dx,dy)=>{ if(this.autoPlay||this.over) return; const s=this.snakes[0]; if(!(dx===-s.dir.x&&dy===-s.dir.y)) s.pendingDir={x:dx,y:dy}; };
+      const setDir=(dx,dy)=>{ if(this.autoPlay||this.over) return; this.startIfWaiting(); const s=this.snakes[0]; if(!(dx===-s.dir.x&&dy===-s.dir.y)) s.pendingDir={x:dx,y:dy}; };
       window.addEventListener('keydown',e=>{
         if(this.autoPlay||this.over||this.roundOver) return;
         if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') setDir(-1,0);
@@ -354,7 +367,7 @@
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
     startAuto(){
-      this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
+      this.autoPlay=true; this.setAwaitStart(false); const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on');
       aiInd.style.display='flex'; aiStatus.textContent='AI 双蛇博弈中…';
       this.snakes[0].ai=true; this.snakes[1].ai=true;
       if(this.roundOver||this.over) this.restart();
