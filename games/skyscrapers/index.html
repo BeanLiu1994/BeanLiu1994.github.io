@@ -99,7 +99,7 @@
     checkWin(){ for(let r=0;r<N;r++){ const s=new Set(); for(let c=0;c<N;c++){ const v=this.board[r][c]; if(!v||s.has(v)) return; s.add(v); } } for(let c=0;c<N;c++){ const s=new Set(); for(let r=0;r<N;r++){ const v=this.board[r][c]; if(!v||s.has(v)) return; s.add(v); } }
       for(let c=0;c<N;c++){ const col=[]; for(let r=0;r<N;r++) col.push(this.board[r][c]); if(visible(col)!==this.clue.top[c]||visible(col.slice().reverse())!==this.clue.bottom[c]) return; }
       for(let r=0;r<N;r++){ if(visible(this.board[r])!==this.clue.left[r]||visible(this.board[r].slice().reverse())!==this.clue.right[r]) return; }
-      this.over=true; this.win=true; this.best++; localStorage.setItem('skyBest',String(this.best)); bestEl.textContent=this.best; this.status('🎉 全部楼群就位！'); if(this.autoPlay) this.autoNext();
+      this.over=true; this.win=true; this.best++; localStorage.setItem('skyBest',String(this.best)); bestEl.textContent=this.best; this.status('🎉 全部楼群就位！'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.autoNext(); },900);
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.autoStep(); }

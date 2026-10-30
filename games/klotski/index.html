@@ -127,7 +127,7 @@
     stopAuto(){ this.autoPlay=false; this._path=null; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     tick(ts){ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.render(); requestAnimationFrame(this._tick); }
     update(dt){ const k=1-Math.pow(0.0008,dt); for(let i=0;i<this.pieces.length;i++){ this.disp[i].x=lerp(this.disp[i].x,this.pieces[i].x,k); this.disp[i].y=lerp(this.disp[i].y,this.pieces[i].y,k); }
-      if(this.autoPlay&&!this.over){ this.autoAccum+=dt; if(this.autoAccum>=0.35){ this.autoAccum=0; this.chooseAuto(); } }
+      if(this.autoPlay&&!this.over){ this.autoAccum+=dt; if(this.autoAccum>=0.12){ this.autoAccum=0; this.chooseAuto(); } }
     }
     bindInput(){ const wrap=document.getElementById('board-wrap');
       // Drag-to-slide: grab a piece and drag; it follows your finger cell-by-cell

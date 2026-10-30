@@ -141,7 +141,7 @@
   }
 
   class Sokoban{
-    constructor(){ this.best=parseInt(localStorage.getItem('bestSok')||'0'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this._winPending=false; this._winFiring=false; this._confetti=[]; this._celebrateUntil=0; this._celebrateTimer=null; this.bindInput(); this.loadLevel(0); }
+    constructor(){ this.best=parseInt(localStorage.getItem('bestSok')||'0'); this.autoPlay=false; this.autoTimer=null; this.running=false; this.rafId=null; this._winPending=false; this._winFiring=false; this._confetti=[]; this._celebrateUntil=0; this._celebrateTimer=null; this.moveDur=90; this.bindInput(); this.loadLevel(0); }
     loadLevel(i,keepAuto){ if(!keepAuto) this.stopAuto(); this._walking=false; this._walkPath=null; this._walkIdx=0; this.lvl=i; const rows=LEVELS[i]; CH=rows.length; CW=Math.max(...rows.map(r=>r.length)); CELL=Math.min(46,Math.floor(430/CW)); W=CW*CELL; H=CH*CELL; ctx=fit();
       const p=parse(rows); this.walls=p.walls; this.goals=p.goals; this.boxes=p.boxes; this.player=p.player; this.boxes.forEach(b=>{b.fromR=b.r;b.fromC=b.c;}); this.player.fromR=this.player.r; this.player.fromC=this.player.c; this.over=false; this.solution=null; this.solIdx=0; this.history=[];
       document.getElementById('overlay-win').classList.remove('active'); this.tween=1; this.startLoop(); this.draw(); this.updateUndoBtn(); }
@@ -201,7 +201,7 @@
       const step=this._walkPath[this._walkIdx];
       this.player={r:step.r,c:step.c,fromR:this.player.r,fromC:this.player.c};
       this.tween=0; this.tweenStart=performance.now(); this._walkIdx++;
-      this.autoTimer=setTimeout(()=>this._walkStep(),170);
+      this.autoTimer=setTimeout(()=>this._walkStep(),110);
     }
     // 执行一步推箱（前提：玩家已到达 mv.from）
     _doPush(mv){
@@ -213,14 +213,14 @@
       this.tween=0; this.tweenStart=performance.now();
       this._stepDuringAuto=false; this.updateUndoBtn();
       if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
-      this.autoTimer=setTimeout(()=>this.autoStep(),480);
+      this.autoTimer=setTimeout(()=>this.autoStep(),170);
     }
     autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } if(this.solIdx>=this.solution.length){ this._checkWin(); return; }
       const mv=this.solution[this.solIdx]; // peek，不立即自增：先走路再推箱
       // 玩家还没站到推箱位置 → 先 BFS 走过去，到了再推
       if(this.player.r!==mv.from.r||this.player.c!==mv.from.c){
         const path=this._bfsPath(this.player, mv.from);
-        if(!path||path.length===0){ this.solIdx++; this.autoTimer=setTimeout(()=>this.autoStep(),200); return; }
+        if(!path||path.length===0){ this.solIdx++; this.autoTimer=setTimeout(()=>this.autoStep(),110); return; }
         this._walkPath=path; this._walkIdx=0; this._walking=true; this._pendingPush=mv;
         this._walkStep(); return;
       }
@@ -240,7 +240,7 @@
       const end=(e)=>{ if(e.pointerId!==id) return; id=null; if(fired||this.autoPlay||this.over) return; const dx=e.clientX-sx,dy=e.clientY-sy; if(Math.max(Math.abs(dx),Math.abs(dy))>=TH){ if(Math.abs(dx)>Math.abs(dy)) this.move(0,dx>0?1:-1); else this.move(dy>0?1:-1,0); } };
       wrap.addEventListener('pointerup',end); wrap.addEventListener('pointercancel',end);
       window.addEventListener('resize',()=>this.draw()); }
-    draw(){ ctx.setTransform(SX,0,0,SY,0,0); ctx.clearRect(0,0,W,H); const tf=this.tween<1?Math.min(1,(performance.now()-this.tweenStart)/260):1; this.tween=tf;
+    draw(){ ctx.setTransform(SX,0,0,SY,0,0); ctx.clearRect(0,0,W,H); const tf=this.tween<1?Math.min(1,(performance.now()-this.tweenStart)/this.moveDur):1; this.tween=tf;
       // draw cells
       for(let r=0;r<CH;r++) for(let c=0;c<CW;c++){ const x=c*CELL,y=r*CELL; if(this.walls.has(r+','+c)){ ctx.fillStyle='#2a2150'; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); } else { ctx.fillStyle='#10162e'; this.rrect(x+1,y+1,CELL-2,CELL-2,5); ctx.fill(); if(this.goals.has(r+','+c)){ ctx.strokeStyle='#4dffc4'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,CELL*0.18,0,7); ctx.stroke(); } } }
       const ease=t=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
