@@ -106,7 +106,7 @@
     }
     gen(){
       this.sol=genSolution();this.clues=computeClues(this.sol);
-      this.diag=this.sol.map(row=>row.slice());
+      this.diag=this.sol.map(row=>row.map(()=>0)); // start blank, not pre-solved
       this.anim={}; // key -> progress 0..1
       this.animSpeed=6;
     }
@@ -127,7 +127,9 @@
       this.win();
     }
     win(){
-      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('slantBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('slantBest',String(this.best)); this.updateBest();
+        // keep auto-playing: regenerate a fresh puzzle and resume auto (do NOT call restart, which would stopAuto)
+        this.schedule(()=>{ this.gen(); this._hideBanner(); this.autoReplay(); }, 800); return; }
       this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('slantBest',String(this.best)); this.updateBest();
       document.getElementById('bannerMsg').textContent='无环解达成 · 已解 '+this.solvedCount;
       document.getElementById('banner').classList.add('show');

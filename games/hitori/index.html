@@ -71,10 +71,11 @@
     fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(rect.width||420,420)); const dpr=window.devicePixelRatio||1; this.W=w; this.cell=w/N; canvas.width=w*dpr; canvas.height=w*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
     genB(){ const B=new Set(); const has=(r,c)=>B.has(key(r,c));
       const no3=(r,c)=>{ const h=[has(r,c-2),has(r,c-1),has(r,c),has(r,c+1),has(r,c+2)]; for(let i=0;i<3;i++) if(h[i]&&h[i+1]&&h[i+2]) return false; const v=[has(r-2,c),has(r-1,c),has(r,c),has(r+1,c),has(r+2,c)]; for(let i=0;i<3;i++) if(v[i]&&v[i+1]&&v[i+2]) return false; return true; };
+      const adj=(r,c)=>has(r-1,c)||has(r+1,c)||has(r,c-1)||has(r,c+1);
       const connected=()=>{ const total=N*N-B.size; if(total===0) return false; const whites=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(!has(r,c)) whites.push([r,c]); const seen=new Set(); const st=[whites[0]]; seen.add(key(whites[0][0],whites[0][1])); while(st.length){ const [r,c]=st.pop(); for(const[dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=N||nc<0||nc>=N||has(nr,nc)) continue; const k=key(nr,nc); if(!seen.has(k)){ seen.add(k); st.push([nr,nc]); } } } return seen.size===total; };
       const cells=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++) cells.push([r,c]); shuffle(cells);
       const target=7+((Math.random()*4)|0);
-      for(const [r,c] of cells){ if(B.size>=target) break; B.add(key(r,c)); if(!no3(r,c)||!connected()) B.delete(key(r,c)); }
+      for(const [r,c] of cells){ if(B.size>=target) break; if(adj(r,c)) continue; B.add(key(r,c)); if(!no3(r,c)||!connected()) B.delete(key(r,c)); }
       return [...B].map(k=>[Math.floor(k/N),k%N]);
     }
     fillLatin(Bset){ const g=Array.from({length:N},()=>new Array(N).fill(0)); const isB=(r,c)=>Bset.has(key(r,c));
@@ -103,8 +104,10 @@
       for(let r=0;r<N;r++){ const h=[has(r,0),has(r,1),has(r,2),has(r,3),has(r,4)]; for(let i=0;i<3;i++) if(h[i]&&h[i+1]&&h[i+2]) return false; }
       for(let c=0;c<N;c++){ const v=[has(0,c),has(1,c),has(2,c),has(3,c),has(4,c)]; for(let i=0;i<3;i++) if(v[i]&&v[i+1]&&v[i+2]) return false; }
       const total=N*N-blackSet.size; if(total===0) return false; const whites=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(!has(r,c)) whites.push([r,c]); const seen=new Set(); const st=[whites[0]]; seen.add(key(whites[0][0],whites[0][1])); while(st.length){ const [r,c]=st.pop(); for(const[dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=N||nc<0||nc>=N||has(nr,nc)) continue; const k=key(nr,nc); if(!seen.has(k)){ seen.add(k); st.push([nr,nc]); } } } if(seen.size!==total) return false;
-      for(let r=0;r<N;r++){ const s=new Set(); for(let c=0;c<N;c++){ if(has(r,c)) continue; const v=this.num[r][c]; if(s.has(v)) return false; s.add(v); } if(s.size!==N) return false; }
-      for(let c=0;c<N;c++){ const s=new Set(); for(let r=0;r<N;r++){ if(has(r,c)) continue; const v=this.num[r][c]; if(s.has(v)) return false; s.add(v); } if(s.size!==N) return false; }
+      // Hitori rule: white cells in each row/column must contain NO duplicate numbers
+      // (they need not contain all N numbers — black cells reduce the count).
+      for(let r=0;r<N;r++){ const s=new Set(); for(let c=0;c<N;c++){ if(has(r,c)) continue; const v=this.num[r][c]; if(s.has(v)) return false; s.add(v); } }
+      for(let c=0;c<N;c++){ const s=new Set(); for(let r=0;r<N;r++){ if(has(r,c)) continue; const v=this.num[r][c]; if(s.has(v)) return false; s.add(v); } }
       return true;
     }
     checkWin(){ const bs=new Set(); for(let r=0;r<N;r++)for(let c=0;c<N;c++) if(this.black[r][c]) bs.add(key(r,c)); if(bs.size===0) return; if(this.valid(bs)){ this.over=true; this.win=true; this.best++; localStorage.setItem('hitoBest',String(this.best)); bestEl.textContent=this.best; this.status('🎉 黑白分明，解开啦！'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.autoNext(); },900); } }

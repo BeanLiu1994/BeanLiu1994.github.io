@@ -255,8 +255,16 @@ class Akari {
   autoStep(){
     if(!this.autoPlay) return;
     if(this.autoIdx>=this._order.length){
-      this.autoTimer=setTimeout(()=>{ if(!this.autoPlay) return;
-        this.gen(); this._genOrder(); this.autoIdx=0; this.autoStep(); }, 650);
+      // All solution bulbs placed: verify the board is actually lit, celebrate, then advance.
+      this.computeLit();
+      if(this.isSolved()){
+        this._onSolve(); // shows "已点亮" banner + sets solved=true (visual feedback)
+        this.autoTimer=setTimeout(()=>{ if(!this.autoPlay) return;
+          this.gen(); this._genOrder(); this.autoIdx=0; this.autoStep(); }, 950);
+      } else {
+        this.autoTimer=setTimeout(()=>{ if(!this.autoPlay) return;
+          this.gen(); this._genOrder(); this.autoIdx=0; this.autoStep(); }, 650);
+      }
       return;
     }
     const [r,c]=this._order[this.autoIdx++];
