@@ -137,8 +137,16 @@ function render(){
 }
 ['src','tbl','sep','detect','genCreate'].forEach(id=>$(id).addEventListener('input',render));
 $('sample').addEventListener('click',()=>{ $('src').value='id,name,age,active,score\n1,Tom,20,true,95.5\n2,Jerry,18,false,88\n3,"Smith, John",25,true,91.2'; render(); });
-$('copy').addEventListener('click',()=>navigator.clipboard.writeText($('out').textContent).then(()=>setStatus('已复制 SQL','ok')));
+$('copy').addEventListener('click',()=>copyText($('out').textContent).then(ok=>setStatus(ok?'已复制 SQL':'复制失败','ok')));
 render();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>

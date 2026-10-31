@@ -61,7 +61,7 @@
     <label>站点名称<input id="site" value="My Blog"></label>
     <label>标题<input id="title" value="一文搞懂 CSS Grid 布局"></label>
     <label>描述<textarea id="desc">从零开始学习 CSS Grid，包含大量可复制的示例与可视化效果，帮你快速掌握现代网页布局。</textarea></label>
-    <label>图片 URL<input id="img" value="https://picsum.photos/600/315"></label>
+    <label>图片 URL<input id="img" placeholder="https://example.com/cover.png（留空显示占位图）"></label>
     <label>链接 URL<input id="url" value="https://example.com/posts/css-grid"></label>
   </section>
   <section class="card">
@@ -81,6 +81,8 @@
 <script>
 const $=id=>document.getElementById(id);
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// 本地占位图（data: URI，零网络依赖），图片 URL 留空时用于预览
+const PLACEHOLDER='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'600\' height=\'315\'><rect width=\'600\' height=\'315\' fill=\'%23eaeaea\'/><text x=\'300\' y=\'162\' font-family=\'sans-serif\' font-size=\'28\' fill=\'%23999\' text-anchor=\'middle\'>预览图 Preview</text></svg>';
 function copyText(text){
   if(navigator.clipboard&&navigator.clipboard.writeText){
     return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text));
@@ -92,12 +94,12 @@ function fallbackCopy(text){
 }
 function render(){
   const site=$('site').value, title=$('title').value, desc=$('desc').value, img=$('img').value, url=$('url').value;
-  $('tw').innerHTML=`<img src="${esc(img)}" alt=""><div class="body">
+  $('tw').innerHTML=`<img src="${esc(img||PLACEHOLDER)}" alt=""><div class="body">
     <div class="site">${esc(site)}</div>
     <div class="title">${esc(title)}</div>
     <div class="desc">${esc(desc)}</div>
     <div class="url">${esc(url)}</div></div>`;
-  $('og').innerHTML=`<img src="${esc(img)}" alt=""><div class="body">
+  $('og').innerHTML=`<img src="${esc(img||PLACEHOLDER)}" alt=""><div class="body">
     <div class="site">${esc(site)}</div>
     <div class="title">${esc(title)}</div>
     <div class="desc">${esc(desc)}</div></div>`;

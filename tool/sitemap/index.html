@@ -89,10 +89,18 @@
     if(bad.length) msg+='，跳过 '+bad.length+' 个无效项';
     $('st').textContent=msg;
   }
-  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function copy(){ copyText($('out').textContent).then(ok=>{ $('st').textContent = ok ? '✓ 已复制到剪贴板' : '复制失败，请手动选择文本'; }); }
   function dl(){ const b=new Blob([$('out').textContent],{type:'application/xml'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='sitemap.xml'; a.click(); }
   $('gen').onclick=build; $('copy').onclick=copy; $('dl').onclick=dl;
 })();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>

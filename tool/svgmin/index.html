@@ -87,10 +87,18 @@
   }
   function fmt(){ const s=$('src').value; if(!s.trim()){ $('st').textContent='✗ 请输入 SVG'; return; }
     const r=pretty(s); $('out').textContent=r; $('stat').textContent='格式化'; $('st').textContent='✓ 已格式化'; }
-  function copy(){ navigator.clipboard.writeText($('out').textContent).then(()=>$('st').textContent='✓ 已复制到剪贴板'); }
+  function copy(){ copyText($('out').textContent).then(ok=>{ $('st').textContent = ok ? '✓ 已复制到剪贴板' : '复制失败，请手动选择文本'; }); }
   function dl(){ const b=new Blob([$('out').textContent],{type:'image/svg+xml'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='min.svg'; a.click(); }
   $('min').onclick=min; $('fmt').onclick=fmt; $('copy').onclick=copy; $('dl').onclick=dl;
 })();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>

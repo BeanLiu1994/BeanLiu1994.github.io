@@ -103,13 +103,21 @@
     window.__out=out;
   }
   $('run').addEventListener('click',run);
-  $('copy').addEventListener('click',()=>{ if(window.__out!==undefined){ navigator.clipboard&&navigator.clipboard.writeText(window.__out); $('st').textContent='✓ 已复制'; } });
+  $('copy').addEventListener('click',()=>{ if(window.__out!==undefined){ copyText(window.__out); $('st').textContent='✓ 已复制'; } });
   $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
   $('mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m;
     [...$('mode').children].forEach(x=>x.classList.toggle('on',x===b)); run(); });
   ['inp','count','sep','num'].forEach(id=>$(id).addEventListener('input',run));
   run();
 })();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>

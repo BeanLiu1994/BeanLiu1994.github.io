@@ -136,13 +136,21 @@
   $('addGroup').addEventListener('click',()=>addGroup());
   $('sitemap').addEventListener('input',build);
   $('host').addEventListener('input',build);
-  $('copy').addEventListener('click',()=>{ if(window.__txt){ navigator.clipboard&&navigator.clipboard.writeText(window.__txt); $('st').textContent='✓ 已复制'; } });
+  $('copy').addEventListener('click',()=>{ if(window.__txt){ copyText(window.__txt); $('st').textContent='✓ 已复制'; } });
   $('download').addEventListener('click',()=>{ const b=new Blob([window.__txt||''],{type:'text/plain'}); const u=URL.createObjectURL(b);
     const a=document.createElement('a'); a.href=u; a.download='robots.txt'; a.click(); URL.revokeObjectURL(u); $('st').textContent='✓ 已下载 robots.txt'; });
 
   // 默认示例分组
   addGroup({agents:'*',delay:'',rules:[{type:'disallow',path:'/admin/'},{type:'disallow',path:'/private/'}]});
 })();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>

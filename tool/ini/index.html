@@ -114,10 +114,18 @@ level = 3</textarea>
   }
   $('toJson').addEventListener('click',toJson);
   $('toIni').addEventListener('click',toIni);
-  $('copy').addEventListener('click',()=>{ navigator.clipboard.writeText($('out').value).then(()=>$('st').textContent='✓ 已复制结果'); });
+  $('copy').addEventListener('click',()=>{ copyText($('out').value).then(ok=>{ $('st').textContent = ok ? '✓ 已复制结果' : '复制失败，请手动选择文本'; }); });
   $('clear').addEventListener('click',()=>{ $('inp').value=''; $('out').value=''; });
   toJson();
 })();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>

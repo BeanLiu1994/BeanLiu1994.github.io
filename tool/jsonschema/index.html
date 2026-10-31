@@ -107,8 +107,16 @@ function render(){
 }
 $('src').addEventListener('input',render);
 $('sample').addEventListener('click',()=>{ $('src').value='{\n  "id": 1,\n  "name": "Tom",\n  "active": true,\n  "score": 95.5,\n  "tags": ["a", "b"],\n  "address": { "city": "Beijing", "zip": "100000" },\n  "roles": [ { "name": "admin" }, { "name": "user" } ]\n}'; render(); });
-$('copy').addEventListener('click',()=>navigator.clipboard.writeText($('out').textContent).then(()=>setStatus('已复制 Schema','ok')));
+$('copy').addEventListener('click',()=>copyText($('out').textContent).then(ok=>setStatus(ok?'已复制 Schema':'复制失败','ok')));
 render();
+
+function fallbackCopy(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }catch(e){ return false; }
+}
+function copyText(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){ return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text)); }
+  return Promise.resolve(fallbackCopy(text));
+}
 </script>
 </body>
 </html>
