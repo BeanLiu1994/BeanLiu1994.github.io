@@ -138,7 +138,6 @@
     }
     flash(i){
       const pad=this.pads[i]; pad.classList.add('lit');
-      if(navigator.vibrate) navigator.vibrate(18);
       this.timers.push(setTimeout(()=>pad.classList.remove('lit'), 300));
     }
     padPress(i){
@@ -179,7 +178,7 @@
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bindInput(){
       this.pads.forEach(p=>{
-        p.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.autoPlay||this.over) return; const i=+p.dataset.i; this.padPress(i); });
+        p.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.autoPlay||this.over) return; const i=+p.dataset.i; this.padPress(i); try{ if(navigator.vibrate) navigator.vibrate(18); }catch(err){} });
       });
     }
   }

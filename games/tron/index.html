@@ -52,9 +52,15 @@
   @keyframes hint-pulse{0%,100%{transform:scale(1);opacity:.85;}50%{transform:scale(1.06);opacity:1;}}
 
   .overlay{
-    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     flex-direction:column; gap:10px; background:rgba(5,9,18,0.72); backdrop-filter:blur(6px);
     -webkit-backdrop-filter:blur(6px); text-align:center; padding:20px;
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:opacity .3s ease, visibility 0s linear .3s;
+  }
+  .overlay.show{
+    opacity:1; visibility:visible; pointer-events:auto;
+    transition:opacity .3s ease;
   }
   .overlay .big{font-size:40px; font-weight:800; letter-spacing:3px;}
   .overlay.win .big{color:var(--accent); text-shadow:0 0 24px var(--accent-glow);}
@@ -412,11 +418,11 @@
       const o = document.getElementById('overlay');
       const t = document.getElementById('overlay-text');
       if(t) t.textContent = result === 'win' ? 'YOU WIN' : result === 'lose' ? 'AI WINS' : 'DRAW';
-      if(o){ o.style.display = 'flex'; o.className = 'overlay ' + (result === 'win' ? 'win' : result === 'lose' ? 'lose' : 'draw'); }
+      if(o){ o.className = 'overlay show ' + (result === 'win' ? 'win' : result === 'lose' ? 'lose' : 'draw'); }
     }
     hideOverlay(){
       const o = document.getElementById('overlay');
-      if(o) o.style.display = 'none';
+      if(o) o.classList.remove('show');
     }
 
     /* ---- input ---- */

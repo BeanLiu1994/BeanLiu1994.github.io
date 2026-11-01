@@ -100,7 +100,7 @@
     position:absolute;
     inset:12px;
     border-radius:12px;
-    display:none;
+    display:flex;
     flex-direction:column;
     align-items:center;
     justify-content:center;
@@ -108,7 +108,16 @@
     background:rgba(8,13,22,.72);
     backdrop-filter:blur(4px);
     z-index:5;
-    animation:fade .35s ease;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity .3s ease, visibility 0s linear .3s;
+  }
+  #overlay.show{
+    opacity:1;
+    visibility:visible;
+    pointer-events:auto;
+    transition:opacity .3s ease;
   }
   #overlay .overlay-title{
     font-size:30px;
@@ -172,7 +181,14 @@
     font-size:13px;
     color:var(--accent);
     letter-spacing:.5px;
+    opacity:0;
     visibility:hidden;
+    transition:opacity .25s ease, visibility 0s linear .25s;
+  }
+  #ai-status.show{
+    opacity:1;
+    visibility:visible;
+    transition:opacity .25s ease;
   }
   .hint{
     width:min(96vw,520px);
@@ -424,8 +440,8 @@ class G {
     if(this.autoPlay) btn.classList.add('active'); else btn.classList.remove('active');
     var ai=document.getElementById('ai-indicator');
     var st=document.getElementById('ai-status');
-    if(this.autoPlay){ ai.classList.add('on'); st.style.visibility='visible'; }
-    else { ai.classList.remove('on'); st.style.visibility='hidden'; }
+    if(this.autoPlay){ ai.classList.add('on'); st.classList.add('show'); }
+    else { ai.classList.remove('on'); st.classList.remove('show'); }
   }
 
   updateScores(){
@@ -435,13 +451,13 @@ class G {
 
   showOverlay(){
     var o=document.getElementById('overlay');
-    o.style.display='flex';
+    o.classList.add('show');
     document.getElementById('overlay-text').textContent = this.autoPlay ? 'Flow Restored' : 'Water Connected!';
     document.getElementById('overlay-sub').textContent = this.autoPlay ? 'auto-solver ready for next' : ('Moves: '+this.moves);
   }
   hideOverlay(){
     var o=document.getElementById('overlay');
-    if(o) o.style.display='none';
+    if(o) o.classList.remove('show');
   }
 
   onPointer(e){
