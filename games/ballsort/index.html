@@ -31,6 +31,11 @@
   .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#04201f; animation:pulse 1.6s infinite; }
   @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
   .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+
+.ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
+.ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
+@keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 </head>
 <body>
@@ -114,11 +119,14 @@
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.solved*1000+this.moves; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
     restart(){ this.stopAuto(); this.moves=0; this.sel=-1; this.anim=null; this.seen=new Set(); this.newPuzzle(); solvedEl.textContent=0; statusEl.textContent='点一根管子选中，再点另一根把顶球倒过去'; }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this._autoProgress=0; this._autoCd=0.3; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoProgress=0; this._autoCd=0.3; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
   }
   window.game=new BallSort();
 })();
 </script>
+<div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
 </body>
 </html>

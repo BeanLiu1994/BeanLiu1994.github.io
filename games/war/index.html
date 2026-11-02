@@ -31,6 +31,11 @@
   .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#1a0608; animation:pulse 1.6s infinite; }
   @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
   .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+
+.ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
+.ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
+@keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 </head>
 <body>
@@ -90,8 +95,10 @@
     }
     finish(){ this.update(); if(this.winner==='you'){ this.best++; localStorage.setItem('warBest',String(this.best)); bestEl.textContent=this.best; } this.status(this.over?(this.winner==='you'?'🏆 你赢下整副牌！':'💀 对手收走全部牌'):'比大小中…'); if(this.over&&this.autoPlay) this.autoNext(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.play(); }
-    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this.play(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
     autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.draw(dt); }catch(err){ console.error(err); } }
     card(x,y,w,h,cd,faceUp){ ctx.save(); ctx.shadowColor='#00000066'; ctx.shadowBlur=10; ctx.fillStyle=faceUp?'#f7f7ff':'#3a2d6b'; this.rr(x,y,w,h,8); ctx.fill(); ctx.shadowBlur=0; ctx.strokeStyle='#ffffff22'; ctx.lineWidth=1.5; this.rr(x,y,w,h,8); ctx.stroke(); if(faceUp){ const red=RED[cd.s]; ctx.fillStyle=red?'#ff5d6a':'#1a1a2e'; ctx.font=`bold ${h*0.32}px system-ui`; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(RANKS[cd.r],x+w*0.1,y+h*0.08); ctx.font=`${h*0.4}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(SUITS[cd.s],x+w/2,y+h*0.56); } else { ctx.strokeStyle='#7c5cff'; ctx.lineWidth=2; this.rr(x+w*0.18,y+h*0.18,w*0.64,h*0.64,6); ctx.stroke(); } ctx.restore(); }
@@ -116,5 +123,6 @@
   window.game=new War();
 })();
 </script>
+<div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
 </body>
 </html>

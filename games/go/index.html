@@ -32,6 +32,11 @@
   .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#0a1a0e; animation:pulse 1.6s infinite; --glow:var(--accent-glow); }
   @keyframes pulse { 0%,100%{box-shadow:0 0 6px var(--glow,transparent);} 50%{box-shadow:0 0 18px var(--glow,transparent),0 0 34px var(--glow,transparent);} }
   .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+
+.ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
+.ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
+@keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 </head>
 <body>
@@ -121,7 +126,9 @@
       return null;
     }
     doMove(r,c){ const res=this.place(r,c,this.turn); if(!res.ok) return false; this.last=[r,c]; this.passCount=0; this._autoProgress++; this.turn=3-this.turn; this.refreshScores(); return true; }
-    toggleAuto(){ this.autoPlay=!this.autoPlay; if(this.autoPlay){ btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; } else { btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); } }
+    toggleAuto(){ this.autoPlay=!this.autoPlay; if(this.autoPlay){ btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoCd=0.4; } else { btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); } }
     startAuto(){ this.autoPlay=true; btnAuto.textContent='Auto: ON'; btnAuto.classList.add('auto-on'); this._autoCd=0.4; }
     stopAuto(){ this.autoPlay=false; btnAuto.textContent='Auto: OFF'; btnAuto.classList.remove('auto-on'); }
     maybeAuto(dt){
@@ -152,5 +159,6 @@
   window.game=new Go();
 })();
 </script>
+<div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
 </body>
 </html>

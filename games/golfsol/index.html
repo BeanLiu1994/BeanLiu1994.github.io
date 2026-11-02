@@ -31,6 +31,11 @@
   .btn.auto-on { background:var(--accent); border-color:var(--accent); color:#06201a; animation:pulse 1.6s infinite; }
   @keyframes pulse {0%,100%{box-shadow:0 0 6px var(--accent-glow);} 50%{box-shadow:0 0 18px var(--accent-glow),0 0 34px var(--accent-glow);} }
   .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
+
+.ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
+.ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
+@keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 </head>
 <body>
@@ -88,8 +93,10 @@
     remaining(){ let n=0; for(const p of this.piles) n+=p.length; return n; }
     checkWin(){ if(this.piles.every(p=>p.length===0)){ this.over=true; this.win=true; this.best++; localStorage.setItem('golfBest',String(this.best)); bestEl.textContent=this.best; this.status('🏆 全部清空，漂亮！'); if(this.autoPlay) this.autoNext(); } }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); this.autoStep(); }
-    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+      var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
     autoStep(){ if(!this.autoPlay||this.over) return;
       let moved=false;
       for(let i=0;i<7;i++){ const p=this.piles[i]; if(p.length){ const card=p[p.length-1]; if(this.canMove(card)){ this.found=card; p.pop(); this._autoProgress++; moved=true; this.checkWin(); if(!this.over) this.status('收入 '+RANKS[card.r]+SUITS[card.s]); break; } } }
@@ -118,5 +125,6 @@
   window.game=new Golf();
 })();
 </script>
+<div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
 </body>
 </html>
