@@ -63,7 +63,7 @@
   const CAP=4;
   class BallSort {
     constructor(){
-      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=-1; this.moves=0; this.solved=0; this.time=0; this.anim=null; this.seen=new Set(); this.lastMove='';
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=-1; this.moves=0; this.solved=0; this.time=0; this.anim=null; this.seen=new Set(); this.lastMove=''; this.solution=null; this.solIdx=0;
       this.best=parseInt(localStorage.getItem('ballsortBest')||'0'); bestEl.textContent=this.best;
       this.fit(); window.addEventListener('resize',()=>this.fit());
       canvas.addEventListener('pointerdown',e=>this.onTap(e));
@@ -101,9 +101,32 @@
       for(const c of cands){ if((c.a+'>'+c.b)===this.lastMove) continue; return [c.a,c.b]; }
       return cands.length?[cands[0].a,cands[0].b]:null; }
     stateKey(){ return this.tubes.map(t=>t.join('.')).join('|'); }
-    autoStep(){ if(this.win()){ this.solved++; if(this.solved>this.best){ this.best=this.solved; localStorage.setItem('ballsortBest',String(this.best)); bestEl.textContent=this.best; } this.newPuzzle(); return; }
-      const key=this.stateKey(); if(this.seen.has(key)){ this.newPuzzle(); return; } this.seen.add(key); if(this.seen.size>400) this.seen.clear();
-      const mv=this.bestMove(); if(mv){ this.doMove(mv[0],mv[1]); } else this.newPuzzle(); }
+    tubesWin(tubes){ return tubes.every(t=>t.length===0||(t.length===CAP&&t.every(v=>v===t[0]))); }
+    // 真正的求解器：BFS 在状态空间里搜索到「每管清空或单色填满」的解，保证自动模式能顺畅通关
+    solveBFS(){
+      const key=(tubes)=>tubes.map(t=>t.join(',')).sort().join('|');
+      const start=this.tubes.map(t=>t.slice());
+      if(this.tubesWin(start)) return [];
+      const visited=new Set([key(start)]); const q=[{tubes:start,path:[]}]; let cnt=0;
+      while(q.length){ const st=q.shift(); cnt++; if(cnt>300000) return null;
+        const n=st.tubes.length;
+        for(let a=0;a<n;a++){ if(!st.tubes[a].length) continue; const ball=st.tubes[a][st.tubes[a].length-1];
+          for(let b=0;b<n;b++){ if(a===b) continue; const ta=st.tubes[a], tb=st.tubes[b];
+            if(tb.length>=CAP) continue; const tbTop=tb.length?tb[tb.length-1]:null; if(tbTop!==null&&tbTop!==ball) continue;
+            if(tb.length===0){ const distinct=new Set(ta).size; if(distinct===1) continue; }
+            const nt=st.tubes.map(t=>t.slice()); nt[b].push(nt[a].pop());
+            const k=key(nt); if(visited.has(k)) continue;
+            const np=st.path.concat([[a,b]]); if(this.tubesWin(nt)) return np;
+            visited.add(k); q.push({tubes:nt,path:np}); } } }
+      return null;
+    }
+    autoStep(){
+      if(this.win()){ this.newPuzzle(); this.solution=null; this.seen.clear(); return; }
+      if(!this.solution){ this.solution=this.solveBFS(); this.solIdx=0; if(!this.solution){ this.newPuzzle(); this.solution=null; this.seen.clear(); return; } }
+      if(this.solIdx>=this.solution.length){ this.newPuzzle(); this.solution=null; this.seen.clear(); return; }
+      const mv=this.solution[this.solIdx++];
+      if(this.canMove(mv[0],mv[1])) this.doMove(mv[0],mv[1]); else { this.solution=null; }
+    }
     update(dt){ this.time+=dt; if(this.anim){ this.anim.t+=dt; if(this.anim.t>=this.anim.dur) this.anim=null; }
       if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0&&!this.anim){ this._autoCd=0.34; this.autoStep(); } } }
     drawTube(L,i){ const cx=L.x0+i*L.gap; const x=cx-L.tw/2; const h=L.th; const y=L.baseY-h;

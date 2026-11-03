@@ -42,7 +42,7 @@
   .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
   .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
   @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
-  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
@@ -68,7 +68,7 @@
     <button class="btn primary" onclick="game.restart()">New Board</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI planning...</span></div>
+  <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI planning...</span></div>
   <div class="stats-bar"><span id="peg-stat">Pegs: 32</span><span id="move-stat">Moves: 0</span></div>
 </div>
 <script>
@@ -101,9 +101,9 @@
     win(){ const left=this.board.size; const score=33-left; if(score>this.best){ this.best=score; localStorage.setItem('bestPeg',this.best); } document.getElementById('win-msg').textContent='Only 1 peg left · score '+(33-1); document.getElementById('overlay-win').classList.add('active'); this.stopAuto(); }
     lose(){ document.getElementById('lose-msg').textContent='No moves left · '+this.board.size+' pegs remain'; document.getElementById('overlay-lose').classList.add('active'); this.stopAuto(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex';
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show');
       this.solution=solve(this.board,new Set()); this.solIdx=0; if(!this.solution){ document.getElementById('ai-status').textContent='AI: no solution'; return; } this.autoStep(); }
-    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
     startLoop(){ this.stopLoop(); this.running=true; const loop=()=>{ if(!this.running) return;
       if(this.anim){ const t=Math.min(1,(performance.now()-this.anim.start)/280); if(t>=1){ const over=this._overPending; this.anim=null; this._overPending=null; if(over==='win') this.win(); else if(over==='lose') this.lose(); } }
       this.draw(); this.rafId=requestAnimationFrame(loop); }; this.rafId=requestAnimationFrame(loop); }

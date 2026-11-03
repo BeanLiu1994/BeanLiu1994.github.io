@@ -44,7 +44,7 @@
   .takebar{display:flex;gap:8px;margin-top:10px;justify-content:center;}
   .takebar .btn{display:none;flex:0 0 auto;min-width:54px;padding:9px 14px;}
   .takebar .btn.show{display:block;}
-  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
@@ -74,7 +74,7 @@
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI computing…</span></div>
+  <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI computing…</span></div>
   <div class="hint">Tap a pile to select, then choose how many to take. Last to take wins.</div>
 </div>
 <script>
@@ -96,8 +96,8 @@
     showEnd(){ document.getElementById('end-title').textContent=this.autoPlay?'Game Over':(this.winner===1?'You Win!':'AI Wins'); document.getElementById('end-msg').textContent=this.autoPlay?('Winner: '+(this.winner===1?'Player 1':'Player 2')):''; document.getElementById('overlay-end').classList.add('active'); }
     chooseAuto(){ const [i,n]=optimalMove(this.piles); this.apply(i,n); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show'); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
     tick(ts){ const dt=Math.min(50,(ts!==undefined)?((ts-(this._last||ts))):16)/1000; this._last=ts; this.update(dt); this.render(); requestAnimationFrame(this._tick); }
     update(dt){ for(let i=0;i<this.piles.length;i++) this.disp[i]=lerp(this.disp[i],this.piles[i],1-Math.pow(0.002,dt)); if(this.autoPlay&&!this.over){ this.autoAccum+=dt; if(this.autoAccum>=0.55){ this.autoAccum=0; this.chooseAuto(); } } else if(!this.autoPlay&&!this.over&&this.turn===2){ this.autoAccum+=dt; if(this.autoAccum>=0.6){ this.autoAccum=0; this.chooseAuto(); } } }
     bindInput(){ const wrap=document.getElementById('board-wrap'); wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.turn!==1) return; const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; const idx=this.pileAt(x,y); if(idx<0) return; e.preventDefault(); this.sel=(this.sel===idx)?null:idx; this.updateUI(); }); window.addEventListener('resize',()=>{ this.size=fitCanvas(); }); }

@@ -41,7 +41,7 @@
   .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
   .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06120c;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
   @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
-  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
@@ -75,7 +75,7 @@
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI thinking…</span></div>
+  <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI thinking…</span></div>
   <div class="rules-wrap">
     <details id="rules-details"><summary class="rules-toggle">How to Play Mancala</summary>
       <div class="rules-body">
@@ -151,8 +151,8 @@
     showEnd(){ const w=this.winner; document.getElementById('end-title').textContent=w===1?'You Win!':(w===2?'AI Wins':'Draw'); document.getElementById('end-msg').textContent='You '+this.b[6]+' · AI '+this.b[13]; document.getElementById('overlay-end').classList.add('active'); }
     chooseAuto(){ NODES=0; if(this.over) return; const m=bestMove(this.b,this.turn,7); if(m<0){ this.over=true; this.winner=this.b[6]>this.b[13]?1:2; this.showEnd(); return; } this.doMove(m); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show'); }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
     tick(ts){ const dt=Math.min(50,(ts!==undefined)?((ts-(this._last||ts))):16)/1000; this._last=ts; this.update(dt); this.render(); requestAnimationFrame(this._tick); }
     update(dt){
       for(let i=0;i<14;i++) this.disp[i]=lerp(this.disp[i],this.b[i],1-Math.pow(0.002,dt));

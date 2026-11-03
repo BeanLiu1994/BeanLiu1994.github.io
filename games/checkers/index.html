@@ -42,7 +42,7 @@
   .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
   .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0a1a;animation:pulse-glow 2s infinite;--glow:var(--accent-glow);}
   @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
-  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;color:var(--muted);justify-content:center;min-height:20px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .stats-bar{display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:0.7rem;color:var(--muted);}
@@ -67,7 +67,7 @@
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI thinking...</span></div>
+  <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI thinking...</span></div>
   <div class="stats-bar"><span id="red-stat">Red: 12</span><span id="blk-stat">Black: 12</span><span id="turn-stat">Turn: Red</span></div>
 </div>
 <script>
@@ -133,8 +133,8 @@
       if(prog>0){ this.noProgress=0; this.posCount=new Map(); } else { this.noProgress++; }
       this.turn=-this.turn; if(!this.checkWin(mover) && !this.autoPlay && this.turn===BLACK){ const self=this; setTimeout(()=>{ if(self.over||self.autoPlay) return; const m=chooseMove(self.board,BLACK,5); self.applyTurn(m); self.draw(); },550); } this.draw(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.autoStep(); }
-    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show'); this.autoStep(); }
+    stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
     autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } const m=chooseMove(this.board,this.turn,5); this.applyTurn(m); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),650); }
     bindInput(){ const wrap=document.getElementById('board-wrap'); let id=null;
       wrap.addEventListener('pointerdown',(e)=>{ if(this.autoPlay||this.over||this.turn!==RED) return; id=e.pointerId; try{wrap.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); const r2=canvas.getBoundingClientRect(); const x=(e.clientX-r2.left)/r2.width*W, y=(e.clientY-r2.top)/r2.height*H; const c=Math.floor(x/S), r=Math.floor(y/S); if(!inb(r,c)) return;

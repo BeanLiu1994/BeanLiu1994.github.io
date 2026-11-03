@@ -47,7 +47,7 @@
   .btn.primary:hover{box-shadow:0 0 20px var(--accent-glow);}
   .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#0a0f1a;animation:pulse-glow 2s infinite;}
   @keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--accent-glow);}50%{box-shadow:0 0 22px var(--accent-glow),0 0 40px var(--accent-glow);}}
-  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
@@ -70,7 +70,7 @@
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
-  <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI hunting…</span></div>
+  <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI hunting…</span></div>
   <div class="hint">Move: arrows / swipe · Bomb: tap or space. Auto = AI plays.</div>
 </div>
 <script>
@@ -353,8 +353,8 @@
       }
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.reset(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI hunting…'; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show'); document.getElementById('ai-status').textContent='AI hunting…'; }
+    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
     bindInput(){
       const wrap=document.getElementById('board-wrap');
       let sx=0,sy=0;

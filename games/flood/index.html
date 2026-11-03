@@ -142,7 +142,7 @@
       while(q.length){ const cur=q.shift(); const r=cur[0],c=cur[1];
         const nb=[[r+1,c],[r-1,c],[r,c+1],[r,c-1]];
         for(const n of nb){ const nr=n[0],nc=n[1]; if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue; if(seen[nr][nc]) continue;
-          const col=(this.claimed[r][c])?k:this.board[nr][nc];
+          const col=(this.claimed[nr][nc])?k:this.board[nr][nc];
           if(col===k){ seen[nr][nc]=true; q.push([nr,nc]); cnt++; } } }
       return cnt - this.claimedCount();
     }

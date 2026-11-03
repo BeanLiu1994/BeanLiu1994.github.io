@@ -42,7 +42,7 @@
   .btn.primary:hover{box-shadow:0 0 22px var(--accent-glow);}
   .btn.auto-on{background:var(--accent);border-color:var(--accent);color:#06121f;animation:pg 2s infinite;--glow:var(--accent-glow);}
   @keyframes pg{0%,100%{box-shadow:0 0 8px var(--glow,transparent);}50%{box-shadow:0 0 22px var(--glow,transparent),0 0 40px var(--glow,transparent);}}
-  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;}
+  .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:.74rem;color:var(--muted);justify-content:center;min-height:18px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}
   .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:bk .8s infinite;}
   @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{color:var(--muted);font-size:.74rem;text-align:center;margin-top:8px;line-height:1.5;}
@@ -63,7 +63,7 @@
     <button class="btn primary" id="newBtn">新谜题</button>
     <button class="btn" id="autoBtn">自动</button>
   </div>
-  <div class="ai-indicator" id="ai" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI 解题中…</span></div>
+  <div class="ai-indicator" id="ai" ><div class="ai-dot"></div><span id="ai-status">AI 解题中…</span></div>
   <div class="hint">点亮格子，使每行/每列中<strong>亮起格子</strong>的序号之和，恰好等于左侧/顶部的提示数。点格子切换明暗。</div>
 </div>
 <script>
@@ -128,8 +128,8 @@
     renderAll(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++)this.renderCell(r,c); this.renderClues(); }
     schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
     toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
-    startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').style.display='flex';this.autoReplay();}
-    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').style.display='none';}
+    startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').classList.add('show');this.autoReplay();}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').classList.remove('show');}
     autoReplay(){
       if(!this.autoPlay)return;
       // find next unshaded solution cell

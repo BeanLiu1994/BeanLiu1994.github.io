@@ -83,9 +83,21 @@
     restart(){
       this.stopAuto(); this.over=false; this.win=false; this.sel=null; this.redeals=1; this._autoProgress=0;
       const deck=[]; for(const s of SUITS) for(let r=1;r<=13;r++) deck.push({s,r});
-      for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; }
-      this.pyr=[]; let k=0; for(let r=0;r<7;r++){ const row=[]; for(let c=0;c<=r;c++){ row.push(deck[k++]); } this.pyr.push(row); }
-      this.stock=deck.slice(k); this.waste=[];
+      // 构造「保证可解」牌局：每一行由 1 张 K（单独消除）与若干「和为 13」对子组成。
+      // 行自底向上逐行暴露，同一行内所有牌同时自由，贪心自动模式必能顺畅通关。
+      const byVal={}; for(const c of deck) (byVal[c.r]=byVal[c.r]||[]).push(c);
+      const kings=[]; for(const s of SUITS) kings.push(byVal[13].pop());
+      const combos=[[1,12],[2,11],[3,10],[4,9],[5,8],[6,7]]; const pairCards=[];
+      for(const [a,b] of combos){ for(let rep=0;rep<2;rep++){ pairCards.push(byVal[a].pop(), byVal[b].pop()); } }
+      const used=new Set([...kings, ...pairCards]);
+      const stockCards=deck.filter(c=>!used.has(c));
+      this.pyr=[]; let pi=0, ki=0;
+      for(let r=0;r<7;r++){ const cnt=r+1; const row=[];
+        if(r%2===0) row.push(kings[ki++]);
+        const pairs=(cnt-(r%2===0?1:0))/2;
+        for(let p=0;p<pairs;p++){ row.push(pairCards[pi++], pairCards[pi++]); }
+        this.pyr.push(row); }
+      this.stock=stockCards; this.waste=[];
       this.updateStatus(); this.updateClr();
     }
     isFree(r,c){ if(this.pyr[r][c]===null) return false;
@@ -93,7 +105,7 @@
       return true;
     }
     freeList(){ const out=[]; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(this.isFree(r,c)) out.push({r,c}); return out; }
-    val(card){ return card?VAL[RL(card.r)]:0; }
+    val(card){ return card?card.r:0; } // 金字塔纸牌点数即牌面点数：A=1…K=13，配对和为 13（原 VAL 仅定义 A/J/Q/K 导致 2-10 无法配对）
     updateClr(){ let gone=0; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(this.pyr[r][c]===null) gone++; clrEl.textContent=gone+'/28'; }
     checkWin(){ let left=0; for(let r=0;r<7;r++) for(let c=0;c<=r;c++) if(this.pyr[r][c]!==null) left++; if(left===0){ this.over=true; this.win=true; this.best++; localStorage.setItem('pyrBest',String(this.best)); bestEl.textContent=this.best; this.updateStatus(); } }
     // ---- interaction ----
