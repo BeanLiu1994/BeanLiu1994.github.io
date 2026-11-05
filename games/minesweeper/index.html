@@ -212,14 +212,17 @@
       const progressed=this.solveStep();
       if(this.won||this.over){ this.stopAuto(); return; }
       if(!progressed){
-        // guess: pick a hidden cell adjacent to most numbers (low risk)
-        const hidden=[];
-        for(let y=0;y<N;y++) for(let x=0;x<N;x++) if(!this.revealed[y][x]&&!this.flagged[y][x]) hidden.push([x,y]);
-        if(hidden.length===0){ this.stopAuto(); return; }
-        let best=hidden[0], bestN=-1;
-        hidden.forEach(([x,y])=>{ let n=0; this.neighbors(x,y).forEach(([nx,ny])=>{ if(this.revealed[ny][nx]) n++; }); if(n>bestN){ bestN=n; best=[x,y]; } });
-        this.reveal(best[0],best[1]);
-        if(this.over){ this.stopAuto(); return; }
+        // auto mode: reveal a guaranteed-safe cell from the known solution (never guess a mine)
+        let safe=null;
+        for(let y=0;y<N&&!safe;y++) for(let x=0;x<N;x++){ if(!this.revealed[y][x]&&!this.flagged[y][x]&&this.board[y][x]!==1){ safe=[x,y]; break; } }
+        if(safe){ this.reveal(safe[0],safe[1]); if(this.won||this.over){ this.stopAuto(); return; } }
+        else {
+          // only mines remain hidden -> flag them; win triggers via revealedCount
+          for(let y=0;y<N;y++) for(let x=0;x<N;x++){ if(!this.revealed[y][x]&&!this.flagged[y][x]) this.flagged[y][x]=true; }
+          this.updateUI(); this.checkWin();
+          if(this.won||this.over) this.stopAuto();
+          return;
+        }
       }
       document.getElementById('ai-status').textContent='AI: revealed '+this.revealedCount;
       this.autoTimer=setTimeout(()=>this.autoStep(), 90);

@@ -150,7 +150,7 @@
       if(!this.autoPlay||this.over) return;
       let next=null; for(const p of this.place){ if(!this.foundSet.has(p.word)){ next=p; break; } }
       if(next){ this.foundSet.add(next.word); this._autoProgress++; this.updateWords(); this.updateFnd(); this.flash=next.word; this.flashT=Date.now();
-        if(this.foundSet.size===this.place.length){ const t=(Date.now()-this.startT)/1000; if(!this.best||t<this.best){ this.best=t; localStorage.setItem('wsBest',String(t)); bestEl.textContent=t.toFixed(1)+'s'; } this.restart(); return; }
+        if(this.foundSet.size===this.place.length){ const t=(Date.now()-this.startT)/1000; if(!this.best||t<this.best){ this.best=t; localStorage.setItem('wsBest',String(t)); bestEl.textContent=t.toFixed(1)+'s'; } this.over=true; statusEl.textContent='🎉 全部找到！'; if(this.autoTimer) clearTimeout(this.autoTimer); this.autoTimer=setTimeout(()=>{ this.restart(); }, 1300); return; }
       }
       this.schedule();
     }
