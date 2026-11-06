@@ -57,6 +57,11 @@
     transition:opacity .3s,transform .3s;z-index:4;}
   .badge.show{opacity:1;transform:translateY(0);animation:pulse 1.4s ease-in-out infinite;}
   @keyframes pulse{0%,100%{box-shadow:0 0 0px var(--glow);}50%{box-shadow:0 0 16px var(--glow);}}
+
+.ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
+.ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
+@keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 </head>
 <body>
@@ -312,6 +317,25 @@
     get score(){return Math.floor(score);}, get level(){return Math.floor(elapsed/12)+1;},
     get elapsed(){return elapsed;}, get passed(){return passed;}, get lives(){return lives;}
   };
+})();
+</script>
+<div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
+<script>
+(function(){
+  var pill=document.getElementById('ai-indicator'); if(!pill) return;
+  var status=document.getElementById('ai-status');
+  var btn=document.getElementById('autoBtn')||document.getElementById('btn-auto')||document.getElementById('auto-toggle')||document.querySelector('[id*="auto" i]');
+  function isAuto(){
+    var g=window.game||window.Game||window.__test;
+    if(g){ if(typeof g.autoPlay==='boolean') return g.autoPlay; if(typeof g.auto==='boolean') return g.auto; }
+    if(btn) return btn.classList.contains('on');
+    return false;
+  }
+  var last=null;
+  function sync(){ var on=isAuto(); if(on===last) return; last=on; pill.classList.toggle('show',on); if(on&&status) status.textContent='AI 自动游玩中…'; }
+  sync();
+  if(btn){ try{ var mo=new MutationObserver(sync); mo.observe(btn,{attributes:true,attributeFilter:['class']}); }catch(e){} }
+  setInterval(sync,200);
 })();
 </script>
 </body>
