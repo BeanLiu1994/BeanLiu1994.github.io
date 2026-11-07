@@ -46,6 +46,44 @@
   @keyframes bk{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{color:var(--muted);font-size:.74rem;text-align:center;margin-top:8px;line-height:1.5;}
   @media(max-width:420px){.title-block h1{font-size:1.25rem;}.cell{font-size:.66rem;}}
+
+  /* ===== Visual refresh: animated aurora backdrop + glass depth (added by refresh pass) ===== */
+  html { background: var(--bg); }
+  body { background: transparent; position: relative; }
+  body::before {
+    content: ''; position: fixed; inset: -10%; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 22%, #3a2a8a66, transparent 42%),
+      radial-gradient(circle at 82% 28%, #1a6a9a66, transparent 44%),
+      radial-gradient(circle at 50% 85%, #7a2a8a55, transparent 46%);
+    background-size: 220% 220%;
+    filter: blur(26px) saturate(120%);
+    animation: aurora 20s ease-in-out infinite alternate;
+  }
+  @keyframes aurora {
+    0%   { background-position: 0% 0%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 30% 100%; }
+  }
+  .container { position: relative; z-index: 1; }
+  .board-wrap, .score-card, .stats-bar span {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .btn.auto-on { animation: pulse-glow 1.6s infinite; }
+  .ai-indicator {
+    background: linear-gradient(90deg, #ffffff08, #4dffd110, #ffffff08);
+    background-size: 200% 100%;
+    animation: ai-shimmer 2.4s linear infinite;
+    border-radius: 999px;
+    padding: 4px 12px;
+  }
+  @keyframes ai-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    body::before { animation: none; }
+    .ai-indicator { animation: none; }
+  }
+
 </style>
 </head>
 <body>

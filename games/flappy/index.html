@@ -119,7 +119,7 @@
       }
       this.pipes.push({x:this.W+10, w:this.W*0.06+22, gapY:gy, gap:gap, passed:false});
     }
-    flap(){ if(this.over) return; if(!this.started){ this.started=true; } this.bird.vy=this.flapV; if(navigator.vibrate) navigator.vibrate(6); }
+    flap(){ if(this.over) return; if(!this.started){ this.started=true; } this.bird.vy=this.flapV; if(!this.autoPlay && navigator.vibrate) navigator.vibrate(6); }
     loop(){ this.stopLoop(); this.last=performance.now(); const f=(t)=>{ const dt=Math.min(34,t-this.last); this.last=t; this.update(dt); this.draw(); if(!this.over) this.raf=requestAnimationFrame(f); }; this.raf=requestAnimationFrame(f); }
     stopLoop(){ if(this.raf) cancelAnimationFrame(this.raf); this.raf=null; }
     update(dt){

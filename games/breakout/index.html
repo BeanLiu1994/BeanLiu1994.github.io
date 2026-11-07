@@ -154,7 +154,7 @@
             else if(b.x>this.W*0.82) dh=Math.min(dh,-0.28);
             this.onBounce(dh);
           }
-          if(navigator.vibrate) navigator.vibrate(8);
+          if(!this.autoPlay && navigator.vibrate) navigator.vibrate(8);
         }
         // bricks — resolve ALL bricks the ball overlaps in this sub-step.
         // Decide the bounce axis by where the ball CAME FROM (its position before
