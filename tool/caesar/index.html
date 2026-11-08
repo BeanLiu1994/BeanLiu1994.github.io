@@ -91,8 +91,19 @@
     $('st').textContent='✓ 已按位移 '+n+' 转换';
   }
   function setStatus(m,t){ const s=$('st'); s.textContent=m; s.className='status'+(t?' '+t:''); }
-  function copy(s){ try{ navigator.clipboard.writeText(s); setStatus('✓ 已复制','ok'); }
-    catch(e){ setStatus('复制失败：'+e.message,'err'); } }
+  function fallbackCopy(text){
+    try{ const ta=document.createElement('textarea'); ta.value=text;
+      ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }
+    catch(e){ return false; }
+  }
+  async function copy(s){
+    try{ await navigator.clipboard.writeText(s); setStatus('✓ 已复制','ok'); return; }
+    catch(e){ /* writeText 在 file:// 或被拦截时会 reject，落到 execCommand 兜底 */ }
+    if(fallbackCopy(s)) setStatus('✓ 已复制','ok');
+    else setStatus('复制失败：请手动选择文本复制','err');
+  }
 
   $('shift').addEventListener('input',()=>{ $('rng').value=$('shift').value; run(); });
   $('rng').addEventListener('input',()=>{ $('shift').value=$('rng').value; run(); });

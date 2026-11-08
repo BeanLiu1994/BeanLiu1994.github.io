@@ -70,6 +70,17 @@
   const pub=$('pub'),priv=$('priv'),data=$('data'),st=$('st');
   let keys=null;
   function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
+  function fallbackCopy(text){
+    try{ const ta=document.createElement('textarea'); ta.value=text;
+      ta.style.position='fixed'; ta.style.top='-9999px'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }
+    catch(e){ return false; }
+  }
+  async function copyText(text){
+    try{ await navigator.clipboard.writeText(text); return true; }
+    catch(e){ return fallbackCopy(text); }
+  }
   function ab2b64(buf){let s='';const b=new Uint8Array(buf);for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
   function b64toab(b64){const bin=atob(b64.replace(/\s+/g,''));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b.buffer;}
   function pem(body,type){return '-----BEGIN '+type+'-----\n'+body.match(/.{1,64}/g).join('\n')+'\n-----END '+type+'-----\n';}
@@ -108,8 +119,8 @@
     }catch(e){ setStatus('✗ 解密失败（密钥或密文有误）：'+e.message,'err'); }
   }
   $('bGen').onclick=gen; $('bEnc').onclick=enc; $('bDec').onclick=dec;
-  $('bCopyPub').onclick=async()=>{ if(!pub.value){setStatus('无公钥','err');return;} await navigator.clipboard.writeText(pub.value); setStatus('✓ 已复制公钥','ok'); };
-  $('bCopyPriv').onclick=async()=>{ if(!priv.value){setStatus('无私钥','err');return;} await navigator.clipboard.writeText(priv.value); setStatus('✓ 已复制私钥','ok'); };
+  $('bCopyPub').onclick=async()=>{ if(!pub.value){setStatus('无公钥','err');return;} const ok=await copyText(pub.value); setStatus(ok?'✓ 已复制公钥':'复制失败，请手动选择文本复制', ok?'ok':'err'); };
+  $('bCopyPriv').onclick=async()=>{ if(!priv.value){setStatus('无私钥','err');return;} const ok=await copyText(priv.value); setStatus(ok?'✓ 已复制私钥':'复制失败，请手动选择文本复制', ok?'ok':'err'); };
 })();
 </script>
 </body>
