@@ -162,29 +162,33 @@
       this.lvl++; this.cool=24; this.loadLevel(this.lvl); this.strokes=0; this.updateUI();
     }
     simulate(ang,power){
-      const dt=1; const b={x:this.ball.x,y:this.ball.y,vx:Math.cos(ang)*power,vy:Math.sin(ang)*power,r:BR};
-      for(let i=0;i<1000;i++){
+      // Integrate the full trajectory in one call (step() runs one sub-step per frame, but a
+      // single simulate() must cover the whole shot). Uses dt=1 sub-steps identical to step()
+      // when a frame's dt≈1, so a simulated sink reproduces in real play.
+      const b={x:this.ball.x,y:this.ball.y,vx:Math.cos(ang)*power,vy:Math.sin(ang)*power,r:BR};
+      for(let i=0;i<2000;i++){
         const px=b.x, py=b.y;
-        b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=FR; b.vy*=FR;
+        b.x+=b.vx; b.y+=b.vy; b.vx*=FR; b.vy*=FR;
         this.collideWalls(b); this.bounds(b);
         const speed=Math.hypot(b.vx,b.vy);
         const dHole=Math.min(Math.hypot(b.x-this.hole.x,b.y-this.hole.y), segDist(px,py,b.x,b.y,this.hole.x,this.hole.y));
-        if(dHole<HR && speed<SINK_SPEED){ return {x:b.x,y:b.y,hit:true,steps:i}; }
+        if(dHole<HR && speed<SINK_SPEED){ return {x:b.x,y:b.y,hit:true,dist:dHole,steps:i}; }
         if(speed<0.02) break;
       }
-      return {x:b.x,y:b.y,hit:false,steps:1000};
+      return {x:b.x,y:b.y,hit:false,dist:Math.hypot(b.x-this.hole.x,b.y-this.hole.y),steps:2000};
     }
     aiPutt(){
       const h=this.hole; let best=null, bestScore=1e9;
-      // wide power range so levels needing a bank shot (around a wall) are still solvable;
-      // scoring prefers a real sink, and among sinks prefers LOWER power (gentler) + fewer steps.
-      const NANG=144, POWERS=[5,7,9,11,13,15,17,19,22];
+      // Wider power range + finer angle so bank shots around walls are reliably found.
+      // A real sink always beats any miss; among sinks prefer the one ending closest
+      // to the hole center (largest margin) and gentler power.
+      const NANG=180, POWERS=[4,6,8,10,12,14,16,18,20,22,25,28,30];
       for(let a=0;a<NANG;a++){ const ang=a/NANG*Math.PI*2;
         for(const pw of POWERS){
           const s=this.simulate(ang,pw);
           let sc;
-          if(s.hit){ sc = s.steps*0.05 + pw*0.4; }                 // real sink: low power + few steps preferred
-          else { sc = 100000 + Math.hypot(s.x-h.x,s.y-h.y) + pw*0.2; } // a miss is ALWAYS worse than any sink; among misses prefer closer + gentler
+          if(s.hit){ sc = s.dist*1.5 + pw*0.15; }                         // real sink: closest-to-center + gentle
+          else { sc = 100000 + s.dist + pw*0.1; }                          // miss: always worse; prefer closer + gentler
           if(sc<bestScore){ bestScore=sc; best={ang,pw}; }
         }
       }
