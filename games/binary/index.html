@@ -101,7 +101,8 @@
     autoStep(){ if(!this.autoPlay) return; if(this.over){ this._autoNext(); return; }
       let done=false;
       for(let r=0;r<N&&!done;r++)for(let c=0;c<N&&!done;c++){ if(this.board[r][c]===-1){ this.board[r][c]=this.sol[r][c]; this._autoProgress++; done=true; } }
-      if(!done){ this.over=true; this.win=true; this.best++; localStorage.setItem('binBest',String(this.best)); bestEl.textContent=this.best; statusEl.textContent='🎉 解开啦！'; }
+      if(!done){ this.over=true; this.win=true; this.best++; localStorage.setItem('binBest',String(this.best)); bestEl.textContent=this.best; statusEl.textContent='🎉 解开啦！';
+        this.updateUI(); this.autoTimer=setTimeout(()=>{ if(this.autoPlay) this._autoNext(); }, 900); return; }
       this.updateUI(); this.autoTimer=setTimeout(()=>this.autoStep(), 70);
     }
     _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }

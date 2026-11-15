@@ -117,7 +117,9 @@
       let best=null,bs=-1e9; for(const m of moves){ const s=this.scoreMove(m,P); if(s>bs){bs=s;best=m;} }
       const rem=this.apply(best,P); if(rem>0){ this.off[P]+=rem; if(this.off[P]>=6){ this.win(P); return; } }
       this.turn=3-P; }
-    win(P){ this.over=true; statusEl.textContent=(P===1?'🏆 你':'AI')+'把对方挤出 6 颗，获胜！'; if(P===1){ this.bestWon++; if(this.bestWon>this.best){ this.best=this.bestWon; localStorage.setItem('abaloneBest',String(this.best)); } } if(this.autoPlay) this._autoNext(); }
+    win(P){ this.over=true; statusEl.textContent=(P===1?'🏆 你':'AI')+'把对方挤出 6 颗，获胜！'; if(P===1){ this.bestWon++; if(this.bestWon>this.best){ this.best=this.bestWon; localStorage.setItem('abaloneBest',String(this.best)); } }
+      // 自动模式先停留展示获胜反馈，再开新局（避免瞬间重开看不到结果）
+      if(this.autoPlay) this._autoTimer=setTimeout(()=>{ if(this.autoPlay) this._autoNext(); }, 1000); }
     _autoNext(){ this.stopAuto(); this.newGame(); this.startAuto(); }
     onTap(e){ e.preventDefault(); if(this.autoPlay||this.over||this.turn!==1) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left,y=e.clientY-r.top;
       let hit=null,bd=1e9; for(const c of this.cells){ const p=this.pts[key(c.q,c.r)]; const dd=Math.hypot(p.x-x,p.y-y); if(dd<bd){bd=dd;hit=c;} } if(!hit||bd>this.W*0.05) return;
@@ -144,7 +146,7 @@
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoProgress=0; this._autoCd=0.4; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+    stopAuto(){ this.autoPlay=false; if(this._autoTimer){clearTimeout(this._autoTimer);this._autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
   }
   window.game=new Abalone();
