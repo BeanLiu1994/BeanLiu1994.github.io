@@ -64,7 +64,7 @@
 
   class Bridges {
     constructor(){
-      this.autoPlay=false; this.autoTimer=null; this._last=0; this._autoProgress=0;
+      this.autoPlay=false; this.autoTimer=null; this._celebrateTimer=null; this._celebrateStart=0; this._last=0; this._autoProgress=0;
       this.best=parseInt(localStorage.getItem('brBest')||'0'); bestEl.textContent=this.best;
       this.fit(); window.addEventListener('resize',()=>this.fit());
       canvas.addEventListener('pointerdown',(e)=>{ e.preventDefault(); this.onDown(e); });
@@ -114,14 +114,17 @@
       }
       this.sel=null;
     }
-    checkWin(){ for(const is of this.islands){ if(this.incident(is)!==is.num) return; } this.over=true; this.win=true; this.best++; localStorage.setItem('brBest',String(this.best)); bestEl.textContent=this.best; statusEl.textContent='🎉 全部连通！'; }
+    checkWin(){ for(const is of this.islands){ if(this.incident(is)!==is.num) return; } this.over=true; this.win=true; this.best++; localStorage.setItem('brBest',String(this.best)); bestEl.textContent=this.best; statusEl.textContent='🎉 全部连通！';
+      // 自动模式：通关庆祝停顿后再进下一局，保证视觉反馈清晰、不突变
+      if(this.autoPlay){ this._celebrateStart=performance.now(); if(this._celebrateTimer) clearTimeout(this._celebrateTimer); this._celebrateTimer=setTimeout(()=>{ this._celebrateTimer=null; if(this.autoPlay) this._autoNext(); }, 950); } }
     updateUI(){ let n=0; for(const k in this.bridges) if(this.bridges[k]) n+=this.bridges[k]; brEl.textContent=n; if(!this.over) statusEl.textContent='点两岛建桥，使每岛桥数等于标号'; }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this.autoStep(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
-    autoStep(){ if(!this.autoPlay) return; if(this.over){ this._autoNext(); return; }
+    autoStep(){ if(!this.autoPlay) return; if(this.over){ // 已通关：等待庆祝停顿计时器推进，期间不重开
+        if(!this._celebrateTimer){ this._celebrateStart=performance.now(); this._celebrateTimer=setTimeout(()=>{ this._celebrateTimer=null; if(this.autoPlay) this._autoNext(); }, 950); } return; }
       if(this.autoList.length){ const [a,b]=this.autoList.shift(); this.bridges[ekey(a,b)]=1; this._autoProgress++; this.checkWin(); this.updateUI(); this.autoTimer=setTimeout(()=>this.autoStep(), 120); }
       else { this._autoNext(); }
     }
@@ -142,6 +145,17 @@
         ctx.strokeStyle=sat?'#4dff91':'#4d9bff'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(is.x,is.y,this.ir,0,7); ctx.stroke();
         ctx.fillStyle='#e6e6f5'; ctx.font='bold '+(this.ir*0.95)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(is.num, is.x, is.y+1);
         if(this.sel&&this.sel.id===is.id){ ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(is.x,is.y,this.ir+4,0,7); ctx.stroke(); }
+      }
+      if(this.over&&this.win){ // 通关庆祝横幅（最后绘制，浮于最上层）：淡入 + 轻微呼吸，平滑不突变
+        const age=performance.now()-(this._celebrateStart||performance.now()); const a=Math.min(1, age/260);
+        ctx.save(); ctx.globalAlpha=a;
+        const bw=W*0.78, bh=W*0.19, bx=(W-bw)/2, by=W*0.40;
+        ctx.fillStyle='rgba(6,18,12,.94)'; ctx.strokeStyle='#4dff91'; ctx.lineWidth=2; ctx.shadowColor='#4dff91'; ctx.shadowBlur=18;
+        ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,14); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0;
+        ctx.fillStyle='#4dff91'; ctx.font='bold '+(W*0.062)+'px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('🎉 全部连通！', W/2, by+bh*0.36);
+        ctx.fillStyle='#cfe9d8'; ctx.font=(W*0.035)+'px Segoe UI'; ctx.fillText('AI 已完成本局 · 即将开始下一局', W/2, by+bh*0.73);
+        ctx.restore();
       }
     }
   }

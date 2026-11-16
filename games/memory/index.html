@@ -49,6 +49,9 @@
   .overlay{position:absolute;inset:8px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
     background:#04101acc;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:5;}
   .overlay.show{opacity:1;pointer-events:auto;}
+  .overlay.auto-celebrate{pointer-events:none;}
+  .overlay.auto-celebrate #ovBtn{display:none;}
+  .overlay.auto-celebrate #ovTitle{font-size:1.9rem;}
   .overlay h2{font-size:1.7rem;background:linear-gradient(135deg,var(--accent),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .overlay p{color:var(--muted);font-size:0.9rem;}
   .badge{position:absolute;top:14px;right:14px;padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:800;letter-spacing:1px;
@@ -116,7 +119,7 @@
   let faceUp;           // currently face-up unmatched indices (max 2)
   let matchedPairs, moves;
   let over, won, auto, autoReplay, autoIdx, autoTimer, autoFlipB;
-  let elapsed, best, winPulse, mismatchFlash;
+  let elapsed, best, winPulse, mismatchFlash, celebrateTimer;
 
   try{ best=parseInt(localStorage.getItem('neonmemory_best'))||0; }catch(e){best=0;}
 
@@ -128,10 +131,10 @@
     tiles=syms.map(s=>({sym:s,faceUp:false,matched:false,anim:0,glow:0}));
     faceUp=[]; matchedPairs=0; moves=0;
     over=false; won=false; auto=false; autoReplay=false; autoIdx=0; autoTimer=0; autoFlipB=false;
-    elapsed=0; winPulse=0; mismatchFlash=0;
+    elapsed=0; winPulse=0; mismatchFlash=0; celebrateTimer=0;
     if(btnAuto){ btnAuto.classList.remove('on'); btnAuto.textContent='自动游玩'; }
     if(elBadge) elBadge.classList.remove('show');
-    elOverlay.classList.remove('show');
+    elOverlay.classList.remove('show','auto-celebrate');
     elPairs.textContent='0'; elMoves.textContent='0';
     elBest.textContent = best>0 ? best+'步' : '–';
   }
@@ -161,8 +164,13 @@
     if(over) return; over=true; won=true; winPulse=1;
     if(best===0||moves<best){ best=moves; try{localStorage.setItem('neonmemory_best',String(best));}catch(e){} }
     elBest.textContent=best+'步';
-    if(auto){ elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用 '+moves+' 步配齐 '+PAIRS+' 对'; autoTimer=1.0; }
-    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用 '+moves+' 步配齐全部卡片'; elOverlay.classList.add('show'); }
+    if(auto){
+      // 自动通关：同样显示庆祝横幅（不拦截触摸），用独立庆祝计时器保证停留充足、不突变
+      elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用 '+moves+' 步配齐 '+PAIRS+' 对';
+      elOverlay.classList.add('auto-celebrate'); elOverlay.classList.add('show');
+      celebrateTimer=1.0;
+    }
+    else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用 '+moves+' 步配齐全部卡片'; elOverlay.classList.remove('auto-celebrate'); elOverlay.classList.add('show'); }
   }
 
   function setAuto(v){
@@ -215,11 +223,11 @@
   function update(dt){
     if(over){
       if(winPulse>0) winPulse=Math.max(0,winPulse-dt*1.4);
-      if(auto){ autoTimer-=dt; if(autoTimer<=0){ newGame(); setAuto(true); } }
+      if(auto){ celebrateTimer-=dt; if(celebrateTimer<=0){ elOverlay.classList.remove('show','auto-celebrate'); newGame(); setAuto(true); } }
       return;
     }
     elapsed+=dt;
-    if(auto && autoReplay){ autoTimer-=dt; if(autoTimer<=0){ autoStep(); autoTimer=0.22; } }
+    if(auto && autoReplay){ autoTimer-=dt; if(autoTimer<=0){ autoStep(); if(!over) autoTimer=0.22; } }
     if(mismatchFlash>0) mismatchFlash=Math.max(0,mismatchFlash-dt*2);
     for(let i=0;i<tiles.length;i++){ const t=tiles[i]; if(t.anim>0) t.anim=Math.max(0,t.anim-dt*4); if(t.glow>0) t.glow=Math.max(0,t.glow-dt*0.8); }
   }
