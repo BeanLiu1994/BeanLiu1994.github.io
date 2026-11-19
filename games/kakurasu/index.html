@@ -80,9 +80,17 @@
     padding: 4px 12px;
   }
   @keyframes ai-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .win-toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-12px);z-index:60;
+    padding:13px 26px;border-radius:14px;background:linear-gradient(135deg,#0d2a1c,#12402b);
+    border:2px solid var(--ok);color:#eafff4;font-size:1.06rem;font-weight:800;letter-spacing:.5px;
+    box-shadow:0 0 34px rgba(62,207,142,.55);white-space:nowrap;pointer-events:none;
+    opacity:0;visibility:hidden;transition:opacity .28s ease,transform .28s ease,visibility .28s;}
+  .win-toast.show{opacity:1;visibility:visible;transform:translate(-50%,0);}
   @media (prefers-reduced-motion: reduce) {
     body::before { animation: none; }
     .ai-indicator { animation: none; }
+    .win-toast { transition: none; }
   }
 
 </style>
@@ -102,6 +110,7 @@
     <button class="btn" id="autoBtn">自动</button>
   </div>
   <div class="ai-indicator" id="ai" ><div class="ai-dot"></div><span id="ai-status">AI 解题中…</span></div>
+  <div class="win-toast" id="winToast">🎉 解开啦！</div>
   <div class="hint">点亮格子，使每行/每列中<strong>亮起格子</strong>的序号之和，恰好等于左侧/顶部的提示数。点格子切换明暗。</div>
 </div>
 <script>
@@ -115,7 +124,7 @@
       this.solvedCount=parseInt(localStorage.getItem('kakBest')||'0')||0;
       this.best=this.solvedCount;
       this.updateBest();
-      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.autoPlay=false;this._autoProgress=0;this._t=null;this._celebrateTimer=null;this.won=false;
       this.gridEl.style.gridTemplateColumns='repeat('+(N+1)+',1fr)';
       this.restart();
     }
@@ -152,24 +161,33 @@
       for(let r=0;r<N;r++){this.rowClueEls[r].textContent=this.rowClue[r];this.rowClueEls[r].classList.toggle('ok',rowOk[r]);}
     }
     checkWin(){
+      if(this.won)return;
       for(let r=0;r<N;r++){let s=0;for(let c=0;c<N;c++)if(this.shaded[r][c])s+=(c+1);if(s!==this.rowClue[r])return;}
       for(let c=0;c<N;c++){let s=0;for(let r=0;r<N;r++)if(this.shaded[r][c])s+=(r+1);if(s!==this.colClue[c])return;}
       this.win();
     }
     win(){
-      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('kakBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
-      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('kakBest',String(this.best)); this.updateBest();
-      document.getElementById('solved').textContent=this.solvedCount;
+      if(this.won)return; this.won=true;
+      this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('kakBest',String(this.best)); this.updateBest(); document.getElementById('solved').textContent=this.solvedCount;
+      const toast=document.getElementById('winToast');
+      if(this.autoPlay){
+        // 自动模式：显示通关庆祝并停顿，独立计时器防止被步进 _t 覆盖，避免瞬间重开导致视觉突变
+        if(toast){ toast.textContent='🎉 解开啦！第 '+this.solvedCount+' 局'; toast.classList.add('show'); }
+        document.getElementById('ai-status').textContent='🎉 本局解开，即将开始下一局…';
+        if(this._celebrateTimer)clearTimeout(this._celebrateTimer);
+        this._celebrateTimer=setTimeout(()=>{ this._celebrateTimer=null; this._autoNext(); },950);
+      } else if(toast){ toast.textContent='🎉 解开啦！'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),1400); }
     }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
     updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
-    restart(){ this.stopAuto(); this.gen(); this.build(); this.renderAll(); document.getElementById('solved').textContent=this.solvedCount; }
+    restart(){ this.stopAuto(); this.won=false; const __wt=document.getElementById('winToast'); if(__wt)__wt.classList.remove('show'); this.gen(); this.build(); this.renderAll(); document.getElementById('solved').textContent=this.solvedCount; }
     renderAll(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++)this.renderCell(r,c); this.renderClues(); }
     schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
     toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
     startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').classList.add('show');this.autoReplay();}
-    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').classList.remove('show');}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}if(this._celebrateTimer){clearTimeout(this._celebrateTimer);this._celebrateTimer=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').classList.remove('show');}
     autoReplay(){
-      if(!this.autoPlay)return;
+      if(!this.autoPlay||this.won)return;
       // find next unshaded solution cell
       for(let r=0;r<N;r++)for(let c=0;c<N;c++){
         if(this.sol[r][c]&&!this.shaded[r][c]){

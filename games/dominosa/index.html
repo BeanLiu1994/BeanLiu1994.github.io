@@ -79,9 +79,17 @@
     padding: 4px 12px;
   }
   @keyframes ai-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .win-toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-12px);z-index:60;
+    padding:13px 26px;border-radius:14px;background:linear-gradient(135deg,#0d2a1c,#12402b);
+    border:2px solid var(--ok);color:#eafff4;font-size:1.06rem;font-weight:800;letter-spacing:.5px;
+    box-shadow:0 0 34px rgba(62,207,142,.55);white-space:nowrap;pointer-events:none;
+    opacity:0;visibility:hidden;transition:opacity .28s ease,transform .28s ease,visibility .28s;}
+  .win-toast.show{opacity:1;visibility:visible;transform:translate(-50%,0);}
   @media (prefers-reduced-motion: reduce) {
     body::before { animation: none; }
     .ai-indicator { animation: none; }
+    .win-toast { transition: none; }
   }
 
 </style>
@@ -101,6 +109,7 @@
     <button class="btn" id="autoBtn">自动</button>
   </div>
   <div class="ai-indicator" id="ai" ><div class="ai-dot"></div><span id="ai-status">AI 拼骨牌中…</span></div>
+  <div class="win-toast" id="winToast">🎉 解开啦！</div>
   <div class="hint">把棋盘划分成不重叠的<strong>骨牌（相邻两格）</strong>，使每一对数字组合在整个棋盘上<strong>只出现一次</strong>。点一格再点相邻格成牌；点已放置的牌可撤销。</div>
 </div>
 <script>
@@ -122,7 +131,7 @@
     constructor(){
       this.gridEl=document.getElementById('grid');
       this.solvedCount=parseInt(localStorage.getItem('domBest')||'0')||0;this.best=this.solvedCount;this.updateBest();
-      this.autoPlay=false;this._autoProgress=0;this._t=null;
+      this.autoPlay=false;this._autoProgress=0;this._t=null;this._celebrateTimer=null;this.won=false;
       this.gridEl.style.gridTemplateColumns='repeat('+C+',1fr)';
       this.restart();
     }
@@ -173,22 +182,32 @@
       }
     }
     checkWin(){
+      if(this.won)return;
       for(let r=0;r<R;r++)for(let c=0;c<C;c++) if(this.owner[r][c]===-1) return;
       if(this.usedPairs.size!==(R*C/2)) return;
       this.win();
     }
     win(){
-      if(this.autoPlay){ this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('domBest',String(this.best)); this.updateBest(); this.schedule(()=>this.restart(),650); return; }
+      if(this.won)return; this.won=true;
       this.solvedCount++; this.best=Math.max(this.best,this.solvedCount); localStorage.setItem('domBest',String(this.best)); this.updateBest(); document.getElementById('solved').textContent=this.solvedCount;
+      const toast=document.getElementById('winToast');
+      if(this.autoPlay){
+        // 自动模式：显示通关庆祝并停顿，独立计时器防止被步进 _t 覆盖，避免瞬间重开导致视觉突变
+        if(toast){ toast.textContent='🎉 解开啦！第 '+this.solvedCount+' 局'; toast.classList.add('show'); }
+        document.getElementById('ai-status').textContent='🎉 本局解开，即将开始下一局…';
+        if(this._celebrateTimer)clearTimeout(this._celebrateTimer);
+        this._celebrateTimer=setTimeout(()=>{ this._celebrateTimer=null; this._autoNext(); },950);
+      } else if(toast){ toast.textContent='🎉 解开啦！'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),1400); }
     }
+    _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
     updateBest(){document.getElementById('best').textContent=this.best?this.best:'--';}
-    restart(){ this.stopAuto(); this._usedId=new Set(); this.gen(); this.build(); this.render(); document.getElementById('solved').textContent=this.solvedCount; }
+    restart(){ this.stopAuto(); this.won=false; const __wt=document.getElementById('winToast'); if(__wt)__wt.classList.remove('show'); this._usedId=new Set(); this.gen(); this.build(); this.render(); document.getElementById('solved').textContent=this.solvedCount; }
     schedule(fn,ms){if(this._t){clearTimeout(this._t);}this._t=setTimeout(()=>{this._t=null;fn();},ms);}
     toggleAuto(){this.autoPlay?this.stopAuto():this.startAuto();}
     startAuto(){this.autoPlay=true;this._autoProgress=0;const b=document.getElementById('autoBtn');b.textContent='停止';b.classList.add('auto-on');document.getElementById('ai').classList.add('show');this.autoReplay();}
-    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').classList.remove('show');}
+    stopAuto(){this.autoPlay=false;if(this._t){clearTimeout(this._t);this._t=null;}if(this._celebrateTimer){clearTimeout(this._celebrateTimer);this._celebrateTimer=null;}const b=document.getElementById('autoBtn');b.textContent='自动';b.classList.remove('auto-on');document.getElementById('ai').classList.remove('show');}
     autoReplay(){
-      if(!this.autoPlay)return;
+      if(!this.autoPlay||this.won)return;
       for(const d of this.dominoes){
         const [p,q]=d.cells;
         if(this.owner[p[0]][p[1]]!==-1) continue;
