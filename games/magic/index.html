@@ -42,6 +42,10 @@
 
 .ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
 .ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+  .win-toast{position:fixed;left:50%;top:16%;transform:translate(-50%,-12px);z-index:70;padding:12px 26px;border-radius:14px;background:linear-gradient(135deg,#0d2a1c,#12402b);border:2px solid #3ecf8e;color:#eafff4;font-size:1.05rem;font-weight:800;letter-spacing:.5px;box-shadow:0 0 34px rgba(62,207,142,.55);white-space:nowrap;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .28s ease,transform .28s ease,visibility .28s ease;}
+  .win-toast.show{opacity:1;visibility:visible;transform:translate(-50%,0);}
+  @media (prefers-reduced-motion:reduce){.win-toast{transition:none}}
+
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
@@ -91,7 +95,7 @@ class MagicSquare {
     this.ctx=this.canvas.getContext('2d');
     this.N=3; this.autoPlay=false; this._autoProgress=0; this._t=null;
     this._cssW=0; this._last=null;
-    this.solvedCount=0; this.best=parseFloat(localStorage.getItem('magicBest')||'0')||0;
+    this.solvedCount=0; this.best=parseFloat(localStorage.getItem('magicBest')||'0')||0; this.won=false;
     this.fit(); this.generate(); this._bind();
     this._raf=requestAnimationFrame(this.loop.bind(this));
   }
@@ -154,7 +158,7 @@ class MagicSquare {
     return d1===M && d2===M;
   }
   win(){
-    if(this.autoPlay){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('magicBest',this.best); } this.schedule(()=>this.generate(),550); return; }
+    if(this.autoPlay){ if(this.won)return; this.won=true; this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('magicBest',this.best); } var __wt=document.getElementById('winToast'); if(__wt){__wt.textContent='🎉 解开啦！第 '+this.solvedCount+' 局';__wt.classList.add('show');} var __as=document.getElementById('ai-status'); if(__as)__as.textContent='🎉 本局解开，即将开始下一局…'; this.schedule(()=>{ this.won=false; var __w=document.getElementById('winToast'); if(__w)__w.classList.remove('show'); var __a=document.getElementById('ai-status'); if(__a)__a.textContent='AI 自动游玩中…'; this.generate(); },950); return; }
     this.solved=true; this._showBanner('幻方成！','每行每列对角线之和均为 '+this.M);
   }
   autoStep(){
@@ -170,9 +174,9 @@ class MagicSquare {
   schedule(fn,ms){ if(this._t){ clearTimeout(this._t); } this._t=setTimeout(()=>{ this._t=null; fn(); },ms); }
   maybeAuto(){ if(!this.autoPlay||this.solved) return; if(this._t) return; this.schedule(()=>this.autoStep(),230); }
   toggleAuto(){ this.autoPlay?this.stopAuto():this.startAuto(); }
-  startAuto(){ this.autoPlay=true; this._autoProgress=0; this._hideBanner(); this.generate(); this.maybeAuto();
+  startAuto(){ this.autoPlay=true; this.won=false; var __wt=document.getElementById('winToast'); if(__wt)__wt.classList.remove('show'); this._autoProgress=0; this._hideBanner(); this.generate(); this.maybeAuto();
     document.getElementById('autoBtn').classList.add('on'); document.getElementById('autoBtn').textContent='停止'; this._updateStatus(); }
-  stopAuto(){ this.autoPlay=false; if(this._t){ clearTimeout(this._t); this._t=null; }
+  stopAuto(){ this.autoPlay=false; this.won=false; var __wt=document.getElementById('winToast'); if(__wt)__wt.classList.remove('show'); if(this._t){ clearTimeout(this._t); this._t=null; }
     document.getElementById('autoBtn').classList.remove('on'); document.getElementById('autoBtn').textContent='自动'; }
   _bind(){
     const cv=this.canvas;
@@ -257,6 +261,7 @@ class MagicSquare {
 window.game = new MagicSquare();
 </script>
 <div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
+<div class="win-toast" id="winToast">🎉 解开啦！</div>
 <script>
 (function(){
   var pill=document.getElementById('ai-indicator'); if(!pill) return;

@@ -38,6 +38,10 @@
 
 .ai-indicator{position:fixed;left:50%;top:8px;transform:translateX(-50%) translateY(-12px);display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:999px;background:rgba(10,14,24,.84);border:1px solid rgba(79,156,255,.55);color:var(--text,#e6e6e6);font-size:.78rem;font-weight:600;letter-spacing:.3px;z-index:60;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 18px rgba(79,156,255,.35);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease,transform .3s ease;pointer-events:none;white-space:nowrap}
 .ai-indicator.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+  .win-toast{position:fixed;left:50%;top:16%;transform:translate(-50%,-12px);z-index:70;padding:12px 26px;border-radius:14px;background:linear-gradient(135deg,#0d2a1c,#12402b);border:2px solid #3ecf8e;color:#eafff4;font-size:1.05rem;font-weight:800;letter-spacing:.5px;box-shadow:0 0 34px rgba(62,207,142,.55);white-space:nowrap;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .28s ease,transform .28s ease,visibility .28s ease;}
+  .win-toast.show{opacity:1;visibility:visible;transform:translate(-50%,0);}
+  @media (prefers-reduced-motion:reduce){.win-toast{transition:none}}
+
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
@@ -77,7 +81,7 @@
   function splitRun(){ const s=2+Math.floor(Math.random()*3); return [[0,s-1],[s,N-1]]; }
   class Kakuro {
     constructor(){
-      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=null; this.solvedCount=0;
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.sel=null; this.solvedCount=0; this.won=false; this._celebrateTimer=null;
       this.best=parseInt(localStorage.getItem('kakuroBest')||'0'); bestEl.textContent=this.best;
       this.fit(); window.addEventListener('resize',()=>this.fit());
       canvas.addEventListener('pointerdown',e=>this.onTap(e));
@@ -103,9 +107,9 @@
       for(let r=0;r<N;r++){ const seen=new Set(); for(const rn of this.hRuns[r]){ let su=0; for(let c=rn.cols[0];c<=rn.cols[1];c++){ const v=this.val[r][c]; if(seen.has(v)) okAll=false; seen.add(v); su+=v; } if(su!==rn.sum) okAll=false; } }
       for(let c=0;c<N;c++){ const seen=new Set(); for(const rn of this.vRuns[c]){ let su=0; for(let r=rn.rows[0];r<=rn.rows[1];r++){ const v=this.val[r][c]; if(seen.has(v)) okAll=false; seen.add(v); su+=v; } if(su!==rn.sum) okAll=false; } }
       if(okAll){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('kakuroBest',String(this.best)); bestEl.textContent=this.best; } statusEl.textContent='✓ 完成！已解 '+this.solvedCount+' 题'; this.newPuzzle(); } else statusEl.textContent='还不对，检查行列不重复与提示和'; }
-    autoStep(){ // reveal solution cell by cell
+    autoStep(){ if(this.won)return; // reveal solution cell by cell
       let done=true; for(let r=0;r<N;r++) for(let c=0;c<N;c++){ if(!this.val[r][c]){ this.val[r][c]=this.sol[r][c]; done=false; break; } if(!done) break; }
-      if(done){ this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('kakuroBest',String(this.best)); bestEl.textContent=this.best; } this.newPuzzle(); } }
+      if(done){ if(this.won)return; this.won=true; this.solvedCount++; if(this.solvedCount>this.best){ this.best=this.solvedCount; localStorage.setItem('kakuroBest',String(this.best)); bestEl.textContent=this.best; } var __wt=document.getElementById('winToast'); if(__wt){__wt.textContent='🎉 解开啦！第 '+this.solvedCount+' 局';__wt.classList.add('show');} var __as=document.getElementById('ai-status'); if(__as)__as.textContent='🎉 本局解开，即将开始下一局…'; if(this._celebrateTimer)clearTimeout(this._celebrateTimer); this._celebrateTimer=setTimeout(()=>{ this._celebrateTimer=null; this.won=false; var __w=document.getElementById('winToast'); if(__w)__w.classList.remove('show'); var __a=document.getElementById('ai-status'); if(__a)__a.textContent='AI 自动游玩中…'; this.newPuzzle(); },950); } }
     update(dt){ if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.16; this.autoStep(); } } }
     draw(){ const W=this.W,cs=this.cell; ctx.clearRect(0,0,W,W);
       for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const x=c*cs,y=r*cs; const info=this.cellInfo[r][c];
@@ -119,14 +123,15 @@
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.solvedCount*100+this.solIdx; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
     restart(){ this.stopAuto(); this.newPuzzle(); solvedEl.textContent=0; statusEl.textContent='点格子选中，下方数字键填入 1-6'; }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
+    startAuto(){ this.autoPlay=true; this.won=false; var __wt=document.getElementById('winToast'); if(__wt)__wt.classList.remove('show'); const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoProgress=0; this._autoCd=0.2; }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
+    stopAuto(){ this.autoPlay=false; this.won=false; if(this._celebrateTimer){clearTimeout(this._celebrateTimer);this._celebrateTimer=null;} var __wt=document.getElementById('winToast'); if(__wt)__wt.classList.remove('show'); const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
   }
   window.game=new Kakuro();
 })();
 </script>
 <div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动游玩中…</span></div>
+<div class="win-toast" id="winToast">🎉 解开啦！</div>
 </body>
 </html>
