@@ -40,6 +40,7 @@
   <div class="toolbar">
     <button id="bCsv2Json" class="primary">CSV → JSON</button>
     <button id="bJson2Csv">JSON → CSV</button>
+    <label><input type="checkbox" id="flatten"> 扁平化嵌套字段</label>
     <button id="bCopy">复制</button>
     <button id="bExample">示例</button>
     <button id="bClear">清空</button>
@@ -59,59 +60,76 @@ Carol,28,Shenzhen</textarea>
   </section>
 </main>
 <div class="status" id="st">就绪</div>
+<script src="../shared/csv.js"></script>
 <script>
 (function(){
   const $ = id => document.getElementById(id);
   function setStatus(m,t){const el=$('st');el.textContent=m;el.className='status'+(t?' '+t:'');}
-  // CSV 解析（处理引号与转义）
-  function parseCSV(text){
-    const rows=[]; let row=[],field='',i=0,inQ=false;
-    while(i<text.length){
-      const c=text[i];
-      if(inQ){
-        if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inQ=false;i++;continue; }
-        field+=c;i++;continue;
-      } else {
-        if(c==='"'){ inQ=true;i++;continue; }
-        if(c===','){ row.push(field);field='';i++;continue; }
-        if(c==='\n'){ row.push(field);rows.push(row);row=[];field='';i++;continue; }
-        if(c==='\r'){ i++;continue; }
-        field+=c;i++;
-      }
+  const isRecord=value=>value!==null && typeof value==='object' && !Array.isArray(value);
+
+  function convert(action){
+    try{
+      action($('input').value);
+    }catch(error){
+      $('output').value='';
+      $('meta').textContent='';
+      setStatus('✗ '+error.message,'err');
     }
-    if(field!==''||row.length) { row.push(field); rows.push(row); }
-    return rows.filter(r=>r.some(x=>x!==''));
   }
+
   function csv2json(){
-    const rows=parseCSV($('input').value);
-    if(rows.length<2){ setStatus('✗ 至少需要表头 + 一行数据','err'); return; }
-    const head=rows[0];
-    const arr=rows.slice(1).map(r=>{ const o={}; head.forEach((h,j)=>o[h]=r[j]!==undefined?r[j]:''); return o; });
-    $('output').value=JSON.stringify(arr,null,2);
-    $('meta').textContent=arr.length+' 条记录';
-    setStatus('✓ CSV → JSON 完成','ok');
+    convert(input=>{
+      const rows=Csv.parse(input);
+      Csv.validateRows(rows);
+      const [headers,...data]=rows;
+      if(new Set(headers).size!==headers.length) throw new Error('CSV 表头包含重复列名');
+      const result=data.map(row=>Object.fromEntries(headers.map((name,i)=>[name,row[i]])));
+      $('output').value=JSON.stringify(result,null,2);
+      $('meta').textContent=result.length+' 条记录';
+      setStatus('✓ CSV → JSON 完成','ok');
+    });
   }
+
+  function flatten(value,prefix,row){
+    if(isRecord(value) && Object.keys(value).length){
+      for(const [key,child] of Object.entries(value)) flatten(child,prefix+'.'+key,row);
+    }else{
+      if(row.has(prefix)) throw new Error('扁平化后列名重复：'+prefix);
+      row.set(prefix,value);
+    }
+  }
+
   function json2csv(){
-    let data;
-    try{ data=JSON.parse($('input').value); }catch(e){ setStatus('✗ 无效 JSON：'+e.message,'err'); return; }
-    if(Array.isArray(data)){
-      if(data.length===0){ setStatus('空数组','err'); return; }
-      const keys=Array.from(data.reduce((s,o)=>{Object.keys(o).forEach(k=>s.add(k));return s;},new Set()));
-      const esc=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-      const lines=[keys.map(esc).join(',')];
-      data.forEach(o=>lines.push(keys.map(k=>esc(o[k])).join(',')));
-      $('output').value=lines.join('\n');
-      $('meta').textContent=data.length+' 条记录';
+    convert(input=>{
+      const data=JSON.parse(input);
+      const records=Array.isArray(data)?data:[data];
+      if(!records.length) throw new Error('空数组无法生成 CSV');
+      const headers=new Set();
+      const rows=records.map(record=>{
+        const entries=isRecord(record)?Object.entries(record):[['value',record]];
+        const row=new Map();
+        for(const [key,value] of entries){
+          if($('flatten').checked) flatten(value,key,row);
+          else row.set(key,value);
+        }
+        for(const key of row.keys()) headers.add(key);
+        return row;
+      });
+      const columns=[...headers];
+      if(!columns.length) throw new Error('没有可转换的列');
+      const output=rows.map(row=>columns.map(key=>{
+        const value=row.get(key);
+        return value!==null && typeof value==='object'?JSON.stringify(value):value;
+      }));
+      $('output').value=Csv.write([columns,...output]);
+      $('meta').textContent=rows.length+' 条记录';
       setStatus('✓ JSON → CSV 完成','ok');
-    } else if(typeof data==='object'){ // 对象数组逐个
-      csv2jsonFromObj(data);
-    } else { setStatus('✗ 仅支持 JSON 数组','err'); }
+    });
   }
-  function csv2jsonFromObj(o){
-    const keys=Object.keys(o);
-    const lines=[keys.join(','),keys.map(k=>o[k]).join(',')];
-    $('output').value=lines.join('\n');
-    setStatus('✓ 对象 → CSV 完成','ok');
+  if(new URLSearchParams(location.search).get('mode')==='flatten'){
+    $('flatten').checked=true;
+    $('input').value='[{"name":"Ada","address":{"city":"London"}}]';
+    json2csv();
   }
   $('bCsv2Json').onclick=csv2json;
   $('bJson2Csv').onclick=json2csv;

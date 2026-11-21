@@ -121,6 +121,7 @@
       <p style="margin-top:12px;color:var(--muted);">不想动脑也能看：点 <strong>Auto</strong> 让 AI 用候选消除法自动破译。用越少次数猜中，Best 越低越好。</p>
     </div>
     <button class="btn primary" onclick="game.hideHelp()">开始玩</button>
+    <button class="btn" type="button" onclick="game.toggleAuto()">自动游玩</button>
   </div></div>
 </div>
 <script>
@@ -179,7 +180,7 @@
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.hideHelp(); this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show'); this.autoStep(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
-    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } this.aiGuess(); this.submitGuess(); if(!this.over){ document.getElementById('ai-status').textContent='AI: '+this.history.length+' guesses · '+this.candidates.length+' candidates'; this.autoTimer=setTimeout(()=>this.autoStep(),550); } }
+    autoStep(){ if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; } this.aiGuess(); this.submitGuess(); if(this.over){ this.stopAuto(); return; } document.getElementById('ai-status').textContent='AI: '+this.history.length+' guesses · '+this.candidates.length+' candidates'; this.autoTimer=setTimeout(()=>this.autoStep(),550); }
     toScreen(e){ const r=canvas.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H }; }
     bindInput(){
       document.addEventListener('keydown',(e)=>{

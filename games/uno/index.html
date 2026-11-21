@@ -74,6 +74,7 @@
         <b>跳过 / 反转 / +2 / 万能+4</b> 各有特效，先出完手牌者获胜！
       </p>
       <button id="btn-start" class="btn">开始游戏</button>
+      <button id="btn-start-auto" class="btn" type="button">自动游玩</button>
       <div class="hint">
         ⌨ 键盘：← → 选牌，空格/回车 出牌，D 抽牌<br/>
         📱 触屏：直接点手牌或牌堆
@@ -456,6 +457,7 @@
 
   // ---------- events ----------
   autoBtn.addEventListener('click', toggleAuto);
+  document.getElementById('btn-start-auto').addEventListener('click', startAuto);
   document.getElementById('btn-start').addEventListener('click', function(){ game.autoPlay=false; autoBtn.classList.remove('on'); autoBtn.textContent='自动 关'; start(); });
   colorpick.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=> setColor(b.dataset.c)));
 

@@ -35,10 +35,12 @@
   const autoBtn = document.getElementById('auto-toggle');
   autoBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    window.Game.autoMode = !window.Game.autoMode;
-    autoBtn.classList.toggle('on', window.Game.autoMode);
-    autoBtn.textContent = window.Game.autoMode ? '自动：开' : '自动：关';
-    window.Game.autoTimer = 0; // 立即重算目标
+    const game = window.Game;
+    game.autoMode = !game.autoMode;
+    autoBtn.classList.toggle('on', game.autoMode);
+    autoBtn.textContent = game.autoMode ? '自动：开' : '自动：关';
+    game.autoTimer = 0; // 立即重算目标
+    if (game.autoMode && (game.mode === 'menu' || game.mode === 'over')) game.start();
   });
 
   // 失焦自动暂停

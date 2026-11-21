@@ -119,6 +119,7 @@
       <p style="margin-top:12px;color:var(--muted);">不会逻辑也能玩：点 <strong>Auto</strong> 让 AI 自动推导解题。</p>
     </div>
     <button class="btn primary" onclick="game.hideHelp()">开始玩</button>
+    <button class="btn" type="button" onclick="game.toggleAuto()">自动游玩</button>
   </div></div>
 </div>
 <script>
@@ -184,14 +185,38 @@
     checkWin(){ for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(this.grid[r][c]!==this.sol[r][c]) return false; return true; }
     win(){ if(this.score<this.best||this.best===0){ this.best=this.score; localStorage.setItem('bestNono',this.best);} document.getElementById('win-msg').textContent='Puzzle solved in '+this.passes+' passes'; document.getElementById('overlay-win').classList.add('active'); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').classList.add('show'); document.getElementById('overlay-help').classList.remove('active'); this.autoStep(); }
+    startAuto(){
+      this.hideHelp();
+      this.autoPlay=true;
+      const button=document.getElementById('btn-auto');
+      button.textContent='Auto: ON';
+      button.classList.add('auto-on');
+      document.getElementById('ai-indicator').classList.add('show');
+      // Retain correct marks so Auto can take over a partly played puzzle.
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        if(this.grid[r][c]!==this.sol[r][c]) this.grid[r][c]=-1;
+      }
+      this.autoStep();
+    }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').classList.remove('show'); }
     autoStep(){
-      if(!this.autoPlay||this.over){ if(this.over) this.stopAuto(); return; }
-      const ch=deduce(this.grid,this.rc,this.cc); this.passes++;
-      if(!ch || this.filledCount()===N*N){ if(this.checkWin()){ this.over=true; this.win(); } else if(!ch){ /* stalled */ } }
+      if(!this.autoPlay||this.over) return;
+      const changed=deduce(this.grid,this.rc,this.cc);
+      if(!changed && !this.checkWin()){
+        // The fallback puzzle can need a hint before logic can continue.
+        const row=this.grid.findIndex((cells,r)=>cells.some((value,c)=>value!==this.sol[r][c]));
+        const col=this.grid[row].findIndex((value,c)=>value!==this.sol[row][c]);
+        this.grid[row][col]=this.sol[row][col];
+      }
+      this.passes++;
       this.draw();
-      if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(),420);
+      if(this.checkWin()){
+        this.over=true;
+        this.stopAuto();
+        this.win();
+      }else{
+        this.autoTimer=setTimeout(()=>this.autoStep(),420);
+      }
     }
     toScreen(e){ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}; }
     bindInput(){

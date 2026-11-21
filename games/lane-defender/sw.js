@@ -1,5 +1,5 @@
 /* 极简 Service Worker：离线缓存游戏资源，让 Web / PWA 可离线运行。 */
-const CACHE = 'lane-defender-v1';
+const CACHE = 'lane-defender-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './src/js/config.js',
   './src/js/utils.js',
   './src/js/entities.js',
+  './src/js/director.js',
   './src/js/input.js',
   './src/js/ui.js',
   './src/js/game.js',
@@ -21,7 +22,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith('lane-defender-') && k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });

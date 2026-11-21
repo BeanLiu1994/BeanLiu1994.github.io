@@ -90,7 +90,20 @@
 <script>
 (function(){
   'use strict';
-  const WORDS=['planet','rocket','guitar','dolphin','castle','wizard','forest','puzzle','shadow','crystal','thunder','marble','silver','anchor','window','bridge','lantern','compass','feather','glacier','umbrella','kitten','sunset','orange','pencil','bottle','rocket','dragon','velvet','walnut','zebra','mango','cookie','rabbit','tunnel','violin','secret','island','mountain','golden'];
+  const WORDS=[
+    'planet','rocket','guitar','dolphin','castle','wizard','forest','puzzle','shadow','crystal',
+    'thunder','marble','silver','anchor','window','bridge','lantern','compass','feather','glacier',
+    'umbrella','kitten','sunset','orange','pencil','bottle','dragon','velvet','walnut','zebra',
+    'mango','cookie','rabbit','tunnel','violin','secret','island','mountain','golden','harbor',
+    'volcano','penguin','captain','garden','bicycle','museum','comet','eclipse','desert','canyon',
+    'prairie','sparrow','whistle','meadow','jungle','orchard','pebble','cactus','willow','rainbow',
+    'avocado','apricot','papaya','orchid','violet','cedar','bamboo','maple','popcorn','pretzel',
+    'waffle','melon','pepper','vanilla','ginger','noodle','radish','gingham','ribbon','jacket',
+    'mitten','sandal','button','zipper','blanket','candle','teapot','saucer','kettle','broom',
+    'shovel','hammer','wrench','screw','anvil','bucket','ladder','parcel','ticket','luggage',
+    'journal','napkin','chapter','syllable','riddle','mosaic','paddock','paddle','kayak','canoe',
+    'trumpet','cymbal','banjo','rhythm','speaker','concert','theater','puppet','trophy','medal',
+  ];
   const canvas=document.getElementById('cv'); const ctx=canvas.getContext('2d');
   const MAXW=6;
   function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -101,7 +114,7 @@
       this.autoPlay=false; this.autoTimer=null;
       this.streak=0; this.wins=parseInt(localStorage.getItem('hmWins')||'0');
       document.getElementById('wins').textContent=this.wins;
-      this.buildKeys(); this.restart();
+      this.wordDeck=[]; this.buildKeys(); this.restart();
     }
     buildKeys(){
       this.keysEl.innerHTML='';
@@ -110,7 +123,12 @@
     keyEl(l){ for(const b of this.keysEl.children) if(b.dataset.l===l) return b; return null; }
     restart(){
       this.stopAuto();
-      this.word=WORDS[Math.floor(Math.random()*WORDS.length)];
+      if(!this.wordDeck.length){
+        this.wordDeck=shuffle(WORDS.slice());
+        const last=this.wordDeck.length-1;
+        if(this.wordDeck[last]===this.word) [this.wordDeck[0],this.wordDeck[last]]=[this.wordDeck[last],this.wordDeck[0]];
+      }
+      this.word=this.wordDeck.pop();
       this.guessed=new Set(); this.wrong=0; this.over=false; this.won=false;
       document.getElementById('overlay-win').classList.remove('active');
       document.getElementById('overlay-lose').classList.remove('active');

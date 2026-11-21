@@ -61,54 +61,78 @@
   </section>
 </main>
 <div class="status" id="st">就绪</div>
+<script src="../shared/csv.js"></script>
 <script>
 (function(){
   const $=id=>document.getElementById(id);
   const st=$('st');
   function setStatus(m,t){st.textContent=m;st.className='status'+(t?' '+t:'');}
-  function parseCsv(text){
-    const rows=[];let row=[],field='',i=0,q=false;
-    while(i<text.length){
-      const c=text[i];
-      if(q){
-        if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} q=false;i++;continue; }
-        field+=c;i++;continue;
-      }
-      if(c==='"'){q=true;i++;continue;}
-      if(c===','){row.push(field);field='';i++;continue;}
-      if(c==='\n'){row.push(field);rows.push(row);row=[];field='';i++;continue;}
-      if(c==='\r'){i++;continue;}
-      field+=c;i++;
-    }
-    row.push(field);rows.push(row);
-    return rows.filter((r,idx)=>!(idx===rows.length-1&&r.length===1&&r[0]===''));
+  const escapable=/[\\|\x60*_[\]~]/;
+  const encoded={ '&amp;':'&','&lt;':'<','&gt;':'>','&#32;':' ','&#9;':'\t' };
+
+  function encodeCell(value){
+    return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+      .replace(/[\t]|^ +| +$/g,spaces=>spaces==='\t'?'&#9;':'&#32;'.repeat(spaces.length))
+      .replace(/[\r\n]+/g,breaks=>[...breaks.replace(/\r\n/g,'\n')].map(()=>'<br>').join(''))
+      .replace(new RegExp(escapable.source,'g'),'\\$&');
   }
+
+  function markdownRow(row){ return '| '+row.join(' | ')+' |'; }
+
   function csvToMd(text){
-    const rows=parseCsv(text);
-    if(!rows.length)return'';
-    const cols=Math.max(...rows.map(r=>r.length));
-    const esc=s=>s.replace(/\|/g,'\\|').replace(/\n/g,' ');
-    const head=rows[0].map(c=>esc(c)).concat(Array(Math.max(0,cols-rows[0].length)).fill(''));
-    let out='| '+head.join(' | ')+' |\n';
-    out+='| '+Array(cols).fill('---').join(' | ')+' |\n';
-    for(let r=1;r<rows.length;r++){
-      const cells=rows[r].map(c=>esc(c)).concat(Array(Math.max(0,cols-rows[r].length)).fill(''));
-      out+='| '+cells.join(' | ')+' |\n';
+    const [header,...data]=Csv.parse(text);
+    const rows=header?[header,...data]:[];
+    Csv.validateRows(rows);
+    const lines=[markdownRow(header.map(encodeCell)),markdownRow(header.map(()=> '---'))];
+    for(const row of data) lines.push(markdownRow(row.map(encodeCell)));
+    return { result:lines.join('\n'), count:rows.length };
+  }
+
+  function splitMarkdownRow(line){
+    const input=line.trim();
+    const cells=[];
+    let value='', endsWithPipe=false;
+    for(let i=0;i<input.length;i++){
+      const char=input[i];
+      endsWithPipe=false;
+      if(char==='\\' && escapable.test(input[i+1]||'')){ value+=input[++i]; }
+      else if(char==='|'){ cells.push(value); value=''; endsWithPipe=true; }
+      else value+=char;
     }
-    return out.replace(/\n$/,'');
+    if(!endsWithPipe) cells.push(value);
+    if(input.startsWith('|')) cells.shift();
+    return cells.map(cell=>cell.trim());
   }
-  function parseMd(text){
-    return text.split('\n').filter(l=>l.trim().startsWith('|')).map(l=>{
-      return l.replace(/^\||\|$/g,'').split('|').map(c=>c.trim().replace(/\\\|/g,'|').replace(/^`|`$/g,''));
-    });
-  }
+
   function mdToCsv(text){
-    const rows=parseMd(text);
-    if(!rows.length)return'';
-    return rows.map(r=>r.map(c=>/[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c).join(',')).join('\n');
+    const lines=text.trim().split(/\r?\n/);
+    const [header=[],separator=[],...data]=lines.map(splitMarkdownRow);
+    if(!header.length || separator.length!==header.length || !separator.every(cell=>/^:?-+:?$/.test(cell))){
+      throw new Error('需要 Markdown 表头和分隔行');
+    }
+    const decode=cell=>cell.replace(/<br\s*\/?>|&amp;|&lt;|&gt;|&#32;|&#9;/gi,
+      match=>match.toLowerCase().startsWith('<br')?'\n':(encoded[match]??match));
+    const rows=[header,...data];
+    Csv.validateRows(rows);
+    return { result:Csv.write(rows.map(row=>row.map(decode))), count:rows.length };
   }
-  function csv2md(){const t=$('in').value.trim();if(!t){setStatus('请先输入 CSV','err');return;}$('out').value=csvToMd(t);const n=parseCsv(t).length;$('outMeta').textContent=n+' 行';setStatus('✓ CSV → Markdown，'+n+' 行','ok');}
-  function md2csv(){const t=$('in').value.trim();if(!t){setStatus('请先输入 Markdown','err');return;}$('out').value=mdToCsv(t);const n=parseMd(t).length;$('outMeta').textContent=n+' 行';setStatus('✓ Markdown → CSV，'+n+' 行','ok');}
+
+  function convert(action,label){
+    const text=$('in').value;
+    try{
+      if(!text.trim()) throw new Error('请输入要转换的表格');
+      const {result,count}=action(text);
+      $('out').value=result;
+      $('outMeta').textContent=count+' 行';
+      setStatus('✓ '+label+'，'+count+' 行','ok');
+    }catch(error){
+      $('out').value='';
+      $('outMeta').textContent='';
+      setStatus('✗ '+error.message,'err');
+    }
+  }
+  const csv2md=()=>convert(csvToMd,'CSV → Markdown');
+  const md2csv=()=>convert(mdToCsv,'Markdown → CSV');
   $('bCsv2md').onclick=csv2md;
   $('bMd2csv').onclick=md2csv;
   $('bCopy').onclick=async()=>{const t=$('out').value;if(!t){setStatus('没有可复制的内容','err');return;}try{await navigator.clipboard.writeText(t);setStatus('✓ 已复制','ok');}catch(e){setStatus('复制失败：'+e.message,'err');}};

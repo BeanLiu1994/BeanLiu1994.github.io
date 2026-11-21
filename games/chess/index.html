@@ -110,12 +110,10 @@
   function inB(r,c){ return r>=0&&r<8&&c>=0&&c<8; }
   function findKing(bd,col){ for(let r=0;r<8;r++)for(let c=0;c<8;c++){ const p=bd[r][c]; if(p!=='.'&&p.toUpperCase()==='K'&&colorOf(p)===col) return [r,c]; } return null; }
   function attacked(bd,r,c,by){
-    if(by===WHITE){
-      if(inB(r-1,c-1)&&bd[r-1][c-1]==='P')return true;
-      if(inB(r-1,c+1)&&bd[r-1][c+1]==='P')return true;
-    } else {
-      if(inB(r+1,c-1)&&bd[r+1][c-1]==='p')return true;
-      if(inB(r+1,c+1)&&bd[r+1][c+1]==='p')return true;
+    const pawnRow = r + (by === WHITE ? 1 : -1);
+    const pawn = by === WHITE ? 'P' : 'p';
+    for(const dc of [-1,1]){
+      if(inB(pawnRow,c+dc) && bd[pawnRow][c+dc]===pawn) return true;
     }
     for(const [dr,dc] of KN){ const nr=r+dr,nc=c+dc; if(inB(nr,nc)){ const p=bd[nr][nc]; if(p!=='.'&&p.toUpperCase()==='N'&&colorOf(p)===by) return true; } }
     for(const [dr,dc] of KINGD){ const nr=r+dr,nc=c+dc; if(inB(nr,nc)){ const p=bd[nr][nc]; if(p!=='.'&&p.toUpperCase()==='K'&&colorOf(p)===by) return true; } }
@@ -131,9 +129,10 @@
       const up=me===WHITE;
       if(p.toUpperCase()==='P'){
         const dir=up?-1:1, startRow=up?6:1, promoRow=up?0:7;
+        const promotions=up?['Q','R','B','N']:['q','r','b','n'];
         const nr=r+dir;
-        if(inB(nr,c)&&bd[nr][c]==='.'){ if(nr===promoRow)['q','r','b','n'].forEach(q=>moves.push({fr:r,fc:c,tr:nr,tc:c,promo:q})); else moves.push({fr:r,fc:c,tr:nr,tc:c}); if(r===startRow&&bd[r+2*dir][c]==='.') moves.push({fr:r,fc:c,tr:r+2*dir,tc:c}); }
-        for(const dc of [-1,1]){ const nc=c+dc; if(inB(nr,nc)){ const t=bd[nr][nc]; if(t!=='.'&&colorOf(t)!==me){ if(nr===promoRow)['q','r','b','n'].forEach(q=>moves.push({fr:r,fc:c,tr:nr,tc:nc,promo:q})); else moves.push({fr:r,fc:c,tr:nr,tc:nc}); } else if(s.ep&&s.ep[0]===nr&&s.ep[1]===nc){ moves.push({fr:r,fc:c,tr:nr,tc:nc,ep:[r,nc]}); } } }
+        if(inB(nr,c)&&bd[nr][c]==='.'){ if(nr===promoRow)promotions.forEach(q=>moves.push({fr:r,fc:c,tr:nr,tc:c,promo:q})); else moves.push({fr:r,fc:c,tr:nr,tc:c}); if(r===startRow&&bd[r+2*dir][c]==='.') moves.push({fr:r,fc:c,tr:r+2*dir,tc:c}); }
+        for(const dc of [-1,1]){ const nc=c+dc; if(inB(nr,nc)){ const t=bd[nr][nc]; if(t!=='.'&&colorOf(t)!==me){ if(nr===promoRow)promotions.forEach(q=>moves.push({fr:r,fc:c,tr:nr,tc:nc,promo:q})); else moves.push({fr:r,fc:c,tr:nr,tc:nc}); } else if(s.ep&&s.ep[0]===nr&&s.ep[1]===nc){ moves.push({fr:r,fc:c,tr:nr,tc:nc,ep:[r,nc]}); } } }
       } else if(p.toUpperCase()==='N'){ for(const [dr,dc] of KN){ const nr=r+dr,nc=c+dc; if(inB(nr,nc)){ const t=bd[nr][nc]; if(t==='.'||colorOf(t)!==me) moves.push({fr:r,fc:c,tr:nr,tc:nc}); } } }
       else if(p.toUpperCase()==='K'){ for(const [dr,dc] of KINGD){ const nr=r+dr,nc=c+dc; if(inB(nr,nc)){ const t=bd[nr][nc]; if(t==='.'||colorOf(t)!==me) moves.push({fr:r,fc:c,tr:nr,tc:nc}); } }
         // castling

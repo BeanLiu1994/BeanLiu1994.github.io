@@ -119,12 +119,39 @@
     GREEN:'草与叶的颜色', ROYAL:'与国王或女王相关的', MAP:'显示地理的图', FOX:'橙红色的狡猾犬科动物',
     ROCKET:'靠推力升空的飞行器', HEART:'泵血的器官；也指爱', STORM:'狂风暴雨的天气', ART:'绘画或雕塑等创作',
     ARM:'连接肩与手的部位', PEACE:'没有战争的状态', CLIFF:'陡峭的岩壁', TRAIL:'林间小路',
-    FLUTE:'吹奏的管乐器', FIRE:'燃烧释放的光热', LEAF:'植物的绿色扁片', ICE:'水的固态'
+    FLUTE:'吹奏的管乐器', FIRE:'燃烧释放的光热', LEAF:'植物的绿色扁片', ICE:'水的固态',
+    OCEAN:"地球上连成一片的大片咸水",
+    BEACH:"海边的沙滩或卵石滩",
+    CORAL:"能形成海底礁体的海洋生物",
+    REEF:"贴近水面的岩礁或珊瑚礁",
+    TIDE:"海面周期性的涨落",
+    SHELL:"贝类动物坚硬的外壳",
+    SHORE:"水域和陆地交界的地带",
+    FOAM:"水面聚集成团的气泡",
+    GUITAR:"常见的六弦拨弦乐器",
+    DRUM:"靠敲击发声的打击乐器",
+    SONG:"可以唱出来的音乐作品",
+    BEAT:"音乐中反复出现的节拍",
+    TEMPO:"音乐演奏的快慢",
+    BASS:"乐曲中较低的声部",
+    NOTE:"乐谱上记录音高和时值的符号",
+    DUET:"由两位演奏者或演唱者完成的曲目",
+    CLOUD:"悬在空中的水滴或冰晶集合体",
+    RAIN:"从云中落下的水滴",
+    WIND:"空气在地面附近的流动",
+    HAIL:"雷暴中可能落下的冰粒",
+    DEW:"清晨凝结在草叶上的小水珠",
+    RAINBOW:"雨后阳光折射形成的彩色弧",
+    THAW:"冻结的冰开始融化",
+    SUN:"照亮地球白昼的恒星"
   };
   const PUZZLES=[
     {"rows":7,"cols":7,"sol":[["F","O","R","E","S","T",null],["O",null,"O",null,"H",null,"G"],["X",null,"Y",null,"U",null,"R"],[null,"C","A","S","T","L","E"],["M",null,"L",null,"T",null,"E"],["A",null,null,null,"L",null,"N"],["P","L","A","N","E","T",null]],"words":[{"word":"FOREST","r":0,"c":0,"dir":"H"},{"word":"SHUTTLE","r":0,"c":4,"dir":"V"},{"word":"PLANET","r":6,"c":0,"dir":"H"},{"word":"CASTLE","r":3,"c":1,"dir":"H"},{"word":"GREEN","r":1,"c":6,"dir":"V"},{"word":"ROYAL","r":0,"c":2,"dir":"V"},{"word":"MAP","r":4,"c":0,"dir":"V"},{"word":"FOX","r":0,"c":0,"dir":"V"}]},
     {"rows":7,"cols":7,"sol":[["R","O","C","K","E","T",null],["O",null,"A",null,null,null,null],["Y",null,"S","T","O","R","M"],["A","R","T",null,null,null,"A"],["L",null,"L",null,"A",null,"P"],[null,"H","E","A","R","T",null],[null,null,null,null,"M",null,null]],"words":[{"word":"ROCKET","r":0,"c":0,"dir":"H"},{"word":"CASTLE","r":0,"c":2,"dir":"V"},{"word":"HEART","r":5,"c":1,"dir":"H"},{"word":"STORM","r":2,"c":2,"dir":"H"},{"word":"ROYAL","r":0,"c":0,"dir":"V"},{"word":"ART","r":3,"c":0,"dir":"H"},{"word":"MAP","r":2,"c":6,"dir":"V"},{"word":"ARM","r":4,"c":4,"dir":"V"}]},
-    {"rows":7,"cols":7,"sol":[["P","E","A","C","E",null,null],[null,null,null,"L",null,null,null],["T","R","A","I","L",null,null],[null,"O",null,"F",null,null,"L"],[null,"Y",null,"F","I","R","E"],[null,"A",null,null,"C",null,"A"],["F","L","U","T","E",null,"F"]],"words":[{"word":"PEACE","r":0,"c":0,"dir":"H"},{"word":"CLIFF","r":0,"c":3,"dir":"V"},{"word":"TRAIL","r":2,"c":0,"dir":"H"},{"word":"ROYAL","r":2,"c":1,"dir":"V"},{"word":"FLUTE","r":6,"c":0,"dir":"H"},{"word":"FIRE","r":4,"c":3,"dir":"H"},{"word":"LEAF","r":3,"c":6,"dir":"V"},{"word":"ICE","r":4,"c":4,"dir":"V"}]}
+    {"rows":7,"cols":7,"sol":[["P","E","A","C","E",null,null],[null,null,null,"L",null,null,null],["T","R","A","I","L",null,null],[null,"O",null,"F",null,null,"L"],[null,"Y",null,"F","I","R","E"],[null,"A",null,null,"C",null,"A"],["F","L","U","T","E",null,"F"]],"words":[{"word":"PEACE","r":0,"c":0,"dir":"H"},{"word":"CLIFF","r":0,"c":3,"dir":"V"},{"word":"TRAIL","r":2,"c":0,"dir":"H"},{"word":"ROYAL","r":2,"c":1,"dir":"V"},{"word":"FLUTE","r":6,"c":0,"dir":"H"},{"word":"FIRE","r":4,"c":3,"dir":"H"},{"word":"LEAF","r":3,"c":6,"dir":"V"},{"word":"ICE","r":4,"c":4,"dir":"V"}]},
+    {"rows":9,"cols":9,"sol":[[null,null,null,"B",null,"C",null,null,null],["T","I","D","E",null,"O",null,null,null],[null,null,null,"A",null,"R","E","E","F"],[null,null,null,"C",null,"A",null,null,"O"],[null,null,"S","H","E","L","L",null,"A"],[null,null,"H",null,null,null,null,null,"M"],[null,null,"O",null,null,null,null,null,null],[null,null,"R",null,null,null,null,null,null],["O","C","E","A","N",null,null,null,null]],"words":[{"word":"SHELL","r":4,"c":2,"dir":"H"},{"word":"CORAL","r":0,"c":5,"dir":"V"},{"word":"BEACH","r":0,"c":3,"dir":"V"},{"word":"SHORE","r":4,"c":2,"dir":"V"},{"word":"REEF","r":2,"c":5,"dir":"H"},{"word":"OCEAN","r":8,"c":0,"dir":"H"},{"word":"TIDE","r":1,"c":0,"dir":"H"},{"word":"FOAM","r":2,"c":8,"dir":"V"}]},
+    {"rows":9,"cols":9,"sol":[["G","U","I","T","A","R",null,null,null],[null,null,null,"E",null,null,null,null,null],["D","R","U","M",null,null,null,null,null],[null,null,null,"P",null,"B","A","S","S"],[null,null,"N","O","T","E",null,"O",null],[null,null,null,null,null,"A",null,"N",null],[null,null,"D","U","E","T",null,"G",null],[null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null]],"words":[{"word":"NOTE","r":4,"c":2,"dir":"H"},{"word":"BEAT","r":3,"c":5,"dir":"V"},{"word":"DUET","r":6,"c":2,"dir":"H"},{"word":"TEMPO","r":0,"c":3,"dir":"V"},{"word":"GUITAR","r":0,"c":0,"dir":"H"},{"word":"DRUM","r":2,"c":0,"dir":"H"},{"word":"BASS","r":3,"c":5,"dir":"H"},{"word":"SONG","r":3,"c":7,"dir":"V"}]},
+    {"rows":9,"cols":9,"sol":[[null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null],["C",null,null,null,"R","A","I","N",null],["L",null,"T",null,"A",null,null,null,null],["O",null,"H","A","I","L",null,null,null],["U",null,"A",null,"N",null,null,null,null],["D","E","W",null,"B",null,"S",null,null],[null,null,null,null,"O",null,"U",null,null],[null,null,null,null,"W","I","N","D",null]],"words":[{"word":"HAIL","r":4,"c":2,"dir":"H"},{"word":"RAINBOW","r":2,"c":4,"dir":"V"},{"word":"THAW","r":3,"c":2,"dir":"V"},{"word":"WIND","r":8,"c":4,"dir":"H"},{"word":"DEW","r":6,"c":0,"dir":"H"},{"word":"CLOUD","r":2,"c":0,"dir":"V"},{"word":"SUN","r":6,"c":6,"dir":"V"},{"word":"RAIN","r":2,"c":4,"dir":"H"}]}
   ];
 
   const W=420, H=420;

@@ -119,7 +119,7 @@
 
   let grid;            // array of cell objects
   let flagged, revealedSafe, totalSafe, exploded;
-  let over, won, auto, flagMode, autoReplay, autoIdx, autoAccum, firstClick;
+  let over, won, auto, flagMode, autoIdx, autoAccum, firstClick;
   let elapsed, best, winPulse, losePulse, minesLeft, toastTimer;
 
   try{ best=parseFloat(localStorage.getItem('neonmines_best')); if(!(best>0)) best=0; }catch(e){best=0;}
@@ -149,7 +149,7 @@
     grid=[]; for(let i=0;i<N*N;i++) grid.push({mine:false,adj:0,revealed:false,flag:false,anim:0});
     flagged=0; revealedSafe=0; exploded=false;
     totalSafe=N*N-MINE_COUNT;
-    over=false; won=false; auto=false; flagMode=false; autoReplay=false; autoIdx=0; autoAccum=0; firstClick=true;
+    over=false; won=false; auto=false; flagMode=false; autoIdx=0; autoAccum=0; firstClick=true;
     elapsed=0; winPulse=0; losePulse=0; minesLeft=MINE_COUNT; toastTimer=0;
     if(btnFlag){ btnFlag.classList.remove('on'); btnFlag.textContent='🚩 标记'; }
     if(btnAuto){ btnAuto.classList.remove('on'); btnAuto.textContent='自动游玩'; }
@@ -184,6 +184,7 @@
     if(firstClick) doFirstClick(i);
     if(grid[i].mine){ exploded=true; revealCell(i); loseGame(); return; }
     revealCell(i);
+    elSafe.textContent=revealedSafe;
     checkWin();
   }
   function toggleFlag(i){
@@ -215,19 +216,33 @@
     if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
     if(elBadge) elBadge.classList.toggle('show',v);
     if(v){
-      autoReplay=true; autoIdx=0; autoAccum=0; flagMode=false;
+      autoIdx=0; autoAccum=0; flagMode=false;
       if(btnFlag){ btnFlag.classList.remove('on'); btnFlag.textContent='🚩 标记'; }
       // place mines now so auto reveal order is well defined
       if(firstClick){ firstClick=false; buildNumbers(genMines(null)); }
+      autoSafe=safeList();
     }
   }
 
   // list of safe cells in row-major order for auto replay
   function safeList(){ const out=[]; for(let i=0;i<N*N;i++) if(!grid[i].mine) out.push(i); return out; }
-  let autoSafe=null;
+  let autoSafe=[];
   function autoStep(){
-    if(autoSafe===null) autoSafe=safeList();
-    if(autoIdx<autoSafe.length){ revealCell(autoSafe[autoIdx]); autoIdx++; checkWin(); }
+    if(autoIdx>=autoSafe.length) return;
+    const i=autoSafe[autoIdx++];
+    // Correct flags on mines can stay. Incorrect flags must not block Auto.
+    if(grid[i].flag) toggleFlag(i);
+    revealCell(i);
+    elSafe.textContent=revealedSafe;
+    checkWin();
+  }
+  function startAuto(){
+    if(over) newGame();
+    setAuto(true);
+  }
+  function toggleAuto(){
+    if(auto) setAuto(false);
+    else startAuto();
   }
 
   // ---- input ----
@@ -243,14 +258,13 @@
     if(r<0||c<0||r>=N||c>=N) return -1;
     return idx(r,c);
   }
-  function onDown(e){ const i=cellAt(e); if(i<0) return; humanReveal(i); e.preventDefault&&e.preventDefault(); }
-  function onContext(e){ const i=cellAt(e); if(i>=0) toggleFlag(i); e.preventDefault&&e.preventDefault(); }
+  function onDown(e){ if(e.button!==0) return; const i=cellAt(e); if(i<0) return; humanReveal(i); e.preventDefault(); }
+  function onContext(e){ const i=cellAt(e); if(!auto&&!over&&i>=0) toggleFlag(i); e.preventDefault(); }
   if(cv&&cv.addEventListener){
-    cv.addEventListener('pointerdown',onDown,{passive:false});
-    cv.addEventListener('mousedown',onDown,{passive:false});
+    cv.addEventListener(typeof PointerEvent==='function'?'pointerdown':'mousedown',onDown,{passive:false});
     cv.addEventListener('contextmenu',onContext,{passive:false});
   }
-  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto) return; setAuto(!auto); if(auto&&over){ newGame(); setAuto(true);} });
+  btnAuto&&btnAuto.addEventListener('click',toggleAuto);
   btnFlag&&btnFlag.addEventListener('click',()=>{ if(auto) return; flagMode=!flagMode; btnFlag.classList.toggle('on',flagMode); btnFlag.textContent=flagMode?'🚩 取消':'🚩 标记'; });
   btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
   btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
@@ -265,7 +279,7 @@
       return;
     }
     elapsed+=dt;
-    if(auto && autoReplay){
+    if(auto){
       autoAccum+=dt;
       if(autoAccum>=0.035){ autoAccum=0; autoStep(); }
     }
@@ -331,8 +345,8 @@
     get score(){return revealedSafe;},
     get remaining(){return totalSafe-revealedSafe;},
     get best(){return best;}, get elapsed(){return elapsed;},
-    startAuto(){ setAuto(true); if(over){ newGame(); setAuto(true);} },
-    toggleAuto(){ setAuto(!auto); },
+    startAuto,
+    toggleAuto,
     restart(){ newGame(); setAuto(false); }
   };
   window.__test={

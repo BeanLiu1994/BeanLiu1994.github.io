@@ -49,7 +49,7 @@
   </div>
   <div class="board-wrap"><canvas id="game" width="420" height="300"></canvas></div>
   <div class="controls">
-    <button class="btn primary" id="btn-deal" onclick="game.deal()">Deal</button>
+    <button class="btn primary" id="btn-deal" onclick="if(!game.autoPlay) game.deal()">Deal</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
   <div class="status" id="status">闲家(Player)对庄家(Banker)，点 Deal 发牌</div>
@@ -76,21 +76,23 @@
     fit(){ const rect=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(rect.width||420,420)); const dpr=window.devicePixelRatio||1;
       this.W=w; this.H=w*300/420; canvas.width=w*dpr; canvas.height=this.H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); this.cw=w/9; this.ch=this.cw*1.35; }
     newDeck(){ const d=[]; for(const s of SUITS) for(let r=1;r<=13;r++) d.push({s,r}); for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; } this.deck=d; }
-    draw(){ if(this.deck.length<6) this.newDeck(); return this.deck.pop(); }
+    drawCard(){ return this.deck.pop(); }
     reset(){ this.player=[]; this.banker=[]; this.pt=0; this.bt=0; this.result=null; this.busy=false; this.reveal=0; }
     deal(){
-      if(this.busy||this.autoPlay||this.result&&this.reveal<1) return;
+      if(this.busy || (this.result && this.reveal<1)) return false;
       this.reset(); this.busy=true; this.phaseT=0;
-      this.player.push(this.draw(),this.draw()); this.banker.push(this.draw(),this.draw());
+      if(this.deck.length<6) this.newDeck();
+      this.player.push(this.drawCard(),this.drawCard()); this.banker.push(this.drawCard(),this.drawCard());
       this.pt=this.tot(this.player); this.bt=this.tot(this.banker);
       this.resolve();
+      return true;
     }
     tot(h){ let s=0; for(const c of h) s+=valOf(c.r); return s%10; }
     resolve(){
       // naturals
       if(this.pt>=8||this.bt>=8){ this.finish(); return; }
       let pThird=null;
-      if(this.pt<=5){ pThird=this.draw(); this.player.push(pThird); this.pt=this.tot(this.player); }
+      if(this.pt<=5){ pThird=this.drawCard(); this.player.push(pThird); this.pt=this.tot(this.player); }
       // banker rule
       const pVal = pThird?valOf(pThird.r):null;
       let bDraw=false;
@@ -101,7 +103,7 @@
         else if(this.bt===5){ if(pVal>=4&&pVal<=7) bDraw=true; }
         else if(this.bt===6){ if(pVal>=6&&pVal<=7) bDraw=true; }
       }
-      if(bDraw){ this.banker.push(this.draw()); this.bt=this.tot(this.banker); }
+      if(bDraw){ this.banker.push(this.drawCard()); this.bt=this.tot(this.banker); }
       this.finish();
     }
     finish(){ this.busy=false; this.reveal=0;
@@ -109,7 +111,7 @@
       this.rounds++; roundsEl.textContent=this.rounds;
       if(this.result==='P') this.score+=1; else if(this.result==='B') this.score-=1;
       scoreEl.textContent=this.score;
-      statusEl.textContent = this.result==='P'?'闲家胜 ▲':(this.result==='B'?'庄家胜 ▼':'平局 ＝')+'（闲 '+this.pt+' · 庄 '+this.bt+'）';
+      statusEl.textContent = (this.result==='P'?'闲家胜 ▲':this.result==='B'?'庄家胜 ▼':'平局 ＝')+'（闲 '+this.pt+' · 庄 '+this.bt+'）';
     }
     // ---- auto ----
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
@@ -117,7 +119,7 @@
       var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this.autoStep(); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
-    autoStep(){ if(!this.autoPlay) return; if(!this.busy && !this.result){ this.deal(); this._autoProgress++; } this.autoTimer=setTimeout(()=>this.autoStep(), 1300); }
+    autoStep(){ if(!this.autoPlay) return; if(this.deal()) this._autoProgress++; this.autoTimer=setTimeout(()=>this.autoStep(), 1300); }
     // ---- render ----
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.busy) this.phaseT+=dt; if(this.result&&this.reveal<1) this.reveal=Math.min(1,this.reveal+dt*3); this.draw(); }catch(err){ console.error(err); } }
     draw(){ const W=this.W,H=this.H,cw=this.cw,ch=this.ch; ctx.clearRect(0,0,W,H);

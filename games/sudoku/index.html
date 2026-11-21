@@ -148,6 +148,49 @@
     return false;
   }
 
+  function hasUniqueSolution(grid){
+    const rowMask=new Array(N).fill(0), colMask=new Array(N).fill(0), boxMask=new Array(N).fill(0);
+    const empty=[];
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      const box=Math.floor(r/3)*3+Math.floor(c/3);
+      const value=grid[r][c];
+      if(value){
+        const bit=1<<value;
+        rowMask[r]|=bit; colMask[c]|=bit; boxMask[box]|=bit;
+      }else empty.push({r,c,box});
+    }
+
+    const allDigits=0b1111111110;
+    let solutions=0;
+    function search(depth){
+      if(depth===empty.length){ solutions++; return; }
+      let bestIndex=depth, bestChoices=0, bestCount=N+1;
+      for(let i=depth;i<empty.length;i++){
+        const {r,c,box}=empty[i];
+        const options=allDigits & ~(rowMask[r]|colMask[c]|boxMask[box]);
+        let count=0;
+        for(let bits=options;bits;bits&=bits-1) count++;
+        if(!count) return;
+        if(count<bestCount){
+          bestIndex=i; bestChoices=options; bestCount=count;
+          if(count===1) break;
+        }
+      }
+
+      [empty[depth],empty[bestIndex]]=[empty[bestIndex],empty[depth]];
+      const {r,c,box}=empty[depth];
+      for(let choices=bestChoices;choices && solutions<2;choices&=choices-1){
+        const bit=choices & -choices;
+        rowMask[r]|=bit; colMask[c]|=bit; boxMask[box]|=bit;
+        search(depth+1);
+        rowMask[r]^=bit; colMask[c]^=bit; boxMask[box]^=bit;
+      }
+      [empty[depth],empty[bestIndex]]=[empty[bestIndex],empty[depth]];
+    }
+    search(0);
+    return solutions===1;
+  }
+
   class Sudoku {
     constructor(){
       this.grid=document.getElementById('grid'); this.pad=document.getElementById('pad');
@@ -176,8 +219,13 @@
       this.stopAuto();
       const sol=genFull(); this.solution=sol;
       this.puzzle=sol.map(row=>row.slice());
-      const remove=46; const idx=shuffle([...Array(81).keys()]).slice(0,remove);
-      for(const k of idx) this.puzzle[(k/9|0)][k%9]=0;
+      let remaining=46;
+      for(const index of shuffle([...Array(N*N).keys()])){
+        const r=Math.floor(index/N), c=index%N;
+        this.puzzle[r][c]=0;
+        if(!hasUniqueSolution(this.puzzle)) this.puzzle[r][c]=sol[r][c];
+        else if(--remaining===0) break;
+      }
       this.user=this.puzzle.map(row=>row.slice());
       this.fixed=this.puzzle.map(row=>row.map(v=>v!==0));
       this.sel=null; this.mistakes=0; this.startTime=0; this.timer=0; this.ticking=false;
@@ -194,10 +242,9 @@
     erase(){ if(this.autoPlay||!this.sel) return; const [r,c]=this.sel; if(this.fixed[r][c]) return; this.user[r][c]=0; this.afterMove(); }
     hint(){ if(this.autoPlay||!this.sel) return; const [r,c]=this.sel; if(this.fixed[r][c]) return; this.startTick(); this.user[r][c]=this.solution[r][c]; this.afterMove(); }
     afterMove(){
-      let full=true, ok=true;
-      for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if(this.user[r][c]===0){ full=false; } else if(this.user[r][c]!==this.solution[r][c]){ ok=false; } }
       this.render();
-      if(full && ok){ this.win(); }
+      const solved=this.user.every((row,r)=>row.every((value,c)=>value>0&&!conflicts(this.user,r,c,value)));
+      if(solved) this.win();
     }
     win(){
       this.ticking=false; if(this.tickTimer){ clearInterval(this.tickTimer); this.tickTimer=null; }
@@ -232,9 +279,11 @@
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     autoStep(){
       if(!this.autoPlay) return;
-      let done=true, target=null;
-      for(let r=0;r<N && !target;r++) for(let c=0;c<N;c++){ if(this.user[r][c]===0){ done=false; if(!target) target=[r,c]; } }
-      if(done){ this.win(); this.stopAuto(); return; }
+      let target=null;
+      for(let r=0;r<N && !target;r++) for(let c=0;c<N;c++){
+        if(this.user[r][c]!==this.solution[r][c]){ target=[r,c]; break; }
+      }
+      if(!target){ this.win(); this.stopAuto(); return; }
       const [r,c]=target; this.user[r][c]=this.solution[r][c];
       const el=this.cellEl(r,c); el.classList.add('fill'); setTimeout(()=>el.classList.remove('fill'),320);
       document.getElementById('ai-status').textContent='AI fills ('+(r+1)+','+(c+1)+') = '+this.solution[r][c];

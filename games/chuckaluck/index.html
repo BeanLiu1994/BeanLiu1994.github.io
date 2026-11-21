@@ -57,7 +57,7 @@
   <div class="pick-row" id="picks"></div>
   <div class="controls">
     <button class="btn" onclick="game.restart()">Restart</button>
-    <button class="btn primary" id="btn-roll" onclick="game.roll()">Roll</button>
+    <button class="btn primary" id="btn-roll" onclick="if(!game.autoPlay) game.roll()">Roll</button>
     <button class="btn primary" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
   <div class="status" id="status">选一个数字（1-6），点 Roll。骰子中出现几次该数字就赢几倍（三个同点 10 倍）。</div>
@@ -80,14 +80,13 @@
     }
     fit(){ const r=canvas.getBoundingClientRect(); const w=Math.max(280,Math.min(r.width||420,460)); const d=window.devicePixelRatio||1; this.W=w; this.H=w*0.52; canvas.width=w*d; canvas.height=this.H*d; ctx.setTransform(d,0,0,d,0,0); }
     refreshPicks(){ [...picksEl.children].forEach((b,i)=>b.classList.toggle('sel',(i+1)===this.pick)); this.drawPips(); }
-    restart(){ this.stopAuto(); this.chips=100; this.rolling=false; this.dice=[1,1,1]; this.t=0; this.result=0; this.flash=0; scoreEl.textContent=this.chips; this.drawPips(); this.status('选一个数字（1-6），点 Roll。'); }
+    restart(){ this.stopAuto(); clearTimeout(this.rollTimer); this.chips=100; this.rolling=false; this.dice=[1,1,1]; this.t=0; this.result=0; this.flash=0; scoreEl.textContent=this.chips; this.drawPips(); this.status('选一个数字（1-6），点 Roll。'); }
     drawPips(){ diceEl.innerHTML=''; for(let i=0;i<3;i++){ const d=document.createElement('div'); d.className='die'; d.textContent=PIPS[this.dice[i]]||'⚀'; diceEl.appendChild(d); } }
     status(t){ statusEl.textContent=t; }
     roll(){
-      if(this.rolling||this.autoPlay||this.chips<=0) return;
-      if(this.chips<1){ this.restart(); return; }
+      if(this.rolling||this.chips<1) return false;
       this.rolling=true; this.t=0; this.flash=0; this.chips-=1; scoreEl.textContent=this.chips; this.status('🎲 摇骰子中…');
-      this._schedule(900,()=>{ this.rolling=false; const m=this.dice.filter(d=>d===this.pick).length;
+      this.rollTimer=setTimeout(()=>{ this.rolling=false; const m=this.dice.filter(d=>d===this.pick).length;
         this.result=m;
         let win=0; if(m===3) win=10; else if(m>0) win=m; else win=0;
         this.chips+=win; scoreEl.textContent=this.chips;
@@ -95,13 +94,20 @@
         this.flash=1;
         this.status(m===0?'未出现 '+this.pick+'，输 1 注。':(m===3?'三个 '+this.pick+'！大赢 '+win+' 注！':this.pick+' 出现 '+m+' 次，赢 '+win+' 注。'));
         this.drawPips();
-      });
+      },900);
+      return true;
     }
-    _autoRoll(){ if(this.autoPlay&&!this.rolling){ this.roll(); } }
     update(dt){
       if(this.flash>0) this.flash=Math.max(0,this.flash-dt*1.4);
       if(this.rolling){ this.t+=dt; this.dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)]; this.drawPips(); }
-      if(this.autoPlay){ this._autoT=(this._autoT||0)-dt; if(this._autoT<=0&&!this.rolling){ this.pick=1+Math.floor(Math.random()*6); this.refreshPicks(); this.roll(); this._autoT=1.6; this._autoProgress++; } }
+      if(!this.autoPlay || this.rolling) return;
+      this._autoT-=dt;
+      if(this._autoT>0) return;
+      if(this.chips<1){ this.restart(); this.startAuto(); return; }
+      this.pick=1+Math.floor(Math.random()*6);
+      this.refreshPicks();
+      if(this.roll()) this._autoProgress++;
+      this._autoT=0.7;
     }
     draw(){
       const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
@@ -118,7 +124,6 @@
       var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoProgress=0; this._autoT=0.4; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
-    _schedule(ms,fn){ setTimeout(()=>{ fn(); },ms); }
   }
   window.game=new Chuck();
 })();

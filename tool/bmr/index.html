@@ -58,10 +58,16 @@
   <div class="card">
     <div class="big" id="bmr">—</div>
     <div class="lbl">基础代谢 BMR (kcal/天)</div>
+    <label>热量调整方式
+      <select id="preset">
+        <option value="percent">按百分比（−20% / +15%）</option>
+        <option value="fixed">固定差值（−500 / +300 kcal）</option>
+      </select>
+    </label>
     <div class="rows">
       <div class="r"><span>每日总消耗 TDEE</span><b id="tdee">—</b></div>
-      <div class="r"><span>减脂建议（-20%）</span><b id="cut">—</b></div>
-      <div class="r"><span>增肌建议（+15%）</span><b id="bulk">—</b></div>
+      <div class="r"><span>减脂估算</span><b id="cut">—</b></div>
+      <div class="r"><span>增肌估算</span><b id="bulk">—</b></div>
     </div>
     <div class="note">结果仅供参考，非医疗建议。</div>
   </div>
@@ -72,20 +78,30 @@
   let sex='m';
   function render(){
     const age=+$('age').value,wt=+$('wt').value,ht=+$('ht').value,act=+$('act').value;
-    if(!(age>0&&wt>0&&ht>0)){$('bmr').textContent='—';return;}
+    if(!(age>0&&wt>0&&ht>0)){
+      for(const id of ['bmr','tdee','cut','bulk']) $(id).textContent='—';
+      return;
+    }
     let bmr=10*wt+6.25*ht-5*age+(sex==='m'?5:-161);
     bmr=Math.round(bmr);
     const tdee=Math.round(bmr*act);
     $('bmr').textContent=bmr;
     $('tdee').textContent=tdee+' kcal';
-    $('cut').textContent=Math.round(tdee*0.8)+' kcal';
-    $('bulk').textContent=Math.round(tdee*1.15)+' kcal';
+    const fixed=$('preset').value==='fixed';
+    const cut=fixed?Math.max(1200,tdee-500):Math.round(tdee*0.8);
+    const bulk=fixed?tdee+300:Math.round(tdee*1.15);
+    $('cut').textContent=cut+' kcal';
+    $('bulk').textContent=bulk+' kcal';
   }
   document.querySelectorAll('#sex button').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#sex button').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); sex=b.dataset.v; render();
   });
-  ['age','wt','ht','act'].forEach(id=>$(id).addEventListener('input',render));
+  if(new URLSearchParams(location.search).get('preset')==='fixed'){
+    $('preset').value='fixed';
+    $('ht').value=170;
+  }
+  ['age','wt','ht','act','preset'].forEach(id=>$(id).addEventListener('input',render));
   render();
 })();
 </script>

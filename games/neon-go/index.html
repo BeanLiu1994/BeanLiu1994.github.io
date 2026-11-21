@@ -66,6 +66,7 @@
   </div>
   <div class="controls">
     <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-pass" type="button" onclick="game.passTurn()">停一手 · Pass</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
   </div>
   <div class="ai-indicator" id="ai-indicator" style="display:none">
@@ -207,6 +208,10 @@
       this.updateStatus();
       return true;
     }
+    passTurn(){
+      if(this.over || this.autoPlay) return;
+      this.pass(this.current);
+    }
     pass(color){
       this.passes++;
       this.current = color===1?2:1;
@@ -243,7 +248,7 @@
       resultTitle.textContent=title;
       resultMsg.textContent='黑 '+black.toFixed(1)+'  ·  白 '+white.toFixed(1)+'（含贴目6.5）';
       overlayEnd.classList.add('active');
-      if(this.autoPlay){ const wasAuto=true; setTimeout(()=>{ if(wasAuto){ this.restart(); this.startAuto(); } },1900); }
+      if(this.autoPlay) this.nextRoundTimer=setTimeout(()=>{ if(this.autoPlay){ this.restart(); this.startAuto(); } },1900);
     }
 
     update(dt){
@@ -307,7 +312,7 @@
 
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoTarget=null; this.autoCD=0.3; this.updateStatus(); }
-    stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; this.autoTarget=null; this.updateStatus(); }
+    stopAuto(){ clearTimeout(this.nextRoundTimer); this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; this.autoTarget=null; this.updateStatus(); }
 
     updateScore(){ capBlackEl.textContent=this.captured[1]; capWhiteEl.textContent=this.captured[2]; }
     updateStatus(){ if(this.over) return; const cur=this.current===1?'黑方':'白方'; statusEl.textContent = this.autoPlay ? ('自动对弈中 · '+cur+' 思考…') : (cur+' 落子'); }

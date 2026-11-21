@@ -59,8 +59,8 @@
   </body>
 </html></textarea>
       <div class="check"><input type="checkbox" id="comments" checked> 删除注释</div>
-      <div class="check"><input type="checkbox" id="between" checked> 删除标签间空白（保守，安全）</div>
-      <div class="check"><input type="checkbox" id="inline"> 同时压缩行内文本空白（激进，可能改变 <pre>/<code> 显示）</div>
+      <div class="check"><input type="checkbox" id="between" checked> 压缩标签内部的空白</div>
+      <div class="check"><input type="checkbox" id="inline"> 压缩普通文本空白（可能改变显示，保留预格式化内容）</div>
       <div class="row" style="margin-top:8px">
         <button id="run">压缩</button>
         <button class="ghost" id="copy">复制</button>
@@ -77,32 +77,62 @@
   </section>
 </main>
 <div class="status" id="st">就绪</div>
+<script src="../shared/vendor/parse5-8.1.1.min.js"></script>
 <script>
 (function(){
   const $ = id => document.getElementById(id);
 
+  const preserveTextIn=new Set(['pre','code','listing','textarea','title','script','style','xmp','plaintext','iframe','noscript']);
+  const htmlWhitespace=/[\t\n\f\r ]+/g;
+
   function minify(html){
-    let s=html;
-    if($('comments').checked) s=s.replace(/<!--[\s\S]*?-->/g,'');
-    if($('between').checked){
-      // 仅去除标签之间（> ... <）的纯空白，对正文与 <pre>/<textarea>/<script>/<style> 内均安全
-      s=s.replace(/>\s+</g,'><');
+    const edits=[];
+    const markup=$('between').checked, text=$('inline').checked, comments=$('comments').checked;
+    const root=htmlParser.parse(html,{sourceCodeLocationInfo:true});
+    const edit=(range,transform)=>{
+      const original=html.slice(range.startOffset,range.endOffset);
+      const output=transform(original);
+      if(output!==original) edits.push({start:range.startOffset,end:range.endOffset,output});
+    };
+    const compactTag=tag=>tag.replace(/"[^"]*"|'[^']*'|[\t\n\f\r ]+/g,part=>/^[\t\n\f\r ]/.test(part)?' ':part);
+
+    function visit(node,preserve=false){
+      const range=node.sourceCodeLocation;
+      if(comments && !preserve && node.nodeName==='#comment' && range &&
+        !/^\s*(?:\[if\b|<!\[endif\]|#|ko\b|\/ko\b)/i.test(node.data)){
+        edit(range,()=> '');
+      }
+      if(text && !preserve && node.nodeName==='#text' && range){
+        edit(range,value=>value.replace(htmlWhitespace,' '));
+      }
+      if(markup && range?.startTag) edit(range.startTag,compactTag);
+      if(markup && range?.endTag) edit(range.endTag,compactTag);
+      const preserveChildren=preserve || preserveTextIn.has(node.tagName) ||
+        (node.namespaceURI && node.namespaceURI!=='http://www.w3.org/1999/xhtml');
+      for(const child of node.childNodes || []) visit(child,preserveChildren);
+      if(node.content) visit(node.content,preserveChildren);
     }
-    if($('inline').checked){
-      // 激进：把文本节点内连续空白压成单个空格（不改变标签属性）
-      s=s.replace(/(>)([\s\S]*?)(<)/g,(m,g1,mid,g2)=>{
-        // 不处理 script / style 块内的内容
-        return g1 + mid.replace(/\s+/g,' ').trim() + g2;
-      });
+    visit(root);
+    edits.sort((a,b)=>a.start-b.start);
+
+    const chunks=[];
+    let offset=0;
+    for(const change of edits){
+      if(change.start<offset) continue;
+      chunks.push(html.slice(offset,change.start),change.output);
+      offset=change.end;
     }
-    return s.replace(/\n{2,}/g,'\n').trim();
+    chunks.push(html.slice(offset));
+    return chunks.join('');
   }
   function sz(b){ return b<1024?b+' B':(b/1024).toFixed(1)+' KB'; }
 
   function run(){
     const raw=$('inp').value;
-    if(!raw.trim()){ $('out').value=''; $('stat').innerHTML=''; $('st').textContent='请输入 HTML'; return; }
-    const min=minify(raw);
+    if(!raw.trim()){ $('out').value=''; $('stat').textContent=''; $('st').textContent='请输入 HTML'; return; }
+    let min;
+    try{ min=minify(raw); }
+    catch(error){ $('out').value=''; $('stat').textContent=''; $('st').textContent='压缩失败：'+error.message; return; }
     $('out').value=min;
     const before=raw.length, after=min.length;
     const saved=before>0?Math.round((1-after/before)*100):0;
@@ -111,10 +141,9 @@
       '<div class="kv"><span class="k">压缩后</span><span class="v">'+sz(after)+' （'+after+' 字符）</span></div>'+
       '<div class="kv"><span class="k">减少</span><span class="v" style="color:var(--ok)">'+saved+'%</span></div>';
     $('st').textContent='✓ 压缩完成，减少 '+saved+'%';
-    window.__min=min;
   }
   $('run').addEventListener('click',run);
-  $('copy').addEventListener('click',()=>{ if(window.__min!==undefined){ copyText(window.__min); $('st').textContent='✓ 已复制'; } });
+  $('copy').addEventListener('click',()=>{ if($('out').value){ copyText($('out').value); $('st').textContent='✓ 已复制'; } });
   $('clear').addEventListener('click',()=>{ $('inp').value=''; run(); });
   ['comments','between','inline','inp'].forEach(id=>$(id).addEventListener('input',run));
   run();
