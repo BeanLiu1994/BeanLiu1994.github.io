@@ -111,8 +111,10 @@
     }
     makeStars(){ this.stars=[]; const n=Math.floor(this.W*this.H/5200); for(let i=0;i<n;i++) this.stars.push({x:Math.random()*this.W,y:Math.random()*this.H,z:rand(0.3,1)}); }
     newGame(){
+      clearTimeout(this.autoTimer);
+      this.autoTimer=null;
       this.over=false; this.score=0; this.wave=1; this.kills=0; this.quota=8;
-      this.lives=3; this.iframe=0; this.autoShield=false;
+      this.lives=3; this.iframe=0;
       this.sx=this.W*0.16; this.sy=this.H*0.5; this.svx=0; this.svy=0;
       this.bullets=[]; this.ebullets=[]; this.enemies=[]; this.parts=[]; this.pews=[];
       this.fireCD=0; this.spawnCD=0.6; this.shieldFlash=0; this.t=0;
@@ -126,8 +128,9 @@
     }
     fire(){ if(this.fireCD>0) return; this.fireCD=0.16; this.bullets.push({x:this.sx+18,y:this.sy,vx:560,r:3}); this.pews.push({x:this.sx+18,y:this.sy,t:0}); }
     hitShip(){
-      if(this.iframe>0||this.autoShield){ if(this.autoShield){ this.shieldFlash=0.3; } return; }
+      if(this.iframe>0) return;
       this.lives--; this.iframe=1.1; this.shieldFlash=0.3;
+      this.updateUI();
       for(let i=0;i<18;i++) this.parts.push({x:this.sx,y:this.sy,vx:rand(-180,180),vy:rand(-180,180),life:rand(0.3,0.7),c:'#ff4d7d'});
       if(this.lives<=0) this.gameOver();
     }
@@ -136,30 +139,50 @@
       if(this.score>this.best){ this.best=this.score; localStorage.setItem('defenderBest',this.best); bestEl.textContent=this.best; }
       overMsg.textContent='得分 '+this.score+' · 抵达第 '+this.wave+' 波';
       overlay.classList.add('active');
-      if(this.autoPlay) this.autoTimer=setTimeout(()=>{ this.stopAuto(); this.newGame(); this.startAuto(); }, 1700);
+      if(this.autoPlay) this.autoTimer=setTimeout(()=>{ if(this.autoPlay) this.newGame(); }, 1700);
     }
     // ---- AI ----
-    autoThink(){
-      // pick nearest enemy to the right of the ship
-      let tgt=null,best=1e9;
-      for(const e of this.enemies){ const dx=e.x-this.sx; if(dx< -10) continue; const d=Math.abs(e.y-this.sy)+dx*0.4; if(d<best){best=d;tgt=e;} }
-      let desiredY=this.sy;
-      // dodge incoming enemy bullets first
-      let threat=null,td=1e9;
-      for(const b of this.ebullets){ const d=Math.hypot(b.x-this.sx,b.y-this.sy); if(d<td && b.x>this.sx-10){td=d;threat=b;} }
-      // also dodge close enemies
-      for(const e of this.enemies){ const d=Math.hypot(e.x-this.sx,e.y-this.sy); if(d<td && e.x>this.sx-6){td=d;threat={x:e.x,y:e.y};} }
-      if(threat && td<70){ desiredY = this.sy + (this.sy>=threat.y? 1:-1)* (90); }
-      else if(tgt){ desiredY = tgt.y; }
-      desiredY=clamp(desiredY,24,this.H-24);
-      // move toward desiredY with max speed
-      const v=clamp((desiredY-this.sy)*6,-300,300);
-      this.sy=clamp(this.sy+v*(1/60),24,this.H-24);
-      // keep ship on left side
-      this.sx=clamp(this.sx+( (this.W*0.16)-this.sx)*4*(1/60), 20, this.W*0.46);
-      // fire when aligned with a target in lane
-      if(tgt){ const dx=tgt.x-this.sx; if(dx>0 && dx<this.W && Math.abs(tgt.y-this.sy)<16) this.fire(); }
-      else if(this.fireCD<=0 && Math.random()<0.3) this.fire();
+    enemyYAt(enemy,seconds){
+      const phase=this.t*1.5+enemy.ph;
+      const drift=enemy.vy*(Math.cos(phase)-Math.cos(phase+1.5*seconds))/1.5;
+      return clamp(enemy.y+drift,20,this.H-20);
+    }
+    autoThink(dt){
+      const home=this.W*0.16;
+      this.sx+=clamp(home-this.sx,-240*dt,240*dt);
+      const threats=[];
+      const track=(x,speed,radius,yAt)=>{
+        if(speed<=0 || x<this.sx-radius) return;
+        const seconds=Math.max(0,(x-this.sx-radius/2)/speed);
+        if(seconds<=0.8) threats.push({seconds,y:yAt(seconds),radius});
+      };
+      for(const bullet of this.ebullets) track(bullet.x,-bullet.vx,bullet.r+15,t=>bullet.y+bullet.vy*t);
+      for(const enemy of this.enemies) track(enemy.x,enemy.sp,enemy.r+15,t=>this.enemyYAt(enemy,t));
+
+      let aim=this.sy, nearest=Infinity;
+      for(const enemy of this.enemies){
+        const distance=enemy.x-this.sx-18;
+        if(distance<=0) continue;
+        const hitTime=distance/(560+enemy.sp);
+        const y=this.enemyYAt(enemy,hitTime);
+        const cost=distance*0.3+Math.abs(y-this.sy);
+        if(cost<nearest){ aim=y; nearest=cost; }
+      }
+
+      let target=this.sy, bestCost=Infinity;
+      const candidates=[aim,this.sy,this.sy-48,this.sy+48,this.sy-104,this.sy+104,24,this.H-24];
+      for(const candidate of candidates){
+        const y=clamp(candidate,24,this.H-24);
+        let cost=Math.abs(y-aim)+Math.abs(y-this.sy)*0.18;
+        for(const threat of threats){
+          const position=this.sy+clamp(y-this.sy,-300*threat.seconds,300*threat.seconds);
+          const clearance=Math.abs(position-threat.y)-threat.radius;
+          if(clearance<7) cost+=(7-clearance)*28/(0.2+threat.seconds);
+        }
+        if(cost<bestCost){ target=y; bestCost=cost; }
+      }
+      this.sy+=clamp(target-this.sy,-300*dt,300*dt);
+      if(nearest!==Infinity && Math.abs(aim-this.sy)<13) this.fire();
     }
     update(dt){
       this.t+=dt;
@@ -168,7 +191,7 @@
       if(this.over) return;
       if(this.iframe>0) this.iframe-=dt;
       if(this.shieldFlash>0) this.shieldFlash-=dt;
-      if(this.autoPlay) this.autoThink();
+      if(this.autoPlay) this.autoThink(dt);
 
       // ship manual easing handled by pointer; auto moves directly
       this.fireCD-=dt;
@@ -202,7 +225,7 @@
       // wave advance
       if(this.kills>=this.quota){ this.wave++; this.quota+=3; this.addScore(50); waveEl.textContent=this.wave; this.spawnCD=0.3; }
     }
-    addScore(n){ this.score+=n; scoreEl.textContent=this.score; if(this.score>this.best){ this.best=this.score; bestEl.textContent=this.best; } }
+    addScore(n){ this.score+=n; scoreEl.textContent=this.score; this.updateUI(); if(this.score>this.best){ this.best=this.score; bestEl.textContent=this.best; } }
     draw(){
       ctx.clearRect(0,0,this.W,this.H);
       // stars
@@ -228,8 +251,8 @@
       const g=ctx.createLinearGradient(-16,0,20,0); g.addColorStop(0,'#9b6bff'); g.addColorStop(1,'#34f5ff');
       ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-14,-11); ctx.lineTo(-7,0); ctx.lineTo(-14,11); ctx.closePath(); ctx.fill();
       ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(2,0,3,0,7); ctx.fill(); ctx.restore();
-      // shield
-      if(this.autoShield||this.shieldFlash>0){ ctx.strokeStyle=this.autoShield?'rgba(52,245,255,0.5)':'rgba(255,77,125,0.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(this.sx,this.sy,22,0,7); ctx.stroke(); }
+      // Hit feedback
+      if(this.shieldFlash>0){ ctx.strokeStyle='rgba(255,77,125,0.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(this.sx,this.sy,22,0,7); ctx.stroke(); }
       ctx.globalAlpha=1; ctx.shadowBlur=0;
       // particles
       for(const p of this.parts){ ctx.globalAlpha=Math.max(0,p.life*1.6); ctx.fillStyle=p.c; ctx.fillRect(p.x-2,p.y-2,4,4); }
@@ -243,9 +266,9 @@
       try{ this.update(dt); this.draw(); }catch(e){}
       requestAnimationFrame(this.loop);
     }
-    updateUI(){ if(this.autoPlay) aiStatus.textContent='AI · 第 '+this.wave+' 波 · 得分 '+this.score; }
-    startAuto(){ this.autoPlay=true; this.autoShield=true; btnAuto.textContent='自动中…'; btnAuto.classList.add('auto-on'); aiInd.classList.add('show'); this.updateUI(); }
-    stopAuto(){ this.autoPlay=false; this.autoShield=false; btnAuto.textContent='自动游玩'; btnAuto.classList.remove('auto-on'); aiInd.classList.remove('show'); if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} }
+    updateUI(){ if(this.autoPlay) aiStatus.textContent='AI · 第 '+this.wave+' 波 · 得分 '+this.score+' · 生命 '+this.lives; }
+    startAuto(){ this.autoPlay=true; btnAuto.textContent='自动中…'; btnAuto.classList.add('auto-on'); aiInd.classList.add('show'); this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='自动游玩'; btnAuto.classList.remove('auto-on'); aiInd.classList.remove('show'); if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.newGame(); this.startAuto(); } }
     bindInput(){
       const rectXY=(e)=>{ const t=e.touches&&e.touches[0]?e.touches[0]:(e.changedTouches&&e.changedTouches[0]?e.changedTouches[0]:e); const r=canvas.getBoundingClientRect(); return {x:(t.clientX-r.left)/r.width*this.W, y:(t.clientY-r.top)/r.height*this.H}; };

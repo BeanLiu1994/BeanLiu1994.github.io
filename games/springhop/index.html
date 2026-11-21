@@ -84,6 +84,8 @@
   const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
   function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 
+  const GRAVITY=1750, STEER=14;
+
   class Hop {
     constructor(){
       this.autoPlay=false; this.over=false; this.time=0;
@@ -100,12 +102,14 @@
       const type= force || (r<0.12?'spring':(r<0.24?'move':'normal'));
       return { xFrac:0.12+Math.random()*0.76, y:y, type:type, phase:Math.random()*6.28 };
     }
-    restart(){
-      this.stopAuto(); this.over=false; this.score=0;
+    restart(keepAuto=false){
+      clearTimeout(this.restartTimer);
+      if(!keepAuto) this.stopAuto();
+      this.over=false; this.score=0; this._maxY=0; scoreEl.textContent='0';
       this.platforms=[]; let y=70; this.gap=this.H*0.15;
       for(let i=0;i<13;i++){ this.platforms.push(this.makePlat(y, i===0?'normal':undefined)); y+=this.gap*(0.78+Math.random()*0.5); }
       this.player={ xFrac:this.platforms[0].xFrac, y:this.platforms[0].y, vy:0 };
-      this.cameraY=0; this.topY=y; this.targetXFrac=this.player.xFrac; this.keyDir=0; this.pointerDown=false; this.autoTargetPlat=null;
+      this.cameraY=0; this.topY=this.platforms.at(-1).y; this.targetXFrac=this.player.xFrac; this.keyDir=0; this.pointerDown=false; this.autoTargetPlat=null;
       overlayLose.classList.remove('active');
     }
     bindInput(){
@@ -118,20 +122,35 @@
       window.addEventListener('keyup',e=>{ if(e.key==='ArrowLeft'&&this.keyDir===-1)this.keyDir=0; else if(e.key==='ArrowRight'&&this.keyDir===1)this.keyDir=0; });
       document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
     }
-    platX(pl){ return (pl.type==='move'? pl.xFrac+Math.sin(this.time*1.5+pl.phase)*0.12 : pl.xFrac); }
-    autoControl(){
-      const p=this.player; let best=null, bs=-1e9;
-      for(const pl of this.platforms){ const dy=pl.y-p.y; if(dy>20&&dy<185){ const s=dy-Math.abs(p.xFrac-this.platX(pl))*1.6; if(s>bs){ bs=s; best=pl; } } }
-      if(!best){ for(const pl of this.platforms){ const dy=pl.y-p.y; if(dy>0 && (!best||dy<best.y-p.y)) best=pl; } }
-      if(best){ this.targetXFrac=this.platX(best); this.autoTargetPlat=best; }
+    platX(pl,time=this.time){ return pl.type==='move'?pl.xFrac+Math.sin(time*1.5+pl.phase)*0.12:pl.xFrac; }
+    autoControl(dt){
+      const p=this.player;
+      const vy=p.vy-GRAVITY*dt/2;
+      let best=null, target=p.xFrac;
+      for(const pl of this.platforms){
+        if(best && pl.y<=best.y) continue;
+        const root=vy*vy+2*GRAVITY*(p.y-pl.y);
+        if(root<0) continue;
+        const landing=(vy+Math.sqrt(root))/GRAVITY;
+        if(landing<0) continue;
+        const x=this.platX(pl,this.time+landing);
+        const remaining=Math.pow(1-Math.min(1,dt*STEER),Math.max(1,landing/dt));
+        const nearest=p.xFrac*remaining+(x<p.xFrac?0:1)*(1-remaining);
+        if(Math.abs(nearest-p.xFrac)+this.platHalf()*0.85<Math.abs(x-p.xFrac)) continue;
+        best=pl;
+        target=Math.max(0,Math.min(1,p.xFrac+(x-p.xFrac)/(1-remaining)));
+      }
+      this.autoTargetPlat=best;
+      this.targetXFrac=target;
     }
     update(dt){
       if(this.over) return; this.time+=dt;
-      const p=this.player, G=1750, bounce=780, spring=1400;
-      let tx=this.targetXFrac; if(this.keyDir) tx=p.xFrac+this.keyDir*dt*2.4;
-      p.xFrac+= (tx-p.xFrac)*Math.min(1,dt*14);
+      const p=this.player, bounce=780, spring=1400;
+      if(this.autoPlay && dt>0) this.autoControl(dt);
+      let tx=this.targetXFrac; if(!this.autoPlay && this.keyDir) tx=p.xFrac+this.keyDir*dt*2.4;
+      p.xFrac+= (tx-p.xFrac)*Math.min(1,dt*STEER);
       if(p.xFrac<0)p.xFrac+=1; if(p.xFrac>1)p.xFrac-=1;
-      const prevY=p.y; p.vy-=G*dt; p.y+=p.vy*dt;
+      const prevY=p.y; p.vy-=GRAVITY*dt; p.y+=p.vy*dt;
       if(p.vy<0){
         const half=this.platHalf();
         for(const pl of this.platforms){ const px=this.platX(pl);
@@ -145,14 +164,13 @@
       if(p.y>this._maxY||this._maxY===undefined){ this._maxY=p.y; this.score=Math.max(this.score,Math.floor(p.y/26)); }
       while(this.topY<this.cameraY+this.H+240){ this.topY+=this.gap*(0.78+Math.random()*0.5); this.platforms.push(this.makePlat(this.topY)); }
       this.platforms=this.platforms.filter(pl=>pl.y>this.cameraY-this.H*0.6);
-      if(this.autoPlay) this.autoControl();
       if(p.y<this.cameraY-this.H*0.16){ this.gameOver(); }
       scoreEl.textContent=this.score;
     }
     gameOver(){
       this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('hopBest',String(this.best)); bestEl.textContent=this.best; }
       loseMsg.textContent='本局高度 '+this.score; overlayLose.classList.add('active');
-      if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },900);
+      if(this.autoPlay) this.restartTimer=setTimeout(()=>{ if(this.autoPlay && this.over) this.restart(true); },900);
     }
     draw(){
       const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);

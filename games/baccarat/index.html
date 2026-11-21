@@ -135,7 +135,7 @@
       if(this.result && this.reveal>=1){ ctx.save(); ctx.shadowColor='#4dff91'; ctx.shadowBlur=16; ctx.fillStyle='#4dff91'; ctx.font='bold '+(cw*0.55)+'px Segoe UI'; ctx.textAlign='center';
         const txt=this.result==='P'?'PLAYER WINS':(this.result==='B'?'BANKER WINS':'TIE'); ctx.fillText(txt, W/2, H-14); ctx.restore(); }
     }
-    card(d,x,y){ const col=RED[d.s]?'#ff5d6a':'#e6e6f5'; const g=ctx.createLinearGradient(x,y,x,y+ch); g.addColorStop(0,'#fbfbff'); g.addColorStop(1,'#d7d9ea');
+    card(d,x,y){ const {cw,ch}=this; const col=RED[d.s]?'#ff5d6a':'#e6e6f5'; const g=ctx.createLinearGradient(x,y,x,y+ch); g.addColorStop(0,'#fbfbff'); g.addColorStop(1,'#d7d9ea');
       this.rr(x,y,cw,ch,6); ctx.fillStyle=g; ctx.fill();
       ctx.fillStyle=col; ctx.font='bold '+(cw*0.34)+'px Segoe UI'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(RL(d.r), x+5, y+4); ctx.textAlign='right'; ctx.fillText(SYM[d.s], x+cw-5, y+4);
       ctx.textAlign='center'; ctx.font=(cw*0.5)+'px Segoe UI'; ctx.fillText(SYM[d.s], x+cw/2, y+ch*0.56);

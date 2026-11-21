@@ -128,12 +128,14 @@
       ring.done=false; ring.prevD=1e9; ring.pulse=0;
     }
     newGame(){
+      clearTimeout(this.autoTimer);
+      this.autoTimer=null;
       this.over=false; this.score=0; this.passed=0; this.ballColor=0;
       this.bx=this.cx; this.by=this.H*0.6; this.bvy=0; this.trail=[];
       this.rings=[]; this.nextAi=0;
       const N=Math.ceil(this.H/this.GAP)+3;
       for(let i=0;i<N;i++){ const ring={ai:this.nextAi++, y:this.by-(i+1)*this.GAP}; this.genRing(ring); this.rings.push(ring); }
-      this.autoShield=false; this.flash=0; this.t=0;
+      this.flash=0; this.t=0;
       scoreEl.textContent=0; overlay.classList.remove('active'); this.updateUI();
       this.setReady(!this.autoPlay); // freeze until first tap; AI bypasses
     }
@@ -147,16 +149,21 @@
     passRing(ring){
       ring.done=true; this.passed++; this.score++; this.ballColor=(this.ballColor+1)%4; scoreEl.textContent=this.score;
       ring.pulse=1;
+      this.updateUI();
       if(this.score>this.best){ this.best=this.score; localStorage.setItem('colorBest',this.best); bestEl.textContent=this.best; }
     }
-    die(msg){ if(this.autoPlay){ return; } this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('colorBest',this.best); bestEl.textContent=this.best; } overMsg.textContent=msg; overlay.classList.add('active'); if(this.autoPlay) this.autoTimer=setTimeout(()=>{ this.stopAuto(); this.newGame(); this.startAuto(); },1500); }
-    autoThink(){
+    die(msg){
+      if(this.over) return;
+      this.over=true;
+      overMsg.textContent=msg;
+      overlay.classList.add('active');
+      if(this.autoPlay) this.autoTimer=setTimeout(()=>{ if(this.autoPlay) this.newGame(); },1500);
+    }
+    autoThink(dt){
       const ring=this.activeRing();
-      let targetX=this.cx;
-      if(ring){ targetX=this.cx+this.R*Math.cos(ring.matchPhi); }
-      // smooth horizontal tracking (no abrupt jumps)
-      this.bx+=(targetX-this.bx)*Math.min(1,0.14);
-      // bounce to stay alive: jump when descending in lower band
+      const target=ring?this.cx+this.R*Math.cos(ring.matchPhi):this.cx;
+      const travel=520*dt;
+      this.bx+=clamp(target-this.bx,-travel,travel);
       if(this.by>this.H*0.55 && this.bvy>-10) this.jump();
     }
     update(dt){
@@ -164,7 +171,7 @@
       if(this.over) return;
       if(this.ready){ return; } // waiting for first tap: frozen scene
       if(this.flash>0) this.flash-=dt;
-      if(this.autoPlay) this.autoThink();
+      if(this.autoPlay) this.autoThink(dt);
       // physics
       this.bvy+=1300*dt; this.by+=this.bvy*dt;
       // clamp horizontal
@@ -179,17 +186,15 @@
           // entry: check color
           let a=Math.atan2(this.by-r.y, this.bx-this.cx)-r.rot; a=((a%TAU)+TAU)%TAU;
           const idx=Math.floor(a/(Math.PI/2))%4;
-          if(r.colors[idx]===r.req){ this.passRing(r); }
-          else { this.flash=0.25; if(!this.autoPlay){ this.die('穿越了错误的色环'); } else { r.done=true; this.passed++; this.score++; this.ballColor=(this.ballColor+1)%4; scoreEl.textContent=this.score; if(this.score>this.best){this.best=this.score;localStorage.setItem('colorBest',this.best);bestEl.textContent=this.best;} } }
+          if(r.colors[idx]===COLORS[this.ballColor]) this.passRing(r);
+          else { this.flash=0.25; this.die('穿越了错误的色环'); return; }
         }
         r.prevD=d;
-        // missed (scrolled off bottom without passing) -> in manual, death
-        if(!r.done && r.y>this.H+this.R+60){ if(!this.autoPlay){ this.die('未能穿越色环'); } else { r.done=true; } }
+        if(!r.done && r.y>this.H+this.R+60){ this.die('未能穿越色环'); return; }
       }
       // recycle rings that went off bottom
       for(let i=this.rings.length-1;i>=0;i--){ const r=this.rings[i]; if(r.y>this.H+this.R+80){ this.rings.splice(i,1); const top=Math.min(...this.rings.map(x=>x.y)); const nr={ai:this.nextAi++, y:top-this.GAP}; this.genRing(nr); this.rings.push(nr); } }
-      // fall death / auto respawn
-      if(this.by>this.H+this.ballR+20){ if(this.autoPlay){ this.by=this.H*0.45; this.bvy=0; this.bx=this.cx; } else { this.die('小球坠落'); } }
+      if(this.by>this.H+this.ballR+20){ this.die('小球坠落'); return; }
       if(this.by<-this.ballR-30){ this.by=-this.ballR-30; if(this.bvy<-200) this.bvy=-200; }
     }
     draw(){
@@ -224,8 +229,8 @@
       requestAnimationFrame(this.loop);
     }
     updateUI(){ if(this.autoPlay) aiStatus.textContent='AI · 已穿越 '+this.passed+' 环'; }
-    startAuto(){ this.autoPlay=true; this.autoShield=true; this.setReady(false); btnAuto.textContent='自动中…'; btnAuto.classList.add('auto-on'); aiInd.classList.add('show'); this.updateUI(); }
-    stopAuto(){ this.autoPlay=false; this.autoShield=false; btnAuto.textContent='自动游玩'; btnAuto.classList.remove('auto-on'); aiInd.classList.remove('show'); if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} }
+    startAuto(){ this.autoPlay=true; this.setReady(false); btnAuto.textContent='自动中…'; btnAuto.classList.add('auto-on'); aiInd.classList.add('show'); this.updateUI(); }
+    stopAuto(){ this.autoPlay=false; btnAuto.textContent='自动游玩'; btnAuto.classList.remove('auto-on'); aiInd.classList.remove('show'); if(this.autoTimer){clearTimeout(this.autoTimer);this.autoTimer=null;} }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.newGame(); this.startAuto(); } }
     bindInput(){
       const rectXY=(e)=>{ const t=e.touches&&e.touches[0]?e.touches[0]:(e.changedTouches&&e.changedTouches[0]?e.changedTouches[0]:e); const r=canvas.getBoundingClientRect(); return {x:(t.clientX-r.left)/r.width*this.W, y:(t.clientY-r.top)/r.height*this.H}; };

@@ -71,7 +71,7 @@
       <div class="overlay-content">
         <h2>全部击破!</h2>
         <p id="win-msg">漂亮的一击</p>
-        <button class="btn primary" onclick="game.restart()">下一关</button>
+        <button class="btn primary" onclick="game.nextLevel()">下一关</button>
       </div>
     </div>
   </div>
@@ -93,6 +93,8 @@
   const overlayLose=document.getElementById('overlay-lose'), loseMsg=document.getElementById('lose-msg');
   const overlayWin=document.getElementById('overlay-win'), winMsg=document.getElementById('win-msg');
   const aiInd=document.getElementById('ai-indicator'), aiStatus=document.getElementById('ai-status');
+
+  const SHOT_STEP=1/120, GRAVITY=1400;
 
   class Sling {
     constructor(){
@@ -120,30 +122,87 @@
       this.pigsLeft=this.pigs.length; pigsEl.textContent=this.pigsLeft;
     }
     hitRect(b,r){ const cx=Math.max(r.x,Math.min(b.x,r.x+r.w)); const cy=Math.max(r.y,Math.min(b.y,r.y+r.h)); const dx=b.x-cx, dy=b.y-cy; const d2=dx*dx+dy*dy; if(d2<b.r*b.r){ const d=Math.sqrt(d2)||0.001; let nx=dx/d, ny=dy/d; if(d2<0.01){ const l=b.x-r.x,ri=r.x+r.w-b.x,t=b.y-r.y,bo=r.y+r.h-b.y; const m=Math.min(l,ri,t,bo); if(m===l){nx=-1;ny=0;} else if(m===ri){nx=1;ny=0;} else if(m===t){nx=0;ny=-1;} else {nx=0;ny=1;} } return {nx,ny,cx,cy}; } return null; }
-    sim(vx,vy){ const bb={x:this.anchor.x,y:this.anchor.y,r:this.bR,vx,vy}; const blocks=this.blocks.map(b=>({x:b.x,y:b.y,w:b.w,h:b.h,hp:b.hp})); const pigs=this.pigs.map(p=>({x:p.x,y:p.y,r:p.r,alive:p.alive})); let destroyed=0,broken=0; const g=1400; for(let i=0;i<260;i++){ bb.vy+=g/60; bb.x+=bb.vx/60; bb.y+=bb.vy/60; for(const p of pigs){ if(p.alive && Math.hypot(bb.x-p.x,bb.y-p.y)<bb.r+p.r){ p.alive=false; destroyed++; } } for(const b of blocks){ if(b.hp<=0) continue; const h=this.hitRect(bb,b); if(h){ const vd=bb.vx*h.nx+bb.vy*h.ny; if(vd<0){ bb.vx-=1.5*vd*h.nx; bb.vy-=1.5*vd*h.ny; } bb.x=h.cx+h.nx*(bb.r+0.5); bb.y=h.cy+h.ny*(bb.r+0.5); b.hp-=1; if(b.hp<=0) broken++; bb.vx*=0.99; bb.vy*=0.99; } } if(bb.y>this.groundY-bb.r && Math.hypot(bb.vx,bb.vy)<70) break; if(bb.x<-40||bb.x>this.W+40||bb.y>this.H+80) break; } return destroyed*3+broken; }
-    autoPlan(){ let best=null,bv=-1; for(let ang=18;ang<=74;ang+=2){ for(let sp=620;sp<=1140;sp+=70){ const vx=Math.cos(ang*Math.PI/180)*sp, vy=-Math.sin(ang*Math.PI/180)*sp; const s=this.sim(vx,vy); if(s>bv){ bv=s; best={vx,vy}; } } } return best; }
-    launch(vx,vy){ this.bird={x:this.anchor.x,y:this.anchor.y,r:this.bR,vx,vy,t:0}; this.state='fly'; this.birdsLeft--; birdsEl.textContent=Math.max(0,this.birdsLeft); }
+    stepBird(b,blocks,pigs,onHit){
+      b.vy+=GRAVITY*SHOT_STEP; b.x+=b.vx*SHOT_STEP; b.y+=b.vy*SHOT_STEP; b.t+=SHOT_STEP;
+      for(const pig of pigs){
+        if(!pig.alive || Math.hypot(b.x-pig.x,b.y-pig.y)>=b.r+pig.r) continue;
+        pig.alive=false;
+        onHit(pig,true);
+      }
+      for(const block of blocks){
+        if(block.hp<=0) continue;
+        const hit=this.hitRect(b,block);
+        if(!hit) continue;
+        const {nx,ny,cx,cy}=hit;
+        const normalSpeed=b.vx*nx+b.vy*ny;
+        if(normalSpeed<0){ b.vx-=1.5*normalSpeed*nx; b.vy-=1.5*normalSpeed*ny; }
+        b.x=cx+nx*(b.r+0.5); b.y=cy+ny*(b.r+0.5);
+        block.hp--;
+        onHit(block,false);
+        b.vx*=0.99; b.vy*=0.99;
+      }
+      if(b.y>this.groundY-b.r){
+        b.y=this.groundY-b.r; b.vy=-b.vy*0.42; b.vx*=0.7;
+        if(Math.hypot(b.vx,b.vy)<70) return true;
+      }
+      return b.x<-40 || b.x>this.W+40 || b.y>this.H+100 || b.t>6;
+    }
+    sim(vx,vy){
+      const bird={...this.anchor,r:this.bR,vx,vy,t:0};
+      const blocks=this.blocks.map(block=>({...block}));
+      const pigs=this.pigs.map(pig=>({...pig}));
+      let score=0;
+      const onHit=(part,isPig)=>{ score+=isPig?100:(part.hp===0?2:1); };
+      while(!this.stepBird(bird,blocks,pigs,onHit)) {}
+      return score;
+    }
+    autoPlan(){
+      let best=null, bestScore=-1;
+      for(let angle=-10;angle<=82;angle+=2){
+        const radians=angle*Math.PI/180;
+        for(let speed=210;speed<=1150;speed+=30){
+          const vx=Math.cos(radians)*speed, vy=-Math.sin(radians)*speed;
+          const score=this.sim(vx,vy);
+          if(score>bestScore){ bestScore=score; best={vx,vy}; }
+        }
+      }
+      return best;
+    }
+    launch(vx,vy){ this.bird={x:this.anchor.x,y:this.anchor.y,r:this.bR,vx,vy,t:0}; this.state='fly'; this.flightTime=0; this.birdsLeft--; birdsEl.textContent=Math.max(0,this.birdsLeft); }
     endBird(){ this.bird=null; if(this.pigsLeft<=0){ this.victory(); return; } if(this.birdsLeft<=0){ this.gameOver(); return; } this.state='aim'; this.cool=0.5; }
     update(dt){
       if(this.over||this.win) return; this.time+=dt;
       if(this.cool>0) this.cool-=dt;
       if(this.autoPlay && this.state==='aim' && this.cool<=0){ const b=this.autoPlan(); if(b){ this.autoV=b; this.launch(b.vx,b.vy); aiStatus.textContent='AI 发射!'; } else this.endBird(); }
       if(this.state==='fly' && this.bird){
-        const b=this.bird; b.vy+=1400*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.t+=dt;
-        for(const p of this.pigs){ if(p.alive && Math.hypot(b.x-p.x,b.y-p.y)<b.r+p.r){ p.alive=false; this.pigsLeft--; this.score+=120; scoreEl.textContent=this.score; pigsEl.textContent=this.pigsLeft; this.booms.push({x:p.x,y:p.y,r:p.r,life:1}); } }
-        for(const bl of this.blocks){ if(bl.hp<=0) continue; const h=this.hitRect(b,bl); if(h){ const vd=b.vx*h.nx+b.vy*h.ny; if(vd<0){ b.vx-=1.5*vd*h.nx; b.vy-=1.5*vd*h.ny; } b.x=h.cx+h.nx*(b.r+0.5); b.y=h.cy+h.ny*(b.r+0.5); bl.hp-=1; if(bl.hp<=0) this.booms.push({x:bl.x+bl.w/2,y:bl.y+bl.h/2,r:Math.max(bl.w,bl.h)/2,life:1}); b.vx*=0.99; b.vy*=0.99; } }
-        if(b.y>this.groundY-b.r){ b.y=this.groundY-b.r; b.vy=-b.vy*0.42; b.vx*=0.7; if(Math.hypot(b.vx,b.vy)<70){ this.endBird(); return; } }
-        if(b.x<-40||b.x>this.W+40||b.y>this.H+100||b.t>6){ this.endBird(); return; }
+        this.flightTime+=dt;
+        while(this.flightTime>=SHOT_STEP){
+          this.flightTime-=SHOT_STEP;
+          const finished=this.stepBird(this.bird,this.blocks,this.pigs,(part,isPig)=>{
+            if(isPig){
+              this.pigsLeft--; this.score+=120;
+              scoreEl.textContent=this.score; pigsEl.textContent=this.pigsLeft;
+              this.booms.push({x:part.x,y:part.y,r:part.r,life:1});
+            } else if(part.hp===0){
+              this.booms.push({x:part.x+part.w/2,y:part.y+part.h/2,r:Math.max(part.w,part.h)/2,life:1});
+            }
+          });
+          if(finished || this.pigsLeft===0){ this.endBird(); break; }
+        }
       }
       for(let i=this.booms.length-1;i>=0;i--){ this.booms[i].life-=dt*2.6; if(this.booms[i].life<=0) this.booms.splice(i,1); }
     }
-    victory(){ this.win=true; this.level++; if(this.score>this.best){ this.best=this.score; localStorage.setItem('slingBest',String(this.best)); } winMsg.textContent='得分 '+this.score; overlayWin.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay){ this.win=false; overlayWin.classList.remove('active'); this.score=this.score; this.makeLevel(); this.state='aim'; } },1300); }
-    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('slingBest',String(this.best)); } loseMsg.textContent='得分 '+this.score+'，剩 '+this.pigsLeft+' 只'; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1300); }
+    victory(){ this.win=true; this.level++; if(this.score>this.best){ this.best=this.score; localStorage.setItem('slingBest',String(this.best)); } winMsg.textContent='得分 '+this.score; overlayWin.classList.add('active'); if(this.autoPlay) this.restartTimer=setTimeout(()=>{ if(this.autoPlay && this.win) this.nextLevel(); },1300); }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('slingBest',String(this.best)); } loseMsg.textContent='得分 '+this.score+'，剩 '+this.pigsLeft+' 只'; overlayLose.classList.add('active'); if(this.autoPlay) this.restartTimer=setTimeout(()=>{ if(this.autoPlay && this.over) this.restart(true); },1300); }
     bindInput(){
-      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.win||this.autoPlay||this.state!=='aim') return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); if(Math.hypot(x-this.anchor.x,y-this.anchor.y)<this.W*0.18){ this.drag=true; this.aim={x,y}; } });
+      canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.win||this.autoPlay||this.state!=='aim') return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); if(Math.hypot(x-this.anchor.x,y-this.anchor.y)<this.W*0.18){ canvas.setPointerCapture(e.pointerId); this.drag=true; this.aim={x,y}; } });
       canvas.addEventListener('pointermove',e=>{ if(this.drag){ e.preventDefault(); const r=canvas.getBoundingClientRect(); this.aim={x:(e.clientX-r.left)*(this.W/r.width),y:(e.clientY-r.top)*(this.H/r.height)}; } });
-      const fire=e=>{ if(!this.drag) return; this.drag=false; const ax=this.anchor.x-this.aim.x, ay=this.anchor.y-this.aim.y; let vx=ax*7, vy=ay*7; const sp=Math.hypot(vx,vy); if(sp>1150){ vx*=1150/sp; vy*=1150/sp; } if(sp<60) return; this.launch(vx,vy); this.aim=null; };
-      canvas.addEventListener('pointerup',fire); canvas.addEventListener('pointercancel',fire);
+      const fire=e=>{ if(!this.drag) return; this.drag=false; const r=canvas.getBoundingClientRect();
+        const ax=this.anchor.x-(e.clientX-r.left)*(this.W/r.width);
+        const ay=this.anchor.y-(e.clientY-r.top)*(this.H/r.height);
+        this.aim=null; let vx=ax*7, vy=ay*7; const sp=Math.hypot(vx,vy); if(sp>1150){ vx*=1150/sp; vy*=1150/sp; } if(sp<60) return; this.launch(vx,vy); };
+      canvas.addEventListener('pointerup',fire);
+      canvas.addEventListener('pointercancel',()=>{ this.drag=false; this.aim=null; });
       document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
     }
     curBird(){ return this.state==='aim' ? {x:this.anchor.x,y:this.anchor.y,r:this.bR} : this.bird; }
@@ -163,7 +222,7 @@
         let vx,vy; if(this.autoPlay){ vx=this.autoV.vx; vy=this.autoV.vy; } else { vx=(this.anchor.x-this.aim.x)*7; vy=(this.anchor.y-this.aim.y)*7; const sp=Math.hypot(vx,vy); if(sp>1150){ vx*=1150/sp; vy*=1150/sp; } }
         // trajectory dots
         let sx=this.anchor.x, sy=this.anchor.y, svx=vx, svy=vy;
-        ctx.save(); ctx.fillStyle='#ffffff66'; for(let i=0;i<26;i++){ svx*=0.992; svy=svy*0.992+1400/60; sx+=svx/60; sy+=svy/60; if(i%2===0){ ctx.globalAlpha=0.6-i*0.02; ctx.beginPath(); ctx.arc(sx,sy,2.2,0,7); ctx.fill(); } } ctx.restore();
+        ctx.save(); ctx.fillStyle='#ffffff66'; for(let i=0;i<26;i++){ svy+=GRAVITY/60; sx+=svx/60; sy+=svy/60; if(i%2===0){ ctx.globalAlpha=0.6-i*0.02; ctx.beginPath(); ctx.arc(sx,sy,2.2,0,7); ctx.fill(); } } ctx.restore();
         // bands
         ctx.save(); ctx.strokeStyle='#5a3a22'; ctx.lineWidth=this.bR*0.35; ctx.beginPath(); ctx.moveTo(this.anchor.x-this.bR*0.9,this.anchor.y-this.bR*1.2); ctx.lineTo(cb.x,cb.y); ctx.moveTo(this.anchor.x+this.bR*0.9,this.anchor.y-this.bR*1.2); ctx.lineTo(cb.x,cb.y); ctx.stroke(); ctx.restore();
       }
@@ -173,10 +232,11 @@
       ctx.fillStyle='#e9ecff'; ctx.font='bold '+Math.round(W*0.04)+'px Segoe UI'; ctx.textAlign='left'; ctx.fillText('得分 '+this.score,W-110,24);
     }
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; this.update(dt); this.draw(); }catch(err){ console.error(err); } }
-    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over||this.win) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.aim=null; }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); else if(this.win) this.nextLevel(); this.startAuto(); } }
+    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.aim=null; this.drag=false; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
-    restart(){ this.stopAuto(); this.over=false; this.win=false; this.score=0; scoreEl.textContent='0'; this.booms=[]; this.bird=null; this.aim=null; this.drag=false; this.cool=0; this.state='aim'; this.makeLevel(); overlayLose.classList.remove('active'); overlayWin.classList.remove('active'); }
+    nextLevel(){ clearTimeout(this.restartTimer); this.win=false; this.autoV=null; this.cool=0; this.state='aim'; this.makeLevel(); overlayWin.classList.remove('active'); }
+    restart(keepAuto=false){ clearTimeout(this.restartTimer); if(!keepAuto) this.stopAuto(); this.autoV=null; this.over=false; this.win=false; this.score=0; scoreEl.textContent='0'; this.booms=[]; this.bird=null; this.aim=null; this.drag=false; this.cool=0; this.state='aim'; this.makeLevel(); overlayLose.classList.remove('active'); overlayWin.classList.remove('active'); }
   }
   window.game=new Sling();
 })();

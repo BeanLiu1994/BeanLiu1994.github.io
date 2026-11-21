@@ -72,7 +72,7 @@
   const R=6;
   class BarrelJump {
     constructor(){
-      this.autoPlay=false; this._last=0; this._autoProgress=0; this._autoCd=0; this.over=false; this.time=0; this.lives=3;
+      this.autoPlay=false; this._last=0; this._autoProgress=0; this.over=false; this.time=0; this.lives=3;
       this.best=parseInt(localStorage.getItem('barrelBest')||'0'); bestEl.textContent=this.best;
       this.fit(); window.addEventListener('resize',()=>this.fit());
       this.restart(); this.loop=this.loop.bind(this); requestAnimationFrame(this.loop);
@@ -82,36 +82,85 @@
     ladderX(col){ return this.margin+col*(this.W-2*this.margin); }
     buildLadders(){ this.ladders=[]; for(let low=0;low<R-1;low++){ const n=2+Math.floor(Math.random()*2); const cols=[0.2,0.5,0.8]; const shuffled=cols.slice().sort(()=>Math.random()-0.5); for(let i=0;i<n;i++) this.ladders.push({lower:low, col:shuffled[i]}); } }
     spawnBarrel(){ const r=0; const col=Math.random(); this.barrels.push({x:this.ladderX(col), r, vx:(Math.random()<.5?-1:1)*100, falling:false, y:this.platY(0)}); }
-    restart(){ this.stopAuto(); this.over=false; this.lives=3; this.floor=0; floorEl.textContent=0;
+    restart(){
+      this.stopAuto();
+      this.over=false; this.lives=3; this.floor=0; floorEl.textContent=0;
+      statusEl.textContent='爬梯子到达顶层，跳过滚桶。';
+      this.startFloor();
+    }
+    startFloor(){
       this.buildLadders(); this.barrels=[]; this.spawnT=0.6;
-      this.px=this.W/2; this.pr=R-1; this.climbing=false; this.climbT=0; this.climbFrom=0; this.climbTo=0; this.jumping=false; this.jumpT=0;
-      this.vx=0; this.updateY(); }
+      this.px=this.W/2; this.pr=R-1; this.climbing=false; this.climbT=0;
+      this.jumping=false; this.jumpT=0; this.vx=0;
+      this.updateY();
+    }
     updateY(){ const base=this.platY(this.pr); if(this.climbing){ this.py=base+(this.platY(this.climbTo)-base)*this.climbT; } else if(this.jumping){ const prog=this.jumpT/0.6; this.py=base-Math.sin(prog*Math.PI)*this.rowGap*0.55; } else this.py=base; }
     ladderAt(col, pr){ return this.ladders.find(l=>Math.abs(l.col-col)<0.06 && l.lower===pr-1); }
     ladderDownAt(col, pr){ return this.ladders.find(l=>Math.abs(l.col-col)<0.06 && l.lower===pr); }
     input(a){ if(this.autoPlay||this.over) return; this.handleInput(a); }
-    handleInput(a){ if(this.climbing){ if(a==='up'){ this.climbT=Math.min(1,this.climbT+0.06); } else if(a==='down'){ this.climbT=Math.max(0,this.climbT-0.06); } if(this.climbT>=1){ this.pr=this.climbTo; this.climbing=false; this.updateY(); } else if(this.climbT<=0&&this.climbTo>this.pr){ this.pr=this.climbFrom; this.climbing=false; this.updateY(); } return; }
-      if(a==='left'){ this.vx=-150; } else if(a==='right'){ this.vx=150; } else if(a==='jump'){ if(!this.jumping){ this.jumping=true; this.jumpT=0; } }
-      else if(a==='up'){ const col=(this.px-this.margin)/(this.W-2*this.margin); if(this.pr>0 && this.ladderAt(col,this.pr)){ this.climbing=true; this.climbFrom=this.pr; this.climbTo=this.pr-1; this.climbT=0; } }
-      else if(a==='down'){ const col=(this.px-this.margin)/(this.W-2*this.margin); if(this.pr<R-1 && this.ladderDownAt(col,this.pr)){ this.climbing=true; this.climbFrom=this.pr; this.climbTo=this.pr+1; this.climbT=0; } } }
-    autoControl(){ if(this.pr===0){ this.win(); return; }
-      // pick ladder to upper platform, safest
-      const cands=this.ladders.filter(l=>l.lower===this.pr-1);
-      let best=null,bestScore=-1e9; for(const l of cands){ const lx=this.ladderX(l.col); let danger=0; for(const b of this.barrels){ if(b.r===this.pr){ const d=Math.abs(b.x-lx); if(d<70) danger+=(70-d); } }
-        const score=-Math.abs(this.px-lx)-danger*0.5; if(score>bestScore){ bestScore=score; best=l; } }
-      if(!best) best=cands[0];
-      const lx=this.ladderX(best.col);
-      if(Math.abs(this.px-lx)<6){ if(!this.climbing){ this.climbing=true; this.climbFrom=this.pr; this.climbTo=this.pr-1; this.climbT=0; } }
-      else { this.vx=(lx>this.px)?150:-150; }
-      // jump over nearby barrel on same platform
-      if(!this.climbing && !this.jumping){ for(const b of this.barrels){ if(b.r===this.pr){ const dx=b.x-this.px; if(Math.abs(dx)<46 && (b.vx*dx>0)){ this.jumping=true; this.jumpT=0; break; } } } }
+    beginClimb(direction){
+      if(this.climbing || this.jumping) return false;
+      const col=(this.px-this.margin)/(this.W-2*this.margin);
+      const ladder=direction<0?this.ladderAt(col,this.pr):this.ladderDownAt(col,this.pr);
+      if(!ladder) return false;
+      this.px=this.ladderX(ladder.col);
+      this.vx=0; this.climbing=true; this.climbTo=this.pr+direction; this.climbT=0;
+      return true;
     }
-    win(){ this.floor++; if(this.floor>this.best){ this.best=this.floor; localStorage.setItem('barrelBest',String(this.best)); bestEl.textContent=this.best; } floorEl.textContent=this.floor; statusEl.textContent='🏆 到达顶层！第 '+this.floor+' 层'; if(this.autoPlay){ this.buildLadders(); this.barrels=[]; this.spawnT=0.6; this.px=this.W/2; this.pr=R-1; this.climbing=false; this.jumping=false; this.updateY(); } }
+    handleInput(a){
+      if(this.climbing) return;
+      if(a==='left') this.vx=-150;
+      else if(a==='right') this.vx=150;
+      else if(a==='jump' && !this.jumping){ this.jumping=true; this.jumpT=0; }
+      else if(a==='up') this.beginClimb(-1);
+      else if(a==='down') this.beginClimb(1);
+    }
+    autoControl(dt){
+      if(this.climbing || this.jumping) return;
+      let target=null, bestCost=Infinity;
+      for(const ladder of this.ladders){
+        if(ladder.lower!==this.pr-1) continue;
+        const x=this.ladderX(ladder.col);
+        let cost=Math.abs(this.px-x);
+        for(const barrel of this.barrels){
+          if(barrel.r===this.pr) cost+=Math.max(0,70-Math.abs(barrel.x-x))*0.5;
+        }
+        if(cost<bestCost){ target=x; bestCost=cost; }
+      }
+      if(target===null) return;
+      if(Math.abs(this.px-target)<3){
+        this.px=target;
+        if(this.beginClimb(-1)) return;
+      }
+      this.vx=Math.max(-150,Math.min(150,(target-this.px)/Math.max(dt,0.001)));
+      for(const barrel of this.barrels){
+        if(barrel.r!==this.pr) continue;
+        const delta=barrel.x-this.px;
+        const relative=barrel.vx-this.vx;
+        if(Math.abs(delta)<46 && delta*relative<0){ this.handleInput('jump'); break; }
+      }
+    }
+    win(){
+      this.floor++;
+      if(this.floor>this.best){
+        this.best=this.floor;
+        localStorage.setItem('barrelBest',String(this.best));
+        bestEl.textContent=this.best;
+      }
+      floorEl.textContent=this.floor;
+      statusEl.textContent='🏆 到达顶层！第 '+this.floor+' 层';
+      this.startFloor();
+    }
     hit(){ this.lives--; if(this.lives<=0){ this.over=true; statusEl.textContent='💥 游戏结束，到达第 '+this.floor+' 层'; if(this.autoPlay) this._autoNext(); }
-      else { statusEl.textContent='被滚桶撞到！剩余 '+this.lives; this.px=this.W/2; this.pr=R-1; this.climbing=false; this.jumping=false; this.updateY(); } }
+      else { statusEl.textContent='被滚桶撞到！剩余 '+this.lives; this.px=this.W/2; this.pr=R-1; this.vx=0; this.climbing=false; this.jumping=false; this.updateY(); } }
     _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
     update(dt){ this.time+=dt; if(this.over) return;
-      if(this.climbing){ this.updateY(); }
+      if(this.autoPlay) this.autoControl(dt);
+      if(this.climbing){
+        this.climbT+=dt/0.5;
+        if(this.climbT>=1){ this.pr=this.climbTo; this.climbing=false; }
+        this.updateY();
+      }
       else { if(!this.jumping){ this.px+=this.vx*dt; if(this.px<this.margin){ this.px=this.margin; this.vx=0; } if(this.px>this.W-this.margin){ this.px=this.W-this.margin; this.vx=0; } }
         else { this.jumpT+=dt; if(this.jumpT>=0.6){ this.jumping=false; } this.updateY(); } }
       // barrels
@@ -122,7 +171,6 @@
           const col=(b.x-this.margin)/(this.W-2*this.margin); if(b.r<R-1 && this.ladderDownAt(col,b.r) && Math.random()<dt*0.7){ b.falling=true; } } }
       // collision
       if(!this.jumping && !this.climbing){ for(const b of this.barrels){ if(b.r===this.pr && Math.abs(b.x-this.px)<22){ this.hit(); break; } } }
-      if(this.autoPlay){ this._autoCd-=dt; if(this._autoCd<=0){ this._autoCd=0.08; this.autoControl(); } }
       if(this.pr===0 && !this.climbing) this.win(); }
     draw(){ const W=this.W,H=this.H; ctx.clearRect(0,0,W,H);
       for(let r=0;r<R;r++){ const y=this.platY(r); ctx.strokeStyle='#ffd54a'; ctx.lineWidth=4; ctx.shadowColor='#ffd54a'; ctx.shadowBlur=8; ctx.beginPath(); ctx.moveTo(this.margin,y); ctx.lineTo(W-this.margin,y); ctx.stroke(); ctx.shadowBlur=0; }
@@ -139,7 +187,7 @@
     loop(ts){ requestAnimationFrame(this.loop); try{ const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016); this._last=ts; if(this.autoPlay) this._autoProgress=this.floor*100+Math.round((R-1-this.pr)/(R-1)*50); this.update(dt); this.draw(); }catch(err){ console.error(err); } }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');
-      var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoProgress=0; this._autoCd=0.1; }
+      var __ai=document.getElementById('ai-indicator');if(__ai){__ai.classList.add('show');var __s=document.getElementById('ai-status');if(__s)__s.textContent='AI 自动游玩中…';} this._autoProgress=0; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on');
       var __ai=document.getElementById('ai-indicator');if(__ai)__ai.classList.remove('show'); }
   }

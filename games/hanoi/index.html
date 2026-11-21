@@ -124,22 +124,60 @@
     elOverlay.classList.remove('show');
   }
   function setAuto(v){
+    if(v && over) newGame();
     auto=v;
     if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
     if(elBadge) elBadge.classList.toggle('show',v);
-    if(v){ selected=-1; buildAutoQueue(); autoTimer=0; }
+    autoQueue=v?null:[];
+    autoTimer=0;
+    if(v) selected=-1;
   }
   function buildAutoQueue(){
-    autoQueue=[];
-    (function h(n,from,to,aux){ if(n===0) return; h(n-1,from,aux,to); autoQueue.push([from,to]); h(n-1,aux,to,from); })(N,0,TARGET,1);
+    // Base-3 digits encode the current peg of each disk from smallest to largest.
+    const weights=Array.from({length:N},(_,i)=>3**i);
+    const initial=pegs.reduce((sum,stack,peg)=>sum+stack.reduce((total,disk)=>total+peg*weights[disk-1],0),0);
+    const goal=TARGET*weights.reduce((sum,weight)=>sum+weight,0);
+    const previous=new Map([[initial,null]]);
+    const states=[initial];
+    for(let head=0;head<states.length;head++){
+      const state=states[head];
+      if(state===goal){
+        const steps=[];
+        for(let next=goal;previous.get(next);){
+          const {from,to,prior}=previous.get(next);
+          steps.push([from,to]);
+          next=prior;
+        }
+        return steps.reverse();
+      }
+      const top=[0,0,0];
+      for(let i=0;i<N;i++){
+        const peg=Math.floor(state/weights[i])%3;
+        if(!top[peg]) top[peg]=i+1;
+      }
+      for(let from=0;from<3;from++){
+        const disk=top[from];
+        if(!disk) continue;
+        for(let to=0;to<3;to++){
+          if(to===from || (top[to] && top[to]<disk)) continue;
+          const next=state+(to-from)*weights[disk-1];
+          if(previous.has(next)) continue;
+          previous.set(next,{from,to,prior:state});
+          states.push(next);
+        }
+      }
+    }
+    return [];
   }
 
   function topDisk(peg){ return pegs[peg].length?pegs[peg][pegs[peg].length-1]:0; }
   function restY(peg, k){ return BASEY - k*DISKH - DISKH/2; } // k = stack index from bottom
 
   function startMove(from,to){
-    if(anim) return false;
-    const d=pegs[from].pop();
+    const disk=topDisk(from), target=topDisk(to);
+    if(anim || from===to || !disk || (target && target<disk)) return false;
+    pegs[from].pop();
+    const d=disk;
     anim={disk:d, from, to, t:0, dur:0.42};
     return true;
   }
@@ -162,7 +200,7 @@
   function winGame(){
     over=true; won=true;
     if(!auto){ if(best===0||moves<best){ best=moves; try{localStorage.setItem('hanoi_best',String(best));}catch(e){} } }
-    if(auto){ autoDelay=1.0; elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='最优 '+moves+' 步'; }
+    if(auto){ autoDelay=1.0; elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用了 '+moves+' 步'; elOverlay.classList.add('show'); }
     else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用了 '+moves+' 步（最优 '+(Math.pow(2,N)-1)+'）'; elOverlay.classList.add('show'); }
   }
 
@@ -182,7 +220,7 @@
     cv.addEventListener('pointerdown',onDown,{passive:false});
     cv.addEventListener('touchstart',onDown,{passive:false});
   }
-  btnAuto&&btnAuto.addEventListener('click',()=>{ if(over&&!auto){ newGame(); return; } setAuto(!auto); });
+  btnAuto&&btnAuto.addEventListener('click',()=>setAuto(!auto));
   btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
   btnOv&&btnOv.addEventListener('click',()=>{ newGame(); setAuto(false); });
 
@@ -199,6 +237,7 @@
       if(anim.t>=1){ pegs[anim.to].push(anim.disk); anim=null; checkWin(); }
       return;
     }
+    if(auto && autoQueue===null) autoQueue=buildAutoQueue();
     if(auto && autoQueue.length>0){
       autoTimer+=dt;
       if(autoTimer>=0.18){ autoTimer=0; const [f,t]=autoQueue.shift(); if(startMove(f,t)) moves++; }

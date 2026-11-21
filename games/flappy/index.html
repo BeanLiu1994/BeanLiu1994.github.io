@@ -205,8 +205,8 @@
       if(!this.started){ ctx.fillStyle='#ffffffaa'; ctx.font='bold '+(this.W*0.05)+'px sans-serif'; ctx.textAlign='center'; ctx.fillText('TAP TO START',this.W/2,this.H*0.5); }
     }
     roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
-    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); else this.started=true; this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI: flying'; }
+    toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
+    startAuto(){ if(this.over) this.restart(); this.started=true; this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; document.getElementById('ai-status').textContent='AI: flying'; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bindInput(){
       const wrap=document.getElementById('board-wrap');

@@ -90,14 +90,26 @@
       // collision
       const pl=this.px, pr=this.px+this.pw, pt=this.py, pb=this.py+this.ph;
       for(const o of this.obs){ const ol=o.x, or=o.x+o.w, ot=this.groundY-o.h, ob=this.groundY; if(pr>ol&&pl<or&&pb>ot&&pt<ob){ this.gameOver(); return; } }
-      // auto
-      if(this.autoPlay && this.onGround){
-        for(const o of this.obs){ const ol=o.x; if(ol> this.px+this.pw-6 && ol < this.px+this.pw+80){ this.jump(); break; } }
-      }
+      if(this.autoPlay && this.onGround) this.autoJump(dt);
       // stars
       for(const s of this.stars){ s.x-=s.s*dt; if(s.x<0){ s.x=this.W; s.y=Math.random()*this.groundY; } }
     }
-    gameOver(){ this.over=true; const d=Math.floor(this.dist/10); if(d>this.best){ this.best=d; localStorage.setItem('runnerBest',String(this.best)); bestEl.textContent=this.best; } statusEl.textContent='💥 撞击！距离 '+d; if(this.autoPlay) this._autoNext(); }
+    autoJump(dt){
+      const front=this.px+this.pw;
+      const obstacle=this.obs.find(candidate=>candidate.x>=front);
+      if(!obstacle) return;
+
+      // The whole obstacle must cross the player while the jump clears its height.
+      const clearance=obstacle.h+5;
+      const root=Math.sqrt(Math.max(0,JUMP*JUMP-2*G*clearance));
+      const rises=(-JUMP-root)/G;
+      const falls=(-JUMP+root)/G;
+      const crossing=(this.pw+obstacle.w)/this.speed;
+      const margin=Math.max(0,falls-rises-crossing);
+      const lead=rises+margin*0.4+dt;
+      if((obstacle.x-front)/this.speed<=lead) this.jump();
+    }
+    gameOver(){ this.over=true; const d=Math.floor(this.dist/10); if(d>this.best){ this.best=d; localStorage.setItem('runnerBest',String(this.best)); bestEl.textContent=this.best; } statusEl.textContent='💥 撞击！距离 '+d; if(this.autoPlay) this.autoTimer=setTimeout(()=>{ if(this.autoPlay) this._autoNext(); },900); }
     _autoNext(){ this.stopAuto(); this.restart(); this.startAuto(); }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on');

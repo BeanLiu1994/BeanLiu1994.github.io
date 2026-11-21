@@ -125,32 +125,45 @@
       scoreEl.textContent=this.score;
     }
     rise(){
-      if(this.grid[0].some(v=>-1)){ this.gameOver(); return; }
+      if(this.grid[0].some(v=>v!==-1)){ this.gameOver(); return; }
       for(let r=0;r<ROWS-1;r++) this.grid[r]=this.grid[r+1];
       this.grid[ROWS-1]=this.newRow();
       this.height++; hEl.textContent=this.height;
     }
     autoPlan(){
-      let best=null, bestScore=-1, bestSetup=null, bestSetupScore=-1;
+      let best=null, bestScore=0, setup=null, setupScore=0;
       for(let r=0;r<ROWS;r++) for(let c=0;c<COLS-1;c++){
-        if(this.grid[r][c]===-1||this.grid[r][c+1]===-1) continue;
-        const g=this.grid.map(row=>row.slice()); const t=g[r][c]; g[r][c]=g[r][c+1]; g[r][c+1]=t;
-        const sc=this.resolveClone(g);
-        if(sc>bestScore){ bestScore=sc; best={r,c}; }
-        // setup: count pairs (2-in-row) after swap as potential
-        if(sc===0){ let pairs=0; for(let rr2=0;rr2<ROWS;rr2++) for(let cc=0;cc<COLS-1;cc++) if(g[rr2][cc]!==-1&&g[rr2][cc]===g[rr2][cc+1]) pairs++; if(pairs>bestSetupScore){ bestSetupScore=pairs; bestSetup={r,c}; } }
+        const left=this.grid[r][c], right=this.grid[r][c+1];
+        if(left===-1 || right===-1 || left===right) continue;
+        const g=this.grid.map(row=>row.slice());
+        [g[r][c],g[r][c+1]]=[right,left];
+        const cleared=this.resolveClone(g);
+        if(cleared>bestScore){ bestScore=cleared; best={r,c}; }
+        if(cleared || best) continue;
+
+        // Only make a setup swap if a second legal swap creates a match.
+        for(let row=0;row<ROWS;row++) for(let col=0;col<COLS-1;col++){
+          const a=g[row][col], b=g[row][col+1];
+          if(a===-1 || b===-1 || a===b || (row===r && col===c)) continue;
+          const next=g.map(line=>line.slice());
+          [next[row][col],next[row][col+1]]=[b,a];
+          const followup=this.resolveClone(next);
+          if(followup>setupScore){ setupScore=followup; setup={r,c}; }
+        }
       }
-      const pick = best||bestSetup;
-      if(pick){ this.swap(pick.r,pick.c,1); if(best) aiStatus.textContent='AI 制造消除…'; else aiStatus.textContent='AI 布局中…'; }
+      const pick=best||setup;
+      if(!pick) return;
+      this.swap(pick.r,pick.c,1);
+      aiStatus.textContent=best?'AI 制造消除…':'AI 布局中…';
     }
-    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('chainBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) setTimeout(()=>{ if(this.autoPlay) this.restart(); },1200); }
+    gameOver(){ this.over=true; if(this.score>this.best){ this.best=this.score; localStorage.setItem('chainBest',String(this.best)); bestEl.textContent=this.best; } loseMsg.textContent='本局得分 '+this.score; overlayLose.classList.add('active'); if(this.autoPlay) this.restartTimer=setTimeout(()=>{ if(this.autoPlay && this.over) this.restart(true); },1200); }
     update(dt){
       if(this.over) return; this.time+=dt;
       this.riseT-=dt; if(this.riseT<=0){ this.rise(); this.riseT=Math.max(1.4, 4.2 - this.height*0.05); if(this.over) return; }
       if(this.autoPlay && this.autoCD<=0 && !this.autoSwap){ this.autoPlan(); this.autoCD=0.45; }
       if(this.autoCD>0) this.autoCD-=dt;
       for(let i=this.flashes.length-1;i>=0;i--){ this.flashes[i].life-=dt*2.4; if(this.flashes[i].life<=0) this.flashes.splice(i,1); }
-      if(this.autoSwap){ this.autoSwap.t=(this.autoSwap.t||0)+dt*4; if(this.autoSwap.t>=1){ const s=this.autoSwap; this.autoSwap=null; this.resolve(); } }
+      if(this.autoSwap){ this.autoSwap.t=(this.autoSwap.t||0)+dt*4; if(this.autoSwap.t>=1){ this.autoSwap=null; this.resolve(); } }
     }
     bindInput(){
       canvas.addEventListener('pointerdown',e=>{ e.preventDefault(); if(this.over||this.autoPlay) return; const r=canvas.getBoundingClientRect(); const x=(e.clientX-r.left)*(this.W/r.width), y=(e.clientY-r.top)*(this.H/r.height); this._r=Math.floor(y/this.T); this._c=Math.floor(x/this.T); this._dx=x; });
@@ -170,7 +183,7 @@
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.autoCD=0; this.autoSwap=null; }
     stopAuto(){ this.autoPlay=false; const b=document.getElementById('btn-auto'); b.textContent='自动: 关'; b.classList.remove('auto-on'); aiInd.style.display='none'; }
-    restart(){ this.stopAuto(); this.over=false; this.score=0; this.height=0; scoreEl.textContent='0'; hEl.textContent='0'; this.grid=this.emptyGrid(); this.flashes=[]; this.autoSwap=null; this.autoCD=0; this.riseT=3; this._r=undefined;
+    restart(keepAuto=false){ clearTimeout(this.restartTimer); if(!keepAuto) this.stopAuto(); this.over=false; this.score=0; this.height=0; scoreEl.textContent='0'; hEl.textContent='0'; this.grid=this.emptyGrid(); this.flashes=[]; this.autoSwap=null; this.autoCD=0; this.riseT=3; this._r=undefined;
       for(let r=ROWS-3;r<ROWS;r++) this.grid[r]=this.newRow();
       overlayLose.classList.remove('active'); statusEl.textContent='左右拖动方块与邻格交换，三颗同色成线即消除'; }
   }

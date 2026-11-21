@@ -234,18 +234,20 @@ class G {
   restart(){ this.reset(); this.stopAuto(); this.setAI('Idle', false); }
 
   toggleAuto(){
-    this.autoPlay = !this.autoPlay;
-    this.updateAutoBtn();
     if (this.autoPlay){
-      this.autoTimer = 0;
-      if (this.roundOver) this.reset();
-      this.setAI('AI guessing…', false);
-    } else {
+      this.stopAuto();
       this.setAI('Auto off', false);
+      return;
     }
+    this.autoPlay = true;
+    this.autoTimer = 0;
+    if (this.roundOver) this.reset();
+    this.updateAutoBtn();
+    this.setAI('AI guessing…', false);
   }
   stopAuto(){
     this.autoPlay = false;
+    if (this.typing) this.current = '';
     this.typing = null;
     this.updateAutoBtn();
   }
@@ -267,17 +269,17 @@ class G {
     if (this.bestEl) this.bestEl.textContent = this.best;
   }
 
-  typeLetter(ch){
-    if (this.revealing || this.roundOver) return;
+  typeLetter(ch, fromAuto = false){
+    if ((this.autoPlay && !fromAuto) || this.revealing || this.roundOver) return;
     if (this.current.length >= this.cols) return;
     this.current += ch;
   }
   backspace(){
-    if (this.revealing || this.roundOver) return;
+    if (this.autoPlay || this.revealing || this.roundOver) return;
     this.current = this.current.slice(0, -1);
   }
-  submit(){
-    if (this.revealing || this.typing || this.roundOver) return;
+  submit(fromAuto = false){
+    if ((this.autoPlay && !fromAuto) || this.revealing || this.typing || this.roundOver) return;
     if (this.current.length !== this.cols) return;
     if (!this.wordSet.has(this.current)) return;
     const colors = this.computeColors(this.current, this.solution);
@@ -324,22 +326,35 @@ class G {
     return true;
   }
   chooseGuess(){
-    if (this.history.length === 0) return 'CRANE';
-    let cands = this.words.filter(w => this.consistent(w, this.history));
-    if (!cands.length) cands = this.words.slice();
+    if (this.history.length === 0 && this.wordSet.has('CRANE')) return 'CRANE';
     const used = new Set(this.history.map(h => h.word));
-    let best = cands[0], bestScore = -1;
-    for (const w of cands){
-      const dist = new Set(w).size;
-      let score = dist * 1000 + this.freqScore(w);
-      if (used.has(w)) score -= 50;
-      if (score > bestScore){ bestScore = score; best = w; }
+    const untried = [...this.wordSet].filter(word => !used.has(word));
+    const consistent = untried.filter(word => this.consistent(word, this.history));
+    const candidates = consistent.length ? consistent : untried;
+    if (candidates.length <= 1) return candidates[0];
+
+    // Prefer a guess that leaves fewer possible answers after the feedback.
+    let best = candidates[0], bestCost = Infinity;
+    for (const guess of candidates){
+      const feedback = new Map();
+      let cost = 0;
+      for (const answer of candidates){
+        const pattern = this.computeColors(guess, answer).join(',');
+        const count = feedback.get(pattern) || 0;
+        feedback.set(pattern, count + 1);
+        cost += 2 * count + 1;
+      }
+      if (cost < bestCost || (cost === bestCost && this.freqScore(guess) > this.freqScore(best))){
+        best = guess;
+        bestCost = cost;
+      }
     }
     return best;
   }
   doAutoStep(){
     const w = this.chooseGuess();
     if (!w) return;
+    this.current = '';
     this.typing = { word: w, idx: 0, timer: 0, perLetter: 0.1 };
     this.setAI('AI: ' + w, false);
   }
@@ -384,12 +399,12 @@ class G {
       this.typing.timer += dt;
       while (this.typing.timer >= this.typing.perLetter && this.typing.idx < this.cols){
         this.typing.timer -= this.typing.perLetter;
-        this.typeLetter(this.typing.word[this.typing.idx]);
+        this.typeLetter(this.typing.word[this.typing.idx], true);
         this.typing.idx++;
       }
       if (this.typing.idx >= this.cols){
         this.typing = null;
-        this.submit();
+        this.submit(true);
       }
     }
     if (this.autoPlay){
