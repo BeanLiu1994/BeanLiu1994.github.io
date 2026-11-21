@@ -183,7 +183,46 @@ h1, h2, h3, p { margin: 0; }
 .button-secondary { border-color: #756b85; background: #20162e; }
 .button-secondary:hover { background: #3a2d49; }
 
-.catalog { margin-top: clamp(46px, 6vw, 75px); }
+.profile-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    margin-top: 20px;
+    padding: 16px 20px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--white);
+}
+.profile-avatar {
+    display: block;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: var(--lavender);
+    object-fit: cover;
+}
+.profile-info h2 {
+    font: 750 clamp(1.35rem, 2.4vw, 1.75rem)/1.12 var(--display);
+    letter-spacing: -.035em;
+}
+.profile-info p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
+.profile-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 42px;
+    padding: 7px 13px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--paper);
+    font-size: .9rem;
+    font-weight: 700;
+}
+.profile-links a:hover { border-color: #b6a3ce; color: var(--violet); }
+
+.catalog { margin-top: clamp(37px, 4.6vw, 61px); }
 .catalog-heading {
     display: flex;
     justify-content: space-between;
@@ -359,6 +398,9 @@ h1, h2, h3, p { margin: 0; }
     .header-github { display: none; }
     .site-nav { gap: 14px; }
     .site-nav a { font-size: .84rem; }
+    .profile-card { grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 14px; }
+    .profile-avatar { width: 54px; height: 54px; }
+    .profile-links { grid-column: 1 / -1; }
     .entry { padding-inline: 7px; gap: 7px; }
     .entry-icon { width: 26px; height: 26px; font-size: .9rem; }
 }
