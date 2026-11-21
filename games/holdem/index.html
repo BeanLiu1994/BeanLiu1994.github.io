@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a1a2a" />
 <title>Hold'em · 霓虹德州</title>
@@ -39,8 +39,18 @@
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>Hold'em</h1><div class="sub">N E O N &nbsp; T E X A S</div></div>
@@ -49,13 +59,14 @@
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">1000</div></div>
     </div>
   </div>
-  <div class="board-wrap"><canvas id="game" width="420" height="380"></canvas></div>
-  <div class="controls">
+  <div class="detail-game-actions controls">
     <button class="btn" id="btn-fold" onclick="game.humanAction('fold')">弃牌 Fold</button>
     <button class="btn primary" id="btn-call" onclick="game.humanAction('call')">看牌/跟注</button>
     <button class="btn" id="btn-raise" onclick="game.humanAction('raise')">加注 Raise</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
+  <div class="board-wrap"><canvas id="game" width="420" height="380"></canvas></div>
+
   <div class="status" id="status">点击「跟注」开始 · 你坐小盲，CPU 坐大盲，自动模式双方由 AI 对战</div>
   <div class="hint">触屏/鼠标：用下方按钮操作 · 开启 Auto 后双方自动对战</div>
 </div>

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#0a0f1f" />
 <title>霓虹填字 · Neon Crossword</title>
 <style>
@@ -73,8 +73,18 @@
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="words">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block">
@@ -87,6 +97,10 @@
       <div class="score-card"><div class="label">最佳</div><div class="value" id="best">--</div></div>
     </div>
   </div>
+  <div class="detail-game-actions toolbar">
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">换一题</button>
+  </div>
   <div class="board-wrap">
     <canvas id="cv"></canvas>
     <div class="badge" id="badge">AUTO</div>
@@ -98,10 +112,7 @@
   </div>
   <div class="clue"><span class="num" id="clueNum">1A</span><span class="dir" id="clueDir"></span><span class="txt" id="clueTxt">—</span></div>
   <div class="keyboard" id="kb"></div>
-  <div class="toolbar">
-    <button class="auto" id="autoBtn">自动游玩</button>
-    <button class="ghost" id="restartBtn">换一题</button>
-  </div>
+
   <div class="hint">点选格子，用<b>屏幕键盘</b>或<b>实体键盘</b>输入字母 · 再次点选同格可切换横/竖 · <b>自动模式</b>会流畅点亮全部答案</div>
 </div>
 <script>

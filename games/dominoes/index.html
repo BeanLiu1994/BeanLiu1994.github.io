@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dominoes · 多米诺骨牌</title>
 <style>
 :root{
@@ -33,15 +33,26 @@ button.on{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok),0 0 14px rgba(62
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="dominoes" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header><h1>多米诺骨牌 · Dominoes</h1><span class="sub">接龙两端，先出完者胜</span></header>
-<div class="wrap"><canvas id="c"></canvas></div>
-<div class="status" id="status">准备中…</div>
-<div class="toolbar">
+<div class="detail-game-actions toolbar">
   <button id="autoBtn">自动游玩</button>
   <button id="newBtn">重新发牌</button>
 </div>
+<div class="wrap"><canvas id="c"></canvas></div>
+<div class="status" id="status">准备中…</div>
+
 <script>
 (function(){
   const cv=document.getElementById('c'), ctx=cv.getContext('2d');

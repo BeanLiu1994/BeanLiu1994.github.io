@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0f1a" />
 <title>Chess · Neon</title>
@@ -53,24 +53,35 @@
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
   @media(max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
-    <div class="title-block"><h1>Chess</h1><div class="sub">N E O N &nbsp; S T R A T E G Y</div></div>
+    <div class="title-block"><h1>Chess</h1></div>
     <div class="score-panel">
       <div class="score-card"><div class="label">Move</div><div class="value" id="move">0</div></div>
       <div class="score-card"><div class="label">Turn</div><div class="value" id="turn">W</div></div>
     </div>
   </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="game" width="440" height="440"></canvas>
     <div class="overlay" id="overlay-end"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="end-title">Checkmate</h2><p id="end-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
   </div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.restart()">New Game</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
-  </div>
+
   <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI analyzing…</span></div>
   <div class="hint">Tap a piece, then tap a lit square. Auto = AI vs AI.</div>
 </div>

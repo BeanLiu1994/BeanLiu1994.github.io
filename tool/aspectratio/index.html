@@ -29,10 +29,20 @@
   .box{background:linear-gradient(135deg,var(--accent),#7b5cff);border-radius:8px;max-width:100%;max-height:180px}
   .note{color:var(--muted);font-size:13px;margin-top:8px;text-align:center}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="workspace">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
-  <h1>📐 宽高比计算器</h1>
+  <h1>宽高比计算器</h1>
   <div class="sub">纯本地运行 · 计算比例 · 锁定比例求缺失边</div>
 </header>
 <main>

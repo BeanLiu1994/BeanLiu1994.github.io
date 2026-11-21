@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#05060f" />
 <title>霓虹保龄球 · Neon Bowling 3D</title>
 <style>
@@ -49,8 +49,18 @@
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="sports">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>霓虹保龄球</h1><div class="sub">N E O N &nbsp; B O W L I N G &nbsp; 3 D</div></div>
@@ -59,16 +69,17 @@
       <div class="score-card"><div class="label">Pins</div><div class="value" id="score-pins">0</div></div>
     </div>
   </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.newGame()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="cv" width="540" height="720"></canvas>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">Great!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.proceed()">Next Ball</button></div></div>
     <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="lose-title">Gutter!</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.proceed()">Next Ball</button></div></div>
   </div>
   <div class="hint" id="hint">拖动瞄准，松手投球</div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.newGame()">New Game</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
-  </div>
+
 </div>
 <script>
 (function(){

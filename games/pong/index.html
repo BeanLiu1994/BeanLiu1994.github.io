@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0a1a" />
 <title>霓虹乒乓 · Pong</title>
@@ -53,8 +53,18 @@
   .stats-bar { display:flex; gap:8px; justify-content:center; margin-top:6px; font-size:0.7rem; color:var(--muted); }
   .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="sports">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>霓虹乒乓</h1><div class="sub">N E O N &nbsp; P O N G</div></div>
@@ -63,16 +73,17 @@
       <div class="score-card ai"><div class="label">AI</div><div class="value" id="score-ai">0</div></div>
     </div>
   </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="cv" width="420" height="520"></canvas>
     <div class="ready-hint show" id="ready-hint"><span>移动挡板 开始</span></div>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="win-title">You Win!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
     <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
   </div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.restart()">New Game</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
-  </div>
+
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI rallying...</span></div>
   <div class="stats-bar"><span id="rally-stat">Rally: 0</span><span id="target-stat">First to 7</span></div>
 </div>

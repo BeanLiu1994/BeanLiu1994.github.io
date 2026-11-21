@@ -37,18 +37,27 @@
   .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px}
   .status.ok{color:var(--ok)} .status.err{color:var(--err)}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="workspace">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🔁 查找替换</h1>
+    <h1>查找替换</h1>
     <div class="sub">支持区分大小写 / 正则 / 全词 · 纯本地</div>
   </div>
   <div class="toolbar">
     <button id="bAll" class="primary">全部替换</button>
     <button id="bCopy">复制结果</button>
     <button id="bClear">清空</button>
-    <a class="btn" href="../../">🏠 首页</a>
   </div>
 </header>
 <main>

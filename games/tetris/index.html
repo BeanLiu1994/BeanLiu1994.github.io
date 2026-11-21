@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0a1a" />
 <title>Tetris · Neon</title>
@@ -65,18 +65,28 @@
   .stats-bar span { background:var(--surface); padding:3px 8px; border-radius:6px; border:1px solid #ffffff08; }
   @media (max-width:400px){ .title-block h1{font-size:1.4rem;} .btn{padding:10px 10px; font-size:.76rem;} }
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="arcade">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
-    <div class="title-block"><h1>Tetris</h1><div class="sub">N E O N &nbsp; E D I T I O N</div></div>
+    <div class="title-block"><h1>Tetris</h1></div>
     <div class="score-panel">
       <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
   </div>
 
-  <div class="controls">
+  <div class="detail-game-actions controls">
     <button class="btn primary" type="button" onclick="game.restart()">New Game</button>
     <button class="btn" type="button" id="btn-auto" aria-pressed="false" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>

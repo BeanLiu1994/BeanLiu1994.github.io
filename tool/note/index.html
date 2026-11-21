@@ -33,9 +33,19 @@
   textarea{flex:1;min-height:320px;resize:vertical;line-height:1.7}
   .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
-<header><div><h1>📝 便签笔记</h1><div class="sub">多便签 · 自动保存到本机（localStorage）</div></div></header>
+<body class="detail-page tool-page" data-layout="workspace">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
+<header><div><h1>便签笔记</h1><div class="sub">多便签 · 自动保存到本机（localStorage）</div></div></header>
 <main>
   <section class="list">
     <div class="bar"><button class="primary" id="add" style="flex:1">＋ 新建便签</button></div>

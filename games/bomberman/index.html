@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0f1a" />
 <title>Boom Grid · Neon</title>
@@ -52,8 +52,18 @@
   @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
   .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="arcade">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>Boom Grid</h1><div class="sub">B O M B &nbsp; M A Z E</div></div>
@@ -62,14 +72,15 @@
       <div class="score-card"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
   </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="game" width="440" height="440"></canvas>
     <div class="overlay" id="overlay-end"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="end-title">Level</h2><p id="end-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
   </div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.restart()">New Game</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
-  </div>
+
   <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI hunting…</span></div>
   <div class="hint">Move: arrows / swipe · Bomb: tap or space. Auto = AI plays.</div>
 </div>

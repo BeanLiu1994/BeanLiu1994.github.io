@@ -32,16 +32,25 @@
   .status.ok{color:var(--ok)} .status.err{color:var(--err)}
   .hint{color:var(--muted);font-size:12px}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="workspace">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🔀 YAML ⇄ JSON 转换</h1>
+    <h1>YAML ⇄ JSON 转换</h1>
     <div class="sub">YAML 与 JSON 互相转换 · 纯本地运行</div>
   </div>
   <div class="toolbar">
     <button id="bSample">示例</button>
-    <a class="btn" href="../../">🏠 首页</a>
   </div>
 </header>
 <main>

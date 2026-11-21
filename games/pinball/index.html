@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0a1a" />
 <title>弹球骑士 · Pinball</title>
@@ -58,8 +58,18 @@
   .rules-body p{margin-bottom:5px;}
   .rules-body b{color:var(--text);}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="arcade">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>弹球骑士</h1><div class="sub">P I N B A L L</div></div>
@@ -68,15 +78,16 @@
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
   </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.restart()">New Game</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
+  </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="cv" width="360" height="560"></canvas>
     <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Ball Master!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
     <div class="overlay lose" id="overlay-lose"><div class="overlay-bg"></div><div class="overlay-content"><h2>Game Over</h2><p id="lose-msg"></p><button class="btn primary" onclick="game.restart()">Try Again</button></div></div>
   </div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.restart()">New Game</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
-  </div>
+
   <div class="ai-indicator" id="ai-indicator" style="display:none"><div class="ai-dot"></div><span id="ai-status">AI playing...</span></div>
   <div class="rules-wrap">
     <details id="rules-details" open><summary class="rules-toggle">怎么玩 / How to Play</summary>

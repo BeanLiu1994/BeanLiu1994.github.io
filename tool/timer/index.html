@@ -17,7 +17,7 @@
   .tabs button{background:transparent;border:0;color:var(--muted);padding:7px 16px;border-radius:6px;cursor:pointer;font-size:13px}
   .tabs button.on{background:var(--accent);color:#fff}
   main{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;align-items:center;justify-content:center}
-  .display{font-size:72px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:2px;color:var(--accent);text-align:center}
+  .display{font-size:clamp(2rem, 10vw, 4.5rem);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:2px;color:var(--accent);text-align:center}
   .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
   button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 18px;font-size:14px;cursor:pointer;transition:.15s}
   button:hover{border-color:var(--accent);color:#fff}
@@ -33,8 +33,18 @@
   .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
   .hidden{display:none!important}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="workspace">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
     <h1>⏱️ 倒计时 / 秒表</h1>

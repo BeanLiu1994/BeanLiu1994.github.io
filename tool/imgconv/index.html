@@ -34,11 +34,21 @@
   .hint{color:var(--muted);font-size:12px}
   input[type=file]{color:var(--muted);font-size:13px}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="editor">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🖼️ 图片格式转换</h1>
+    <h1>图片格式转换</h1>
     <div class="sub">PNG / JPEG / WebP 互转 · 可缩放 · 纯本地处理</div>
   </div>
   <div class="toolbar">

@@ -37,11 +37,21 @@
   .hint{color:var(--muted);font-size:12px}
   input[type=file]{color:var(--muted);font-size:13px}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="editor">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🔐 哈希计算器</h1>
+    <h1>哈希计算器</h1>
     <div class="sub">MD5 · SHA-1/256/384/512 · CRC32 · 纯本地运行</div>
   </div>
   <div class="toolbar">

@@ -21,10 +21,10 @@
   input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);
     border-radius:10px;padding:11px 12px;font-size:17px;outline:none}
   input:focus{border-color:var(--accent)}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;margin-top:14px}
   .cell{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center}
   .cell .k{color:var(--muted);font-size:12px}
-  .cell .v{color:var(--accent);font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+  .cell .v{overflow-wrap:anywhere;color:var(--accent);font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
   .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
   button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;
     padding:10px 16px;font-size:14px;cursor:pointer;transition:.12s;font-family:inherit}
@@ -34,9 +34,19 @@
   .hint{color:var(--muted);font-size:12px;margin-top:12px;line-height:1.6}
   .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);width:100%;min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
-<header><div><h1>🧾 分账计算器</h1><div class="sub">聚餐 / 账单均摊 · 纯本地</div></div></header>
+<body class="detail-page tool-page" data-layout="workspace">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
+<header><div><h1>分账计算器</h1><div class="sub">聚餐 / 账单均摊 · 纯本地</div></div></header>
 <main>
   <div class="card">
     <div class="fields">

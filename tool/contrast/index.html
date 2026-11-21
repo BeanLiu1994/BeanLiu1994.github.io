@@ -32,11 +32,21 @@
   .res-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
   .status{padding:10px 20px;font-size:13px;border-top:1px solid var(--border);min-height:40px;display:flex;align-items:center;gap:8px;color:var(--ok)}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="editor">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🎨 颜色对比度检查</h1>
+    <h1>颜色对比度检查</h1>
     <div class="sub">WCAG 2.1 对比度 · 纯本地无障碍校验</div>
   </div>
 </header>

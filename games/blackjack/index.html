@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/><meta name="theme-color" content="#0a0f1a"/><title>Blackjack · Neon</title><style>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#0a0f1a"/><title>Blackjack · Neon</title><style>
 :root{--bg:#0a0f1a;--surface:#111a2b;--text:#e7edf7;--muted:#8090a8;--accent:#36e08a;--accent-glow:#36e08a66;--danger:#ff5d6c;--gold:#ffd76a;}
 *{margin:0;padding:0;box-sizing:border-box;}html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
@@ -20,12 +20,23 @@ canvas{display:block;width:100%;height:auto;border-radius:10px;}
 .ai-indicator{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.75rem;color:var(--muted);justify-content:center;min-height:20px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease}.ai-indicator.show{opacity:1;visibility:visible}.ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:blink .8s infinite;}
 @keyframes blink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
 .hint{margin-top:8px;text-align:center;font-size:.7rem;color:var(--muted);}
-</style></head><body><div class="container">
+</style><link rel="stylesheet" href="../../assets/detail.css">
+</head><body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav><div class="container">
 <div class="header"><div class="title-block"><h1>Blackjack</h1><div class="sub">21 · N E O N&nbsp;C A S I N O</div></div>
 <div class="score-panel"><div class="score-card"><div class="label">Wins</div><div class="value" id="wins">0</div></div><div class="score-card"><div class="label">Streak</div><div class="value" id="streak">0</div></div><div class="score-card"><div class="label">Best</div><div class="value" id="best">0</div></div></div></div>
-<div class="board-wrap" id="board-wrap"><canvas id="game" width="440" height="440"></canvas>
+<div class="detail-game-actions controls"><button class="btn" id="btn-hit" onclick="game.hit()">Hit</button><button class="btn" id="btn-stand" onclick="game.stand()">Stand</button><button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button></div>
+  <div class="board-wrap" id="board-wrap"><canvas id="game" width="440" height="440"></canvas>
 <div class="overlay" id="overlay-end"><div class="overlay-bg"></div><div class="overlay-content"><h2 id="end-title">Round</h2><p id="end-msg"></p><button class="btn primary" onclick="game.restart()">New Round</button></div></div></div>
-<div class="controls"><button class="btn" id="btn-hit" onclick="game.hit()">Hit</button><button class="btn" id="btn-stand" onclick="game.stand()">Stand</button><button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button></div>
+
 <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI playing…</span></div>
 <div class="hint">Tap Hit / Stand. Auto = AI dealer vs AI player (basic strategy).</div>
 </div><script>

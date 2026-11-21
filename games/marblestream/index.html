@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#1a0418" />
 <title>霓虹弹珠 · Marble Stream</title>
 <style>
@@ -42,8 +42,18 @@
   @keyframes blink { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.7);} }
   .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="arcade">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block">
@@ -54,6 +64,10 @@
       <div class="score-card"><div class="label">Score</div><div class="value" id="score">0</div></div>
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
+  </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.restart()">新游戏</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
   </div>
   <div class="board-wrap">
     <canvas id="game" width="380" height="520"></canvas>
@@ -74,10 +88,7 @@
       </div>
     </div>
   </div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.restart()">新游戏</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
-  </div>
+
   <div class="ai-indicator" id="ai-indicator" style="display:none">
     <div class="ai-dot"></div><span id="ai-status">AI 自动瞄准中…</span>
   </div>
@@ -200,7 +211,7 @@
       canvas.addEventListener('pointermove',e=>{ if(this.aiming) aim(e); });
       const fire=e=>{ if(!this.aiming) return; this.aiming=false; this.shoot(); };
       canvas.addEventListener('pointerup',fire); canvas.addEventListener('pointercancel',fire);
-      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+      document.querySelector('.board-wrap').addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
     }
     marble(x,y,color,alpha){ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.shadowColor=color; ctx.shadowBlur=10; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x,y,this.mR,0,7); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#ffffff55'; ctx.beginPath(); ctx.arc(x-this.mR*0.3,y-this.mR*0.3,this.mR*0.34,0,7); ctx.fill(); ctx.restore(); }
     draw(){

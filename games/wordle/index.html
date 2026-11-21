@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wordle</title>
 <style>
   :root{
@@ -76,11 +76,21 @@
   @keyframes blink{50%{opacity:.35;}}
   .blink{animation:blink 1s steps(1) infinite;}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="wordle" data-genre="words">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
   <div class="shell">
     <header>
-      <div class="logo">WORDLE</div>
+      <h1 class="logo">Wordle</h1>
       <div class="scores">
         <div class="card win"><div class="lbl">Won</div><div class="val" id="won">0</div></div>
         <div class="card streak"><div class="lbl">Streak</div><div class="val" id="streak">0</div></div>
@@ -88,14 +98,15 @@
       </div>
     </header>
 
-    <div class="board-wrap" id="board-wrap">
-      <canvas id="game"></canvas>
-    </div>
-
-    <div class="controls">
+    <div class="detail-game-actions controls">
       <button class="ctrl" id="btn-restart" onclick="game.restart()">New Game</button>
       <button class="ctrl" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
     </div>
+  <div class="board-wrap" id="board-wrap">
+      <canvas id="game"></canvas>
+    </div>
+
+
 
     <div class="ai">
       <span id="ai-indicator"></span>

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#1a0a0a" />
 <title>Xiangqi · 中国象棋</title>
@@ -38,8 +38,18 @@
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>中国象棋</h1><div class="sub">X I A N G Q I</div></div>
@@ -48,11 +58,12 @@
       <div class="score-card"><div class="label">Games</div><div class="value" id="best">0</div></div>
     </div>
   </div>
-  <div class="board-wrap"><canvas id="game" width="432" height="484"></canvas></div>
-  <div class="controls">
+  <div class="detail-game-actions controls">
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
+  <div class="board-wrap"><canvas id="game" width="432" height="484"></canvas></div>
+
   <div class="status" id="status">点选己方棋子再点目标格落子 · 自动模式双方由 AI 对弈</div>
 </div>
 <script>

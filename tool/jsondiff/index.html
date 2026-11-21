@@ -38,11 +38,21 @@
   .status.ok{color:var(--ok)} .status.err{color:var(--err)}
   @media(max-width:720px){.panes{flex-direction:column}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="editor">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🔀 JSON 差异对比</h1>
+    <h1>JSON 差异对比</h1>
     <div class="sub">纯本地 · 结构化比较 · JSON Diff</div>
   </div>
   <div class="toolbar">

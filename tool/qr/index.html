@@ -35,11 +35,21 @@
   .status.ok{color:var(--ok)} .status.err{color:var(--err)}
   .hint{color:var(--muted);font-size:12px}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="editor">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🔳 二维码生成器</h1>
+    <h1>二维码生成器</h1>
     <div class="sub">文本 / 链接 → 二维码 · 纯本地生成 · 数据不上传</div>
   </div>
   <div class="toolbar">

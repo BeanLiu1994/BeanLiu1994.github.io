@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Ludo</title>
 <style>
 :root{
@@ -44,8 +44,18 @@ body{touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-se
 .btn-accent{border-color:var(--c2);color:var(--c2);box-shadow:0 0 18px var(--accent-glow);}
 .hint{color:var(--muted);font-size:12px;margin:0;text-align:center;}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="ludo" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="app">
   <header class="topbar">
     <h1 class="logo">LUDO</h1>
@@ -55,6 +65,10 @@ body{touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-se
       <div class="card"><span class="card-label">Your Wins</span><span class="card-val" id="best-val">0</span></div>
     </div>
   </header>
+  <div class="detail-game-actions controls">
+    <button id="btn-restart" class="btn">New Game</button>
+    <button id="btn-auto" class="btn btn-accent">Auto: OFF</button>
+  </div>
   <div class="board-wrap">
     <canvas id="game"></canvas>
     <div class="ai-row">
@@ -62,10 +76,7 @@ body{touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-se
       <span class="ai-text" id="ai-status">Your turn &mdash; tap a token</span>
     </div>
   </div>
-  <div class="controls">
-    <button id="btn-restart" class="btn">New Game</button>
-    <button id="btn-auto" class="btn btn-accent">Auto: OFF</button>
-  </div>
+
   <p class="hint">Tap your token to move. Auto = all AI.</p>
 </div>
 <script>

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#070713" />
 <title>Mahjong Solitaire · Neon</title>
 <style>
@@ -53,8 +53,18 @@
   .hint{text-align:center;font-size:.64rem;color:var(--muted);line-height:1.5;}
   @media (max-width:400px){.title-block h1{font-size:1.3rem;}.btn{padding:10px;font-size:.76rem;}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>Mahjong</h1><div class="sub">S O L I T A I R E</div></div>
@@ -62,6 +72,10 @@
       <div class="score-card"><div class="label">Pairs</div><div class="value" id="score">0</div></div>
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
+  </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" id="btn-auto">自动游玩</button>
+    <button class="btn" id="btn-restart">重开</button>
   </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="game"></canvas>
@@ -75,10 +89,7 @@
     </div>
   </div>
   <div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动消除中…</span></div>
-  <div class="controls">
-    <button class="btn primary" id="btn-auto">自动游玩</button>
-    <button class="btn" id="btn-restart">重开</button>
-  </div>
+
   <div class="hint">点选两张相同且「左右至少一侧空、上方无压」的空闲牌即可消除</div>
 </div>
 <script>

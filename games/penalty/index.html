@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#0a1a14" />
 <title>霓虹点球 · Neon Penalty</title>
 <style>
@@ -42,8 +42,18 @@
   .status { margin-top:8px; font-size:0.74rem; color:var(--muted); text-align:center; min-height:18px; }
   .hint { margin-top:6px; font-size:0.66rem; color:var(--muted); text-align:center; opacity:.8; }
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="sports">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block">
@@ -55,6 +65,10 @@
       <div class="score-card ai"><div class="label">对手</div><div class="value" id="ai">0</div></div>
       <div class="score-card"><div class="label">回合</div><div class="value" id="round">1</div></div>
     </div>
+  </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" onclick="game.restart()">新比赛</button>
+    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
   </div>
   <div class="main">
     <div class="board-wrap">
@@ -69,10 +83,7 @@
       </div>
     </div>
   </div>
-  <div class="controls">
-    <button class="btn primary" onclick="game.restart()">新比赛</button>
-    <button class="btn" id="btn-auto" onclick="game.toggleAuto()">自动: 关</button>
-  </div>
+
   <div class="ai-indicator" id="ai-indicator" style="display:none">
     <div class="ai-dot"></div><span id="ai-status">AI 攻防演示中…</span>
   </div>
@@ -260,7 +271,7 @@
         let best=0,bd=1e9; for(let i=0;i<6;i++){ const z=this.zones[i]; const d=(z.x-x)**2+(z.y-y)**2; if(d<bd){bd=d;best=i;} }
         this.doShot(best);
       });
-      document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+      document.querySelector('.board-wrap').addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else this.startAuto(); }
     startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='自动: 开'; b.classList.add('auto-on'); aiInd.style.display='flex'; this.startMatch(); }

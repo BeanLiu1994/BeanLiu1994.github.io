@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#05060f" />
 <title>Defender · Neon</title>
 <style>
@@ -54,8 +54,18 @@
   .hint{text-align:center;font-size:.64rem;color:var(--muted);line-height:1.5;}
   @media (max-width:400px){.title-block h1{font-size:1.3rem;}.btn{padding:10px;font-size:.76rem;}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="arcade">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>Defender</h1><div class="sub">S T A R   P A T R O L</div></div>
@@ -64,6 +74,10 @@
       <div class="score-card wave"><div class="label">Wave</div><div class="value" id="wave">1</div></div>
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
+  </div>
+  <div class="detail-game-actions controls">
+    <button class="btn primary" id="btn-auto">自动游玩</button>
+    <button class="btn" id="btn-restart">重开</button>
   </div>
   <div class="board-wrap" id="board-wrap">
     <canvas id="game"></canvas>
@@ -77,10 +91,7 @@
     </div>
   </div>
   <div class="ai-indicator" id="ai-indicator"><span class="ai-dot"></span><span id="ai-status">AI 自动巡逻中…</span></div>
-  <div class="controls">
-    <button class="btn primary" id="btn-auto">自动游玩</button>
-    <button class="btn" id="btn-restart">重开</button>
-  </div>
+
   <div class="hint">拖动战机上下移动并自动开火 · 击落来犯敌机、躲避弹幕 · 清完一波进入下一波</div>
 </div>
 <script>

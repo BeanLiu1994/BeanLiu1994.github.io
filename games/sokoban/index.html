@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a0a1a" />
 <title>Sokoban · Neon</title>
@@ -50,8 +50,18 @@
   @media (max-width:400px){.title-block h1{font-size:1.4rem;}.btn{padding:10px 12px;font-size:.78rem;}}
   #solver-status[hidden]{display:none;}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="puzzle">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block"><h1>Sokoban</h1><div class="sub">B O X &nbsp; P U S H</div></div>
@@ -60,16 +70,17 @@
       <div class="score-card best"><div class="label">Best</div><div class="value" id="best">0</div></div>
     </div>
   </div>
-  <div class="board-wrap" id="board-wrap">
-    <canvas id="game"></canvas>
-    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Solved!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
-  </div>
-  <div class="controls">
+  <div class="detail-game-actions controls">
     <button class="btn primary" onclick="game.restart()">New Game</button>
     <button class="btn" id="btn-undo" onclick="game.undo()">Undo</button>
     <button class="btn" id="btn-reset" onclick="game.reset()">Reset</button>
     <button class="btn" id="btn-auto" onclick="game.toggleAuto()">Auto: OFF</button>
   </div>
+  <div class="board-wrap" id="board-wrap">
+    <canvas id="game"></canvas>
+    <div class="overlay win" id="overlay-win"><div class="overlay-bg"></div><div class="overlay-content"><h2>Solved!</h2><p id="win-msg"></p><button class="btn primary" onclick="game.restart()">Play Again</button></div></div>
+  </div>
+
   <div class="ai-indicator" id="ai-indicator" ><div class="ai-dot"></div><span id="ai-status">AI solving...</span></div>
   <p id="solver-status" role="status" class="stats-bar" hidden></p>
   <div class="stats-bar"><span id="box-stat">Boxes: 0</span><span id="done-stat">On goal: 0</span><span id="lvl-stat">Lv: 1/3</span></div>

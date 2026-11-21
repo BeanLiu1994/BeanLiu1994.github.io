@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#0a0f1f" />
 <title>霓虹拼词 · Neon Words</title>
 <style>
@@ -63,8 +63,18 @@
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#4f9cff);box-shadow:0 0 8px var(--accent,#4f9cff);animation:aiPulse .8s infinite}
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page game-page" data-layout="standard" data-genre="words">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link is-collection" href="../../#games">Games</a>
+      <a class="detail-nav__link" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <div class="container">
   <div class="header">
     <div class="title-block">
@@ -77,6 +87,12 @@
       <div class="score-card"><div class="label">分数</div><div class="value" id="score">0</div></div>
     </div>
   </div>
+  <div class="detail-game-actions toolbar">
+    <button class="ghost" id="clearBtn">清除</button>
+    <button class="ghost" id="submitBtn">提交</button>
+    <button class="auto" id="autoBtn">自动游玩</button>
+    <button class="ghost" id="restartBtn">重开</button>
+  </div>
   <div class="board-wrap">
     <canvas id="cv"></canvas>
     <div class="badge" id="badge">AUTO</div>
@@ -86,12 +102,7 @@
       <button class="auto on" id="ovBtn">再来一局</button>
     </div>
   </div>
-  <div class="toolbar">
-    <button class="ghost" id="clearBtn">清除</button>
-    <button class="ghost" id="submitBtn">提交</button>
-    <button class="auto" id="autoBtn">自动游玩</button>
-    <button class="ghost" id="restartBtn">重开</button>
-  </div>
+
   <div class="hint">点选相邻字母连成单词（≥3 字母，可斜向）· 点末格或按<b>提交</b>确认 · 找出 <b>10</b> 个词通关 · 自动模式帮你扫词</div>
 </div>
 <script>

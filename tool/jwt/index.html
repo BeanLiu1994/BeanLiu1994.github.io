@@ -37,11 +37,21 @@
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border)}
   .badge.ok{color:var(--ok);border-color:var(--ok)} .badge.err{color:var(--err);border-color:var(--err)}
 </style>
+<link rel="stylesheet" href="../../assets/detail.css">
 </head>
-<body>
+<body class="detail-page tool-page" data-layout="editor">
+<nav class="detail-nav" aria-label="Site navigation">
+  <div class="detail-nav__inner">
+    <a class="detail-nav__brand" href="../../"><span class="detail-nav__mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Peng Liu</a>
+    <div class="detail-nav__links">
+      <a class="detail-nav__link" href="../../#games">Games</a>
+      <a class="detail-nav__link is-collection" href="../../#tools">Tools</a>
+    </div>
+  </div>
+</nav>
 <header>
   <div>
-    <h1>🔐 JWT 解析器</h1>
+    <h1>JWT 解析器</h1>
     <div class="sub">解码 / 校验 JWT · 纯本地 · 数据不上传</div>
   </div>
   <div class="toolbar">
