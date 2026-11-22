@@ -52,6 +52,7 @@
   @media (max-width:400px){ .title-block h1{font-size:1.4rem;} .btn{padding:10px 10px; font-size:.76rem;} }
 </style>
 <link rel="stylesheet" href="../../assets/detail.css">
+<script defer src="../../assets/game-fit.js"></script>
 </head>
 <body class="detail-page game-page" data-layout="standard" data-genre="arcade">
 <nav class="detail-nav" aria-label="Site navigation">
@@ -223,7 +224,6 @@
       const wrap=document.getElementById('board-wrap');
       wrap.addEventListener('pointerdown',(e)=>{ e.preventDefault(); if(this.over) return; this.flap(); });
       document.addEventListener('keydown',(e)=>{ if(e.key===' '||e.key==='ArrowUp'||e.key==='w'){ e.preventDefault(); if(this.over) return; this.flap(); } });
-      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.H=this.W*1.4; this.bird.r=this.W*0.035+9; this.g=this.W*0.0012+0.32; this.flapV=-(this.W*0.007+5.2); this.draw(); });
     }
   }
   window.game=new Flappy();

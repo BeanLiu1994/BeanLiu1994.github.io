@@ -128,7 +128,7 @@ class Make24 {
     this.canvas=document.getElementById('c');
     this.ctx=this.canvas.getContext('2d');
     this.autoPlay=false; this._autoProgress=0; this._t=null;
-    this._cssW=0; this._last=null;
+    this._cssW=0; this._cssH=0; this._last=null;
     this.solvedCount=0; this.best=parseFloat(localStorage.getItem('m24Best')||'0')||0; this.won=false;
     this.fit(); this.deal(); this._bind();
     this._raf=requestAnimationFrame(this.loop.bind(this));
@@ -140,7 +140,7 @@ class Make24 {
     this.W=w; this.H=h;
     this.canvas.width=Math.round(w*dpr); this.canvas.height=Math.round(h*dpr);
     this.ctx.setTransform(dpr,0,0,dpr,0,0);
-    this._cssW=rect.width;
+    this._cssW=rect.width; this._cssH=rect.height;
   }
   deal(keepAuto){
     let attempt=0, sol=null;
@@ -253,7 +253,7 @@ class Make24 {
   }
   loop(ts){
     const rect=this.canvas.getBoundingClientRect();
-    if(rect.width && rect.width!==this._cssW) this.fit();
+    if(rect.width && rect.height && (rect.width!==this._cssW || rect.height!==this._cssH)) this.fit();
     const dt=Math.min(0.05,(ts!==undefined)?((ts-(this._last||ts))/1000):0.016);
     this._last=ts;
     if(this.autoPlay) this.maybeAuto();

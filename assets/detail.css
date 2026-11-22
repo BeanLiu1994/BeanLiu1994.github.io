@@ -235,11 +235,20 @@ body.game-page {
 }
 
 .game-page[data-layout="uno"] .detail-nav { z-index: 80; }
-.game-page[data-layout="uno"] #shell { top: var(--detail-nav-height); }
-.game-page[data-layout="uno"] .overlay { top: var(--detail-nav-height); }
-.game-page[data-layout="uno"] #game-canvas { max-width: min(460px, 100%); max-height: calc(100svh - var(--detail-nav-height) - 10px); }
+.game-page[data-layout="uno"] #shell { top: var(--detail-nav-height); touch-action: auto; }
+.game-page[data-layout="uno"] .overlay {
+    top: var(--detail-nav-height);
+    align-items: safe center;
+    overflow-y: auto;
+    touch-action: pan-y;
+}
+.game-page[data-layout="uno"] #game-canvas {
+    width: min(460px, 100%, calc((100svh - var(--detail-nav-height) - 10px) * 460 / 780));
+    max-height: none;
+}
 .game-page[data-layout="uno"] .auto-toggle, .game-page[data-layout="uno"] .ai-indicator { top: calc(var(--detail-nav-height) + 8px); }
 .game-page[data-layout="uno"] .panel {
+    flex: none;
     border-color: var(--detail-line);
     background: var(--detail-stage);
     box-shadow: 0 14px 50px #10091888;
@@ -391,4 +400,92 @@ body.tool-page {
     .tool-page > main > .pane { width: 100%; max-width: 100%; min-width: 0; }
     .tool-page > main > .pane:not(:has(> .card)) { min-height: 230px; }
     .tool-page .pane > textarea { min-height: 175px; }
+}
+
+/* Keep the controls and the playing area in view together on compact screens. */
+.game-page .fit-board {
+    max-inline-size: var(--fit-board-width, 100%);
+    margin-inline: auto;
+}
+.game-page[data-game="defender"] .fit-board {
+    width: 100%;
+    flex: none;
+}
+.game-page .fit-canvas { max-inline-size: 100%; height: auto !important; }
+.game-page .play-area.fit-field { justify-content: center; }
+.game-page .play-area > .fit-board { min-inline-size: 0; margin-inline: 0; }
+
+@media (max-height: 780px) {
+    body.game-page { --detail-nav-height: 46px; }
+    .game-page > .container { padding-block: 10px 12px; }
+    .game-page .container > .header { margin-bottom: 7px; }
+    .game-page .container > .detail-game-actions { margin-bottom: 7px; }
+    .game-page .title-block h1 { font-size: clamp(1.35rem, 4.5vw, 2rem); }
+    .game-page .detail-game-actions > button { min-height: 39px; }
+    .game-page .pad { margin-top: 7px; }
+    .game-page .pad .btn { min-width: 0; padding-block: 8px; }
+    .game-page[data-layout="wordle"] .board-wrap { max-height: none; }
+    .game-page[data-layout="wordle"] .keyboard .key { height: 42px; }
+    .game-page .fit-stage:has(> .clue) .title-block h1 { font-size: clamp(1.18rem, 4.3vw, 1.55rem); }
+    .game-page .fit-stage > .clue { min-height: 32px; padding: 5px 8px; }
+    .game-page .fit-stage:has(> .clue) .keyboard { gap: 4px; }
+    .game-page .fit-stage:has(> .clue) .keyboard .key { min-height: 31px; padding-block: 4px; }
+}
+
+@media (min-width: 650px) and (max-height: 780px) {
+    .game-page > .fit-stage:is(.container, .app, .shell) {
+        display: grid;
+        grid-template-columns: minmax(175px, 230px) minmax(0, 1fr);
+        grid-auto-flow: row dense;
+        grid-auto-rows: min-content;
+        align-content: start;
+        align-items: start;
+        column-gap: clamp(12px, 3vw, 30px);
+        row-gap: 5px;
+        width: min(100%, 805px);
+        max-width: none;
+        margin-inline: auto;
+        padding: 10px var(--detail-gutter) 12px;
+    }
+    .game-page > .fit-stage:has(> .clue) {
+        grid-template-columns: minmax(230px, 292px) minmax(0, 1fr);
+    }
+    .fit-stage > :not(.fit-field) { grid-column: 1; min-width: 0; }
+    .fit-stage > .fit-field {
+        grid-column: 2;
+        grid-row: 1 / span var(--fit-rows);
+        width: 100%;
+        align-self: start;
+    }
+    .fit-stage > .fit-board { justify-self: center; }
+    .fit-stage > .fit-field > .fit-board { width: 100%; }
+    .fit-stage > .fit-field > .side { flex: 0 0 74px; }
+    .fit-stage > :is(.header, header.topbar, header) { flex-wrap: wrap; }
+    .fit-stage > .detail-game-actions { flex-wrap: wrap; }
+    .fit-stage > .keyboard { width: 100%; }
+    .fit-stage .keyboard .key { min-width: 0; }
+    .game-page[data-layout="wordle"] .fit-stage > .keyboard button { min-width: 0; padding-inline: 0; }
+    .game-page[data-layout="wordle"] > .shell.fit-stage { margin: 0 auto auto; }
+}
+
+@media (max-height: 520px) {
+    .game-page[data-layout="uno"] :is(.panel, .overlay) { padding: 10px; }
+    .game-page[data-layout="uno"] .panel .desc { margin-bottom: 7px; }
+    .game-page[data-layout="uno"] .panel .hint { margin-top: 7px; }
+    .game-page[data-layout="uno"] .panel .btn { margin: 4px; padding-block: 8px; }
+    .game-page[data-layout="dominoes"], .game-page[data-layout="make24"] { height: max(100svh, 390px); }
+}
+
+.tool-page > main :is(.row, .field, .pane-head, .preview) { min-inline-size: 0; }
+.tool-page main :is(pre, textarea) { max-inline-size: 100%; min-inline-size: 0; }
+.tool-page main pre { overflow-x: auto; }
+.tool-page :is(.status, .result, .out, th, td, .pane-head) { overflow-wrap: anywhere; }
+.tool-page main :is(.preview, .card, .pane) > :is(img, canvas, svg, video) { max-inline-size: 100%; }
+
+@media (max-height: 560px) {
+    body.tool-page { --detail-nav-height: 46px; }
+    .tool-page > header { padding-block: 14px 10px; }
+    .tool-page > header h1 { font-size: clamp(1.5rem, 4vw, 2.25rem); }
+    .tool-page > header > .toolbar { margin-top: 3px; padding: 6px; gap: 5px; }
+    .tool-page > main { padding-bottom: 12px; }
 }

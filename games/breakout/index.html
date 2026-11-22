@@ -51,6 +51,7 @@
   @media (max-width:400px){ .title-block h1{font-size:1.4rem;} .btn{padding:10px 10px; font-size:.76rem;} }
 </style>
 <link rel="stylesheet" href="../../assets/detail.css">
+<script defer src="../../assets/game-fit.js"></script>
 </head>
 <body class="detail-page game-page" data-layout="standard" data-genre="arcade">
 <nav class="detail-nav" aria-label="Site navigation">
@@ -336,7 +337,6 @@
         if(e.key==='ArrowLeft'||e.key==='a'){ this.paddleX=Math.max(0,this.paddleX-this.W*0.08); e.preventDefault(); }
         else if(e.key==='ArrowRight'||e.key==='d'){ this.paddleX=Math.min(this.W-this.paddleW,this.paddleX+this.W*0.08); e.preventDefault(); }
       });
-      window.addEventListener('resize',()=>{ this.W=fitCanvas(); this.H=this.W*1.35; this.paddleW=Math.max(56,this.W*0.18); this.paddleY=this.H-PAD_H-14; this.ballR=this.W*0.018+4; this.draw(); });
     }
   }
   window.game=new Breakout();

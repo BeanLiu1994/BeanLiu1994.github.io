@@ -245,7 +245,7 @@ button.on{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok),0 0 14px rgba(62
 
   const game=new Dominoes(); window.game=game;
   let downX=0,downY=0;
-  function getPos(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+  function getPos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*game.W/r.width,y:(e.clientY-r.top)*game.H/r.height}; }
   function handHit(p){
     const W=game.W,H=game.H; const n=7; let tw=Math.min(W*0.11,H*0.13);
     tw=Math.max(8,Math.min(tw,(W*0.92)/n)); const th=tw*0.5; const gap=Math.max(1,tw*0.08);

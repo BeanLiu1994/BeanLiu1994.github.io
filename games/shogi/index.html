@@ -37,6 +37,7 @@
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 <link rel="stylesheet" href="../../assets/detail.css">
+<script defer src="../../assets/game-fit.js"></script>
 </head>
 <body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
 <nav class="detail-nav" aria-label="Site navigation">
@@ -119,7 +120,7 @@
     doTurn(mv){ this.anim={from:this.cp(mv.from),to:this.cp(mv.to),t:0,apply:()=>{ this.applyMove(mv.from,mv.to); this.ply++; const opp=this.turn==='b'?'w':'b'; if(this.legalMoves(opp).length===0){ this.over=opp; this.wins[this.turn]++; bestEl.textContent=this.wins.b+'-'+this.wins.w; this.status((this.turn==='b'?'⚫ 黑':'⚪ 白')+'方将死对方，胜！第'+this.round+'局。'); if(this.autoPlay) this._autoNext(); } else { this.turn=opp; } } }; }
     cp(rc){ const cs=this.cs; return {x:rc[1]*cs+cs/2,y:rc[0]*cs+cs/2}; }
     _autoNext(){ this.stopAuto(); this.round++; scoreEl.textContent=this.round; this.newGame(); this.startAuto(); }
-    onDown(e){ e.preventDefault(); if(this.autoPlay||this.over||this.anim) return; const r=canvas.getBoundingClientRect(); const c=Math.floor((e.clientX-r.left)/this.cs), rr=Math.floor((e.clientY-r.top)/this.cs); if(!inB(rr,c)) return; if(this.sel){ if(this.legalMoves('w').some(m=>m.from[0]===this.sel[0]&&m.from[1]===this.sel[1]&&m.to[0]===rr&&m.to[1]===c)){ this.doTurn({from:this.sel,to:[rr,c]}); this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].c==='w'){ this.sel=[rr,c]; } else this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].c==='w'){ this.sel=[rr,c]; } }
+    onDown(e){ e.preventDefault(); if(this.autoPlay||this.over||this.anim) return; const r=canvas.getBoundingClientRect(); const c=Math.floor((e.clientX-r.left)*N/r.width), rr=Math.floor((e.clientY-r.top)*N/r.height); if(!inB(rr,c)) return; if(this.sel){ if(this.legalMoves('w').some(m=>m.from[0]===this.sel[0]&&m.from[1]===this.sel[1]&&m.to[0]===rr&&m.to[1]===c)){ this.doTurn({from:this.sel,to:[rr,c]}); this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].c==='w'){ this.sel=[rr,c]; } else this.sel=null; } else if(this.board[rr][c]&&this.board[rr][c].c==='w'){ this.sel=[rr,c]; } }
     status(t){ statusEl.textContent=t; }
     update(dt){ if(this.anim){ this.anim.t+=dt/0.28; if(this.anim.t>=1){ const a=this.anim; this.anim=null; a.apply(); } }
       if(this.autoPlay&&!this.anim&&!this.over){ this._aT=(this._aT||0)-dt; if(this._aT<=0){ this.autoStep(); this._aT=0.45; } } }
