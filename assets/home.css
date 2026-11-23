@@ -221,6 +221,9 @@ h1, h2, h3, p { margin: 0; }
     font-weight: 700;
 }
 .profile-links a:hover { border-color: #b6a3ce; color: var(--violet); }
+.profile-links .profile-mark { gap: 3px; color: var(--violet); }
+.profile-mark i { width: 5px; height: 5px; border-radius: 1px; border: 1px solid currentColor; transform: rotate(45deg); }
+.profile-mark i:first-child { background: currentColor; }
 
 .catalog { margin-top: clamp(37px, 4.6vw, 61px); }
 .catalog-heading {

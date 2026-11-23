@@ -1,0 +1,91 @@
+.trail-page {
+    --detail-focus: #dffc72;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at 65% 0%, #38234e, #18111f 63%);
+    color: #f8f1ff;
+}
+
+.trail-hub {
+    width: min(100% - 32px, 690px);
+    padding: 26px 0 54px;
+    margin: 0 auto;
+}
+
+.trail-back { color: #ded0ed; font-weight: 700; text-decoration: none; }
+.trail-header { padding: 39px 0 16px; }
+.trail-header > h1 {
+    font: 800 clamp(2.8rem, 9vw, 5rem) / 1 var(--detail-display);
+    margin: 0 0 14px;
+}
+.trail-header > p { color: #d9cde5; line-height: 1.6; max-width: 36ch; }
+.trail-glyph { display: flex; gap: 5px; margin-bottom: 17px; }
+.trail-glyph i { width: 12px; height: 12px; border: 1px solid #dffc72; border-radius: 3px; transform: rotate(45deg); }
+.trail-glyph i:first-child { background: #dffc72; }
+
+.trail-progress { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #cfc1de; }
+.trail-page button, .trail-options button {
+    font: inherit;
+    border-radius: 8px;
+    border: 1px solid #665478;
+    background: #33263f;
+    color: #fff;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.trail-steps { list-style: none; padding: 0; margin: 7px 0 18px; }
+.trail-steps li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 13px;
+    align-items: center;
+    padding: 13px;
+    margin-bottom: 8px;
+    border-radius: 13px;
+    border: 1px solid #4e3e5c;
+    background: #251b30;
+}
+.trail-steps .earned { border-color: #9bab68; }
+.trail-number { font: 800 1.5rem var(--detail-display); color: #dffc72; }
+.trail-steps h2, .trail-lock h2 { font: 750 1.15rem var(--detail-body); margin: 0; }
+.trail-steps p { color: #d4c5e0; margin: 4px 0 0; line-height: 1.45; }
+.trail-steps a, .trail-options a { color: #dffc72; font-weight: 650; text-underline-offset: 3px; white-space: nowrap; }
+.trail-lock {
+    padding: 14px;
+    border-radius: 13px;
+    border: 1px solid #8b755e;
+    background: #2b2232;
+}
+.trail-lock label { display: block; margin: 0 0 9px; font-weight: 700; }
+.trail-lock input {
+    width: 6em;
+    margin-right: 7px;
+    padding: 6px;
+    border: 1px solid #756487;
+    border-radius: 8px;
+    background: #1c1524;
+    color: #fff;
+    font: 700 1.2rem var(--detail-mono);
+    letter-spacing: .18em;
+}
+.trail-lock button { background: #dffc72; border-color: #dffc72; color: #211727; }
+.trail-lock p:empty { display: none; }
+
+.game-page .trail-banner {
+    padding: 9px 10px;
+    margin: 0 0 8px;
+    border: 1px solid #665478;
+    border-radius: 10px;
+    background: #282036;
+    color: #faf2ff;
+    font: 400 .85rem / 1.45 var(--detail-body);
+}
+.trail-banner p { margin: 3px 0; }
+.trail-banner .trail-status { color: #dfcee9; }
+.trail-banner.trail-earned { border-color: #9bab68; }
+.trail-options { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 5px; }
+
+@media (max-width: 420px) {
+    .trail-steps li { grid-template-columns: auto 1fr; }
+    .trail-steps a { grid-column: 2; }
+}

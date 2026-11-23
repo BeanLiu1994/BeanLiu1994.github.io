@@ -64,6 +64,7 @@
 @keyframes aiPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
 </style>
 <link rel="stylesheet" href="../../assets/detail.css">
+<link rel="stylesheet" href="../../assets/trail.css">
 <script defer src="../../assets/game-fit.js"></script>
 </head>
 <body class="detail-page game-page" data-layout="standard" data-genre="puzzle">
@@ -104,6 +105,7 @@
 
   <div class="hint">点<b>起始柱</b>再点<b>目标柱</b>移动顶部圆盘 · 大盘不能压小盘 · <b>自动模式</b>会用最优步数流畅搬运通关</div>
 </div>
+<script src="../../assets/trail.js"></script>
 <script>
 (function(){
   "use strict";
@@ -124,6 +126,7 @@
   const ctx=(cv&&cv.getContext)?cv.getContext('2d'):null;
 
   let pegs, selected, anim, moves, best, auto, over, won, autoQueue, autoTimer, autoDelay, invalidT, invalidPeg;
+  let trail, trailSetup, trailMoves=[];
   try{ best=parseInt(localStorage.getItem('hanoi_best')||'0',10)||0; }catch(e){best=0;}
 
   function diskW(size){ const minW=46, maxW=128; return minW + (size-1)/(N-1)*(maxW-minW); }
@@ -131,11 +134,14 @@
 
   function newGame(){
     pegs=[[],[],[]];
-    for(let s=N;s>=1;s--) pegs[0].push(s); // bottom..top
+    if(trailSetup) pegs=trailSetup.pegs.map(peg=>[...peg]);
+    else for(let s=N;s>=1;s--) pegs[0].push(s); // bottom..top
+    trailMoves=[];
     selected=-1; anim=null; moves=0; over=false; won=false; autoQueue=[]; autoTimer=0; autoDelay=0; invalidT=0; invalidPeg=-1;
     elOverlay.classList.remove('show');
   }
   function setAuto(v){
+    if(v && trail) return;
     if(v && over) newGame();
     auto=v;
     if(btnAuto){ btnAuto.classList.toggle('on',v); btnAuto.textContent=v?'自动中…':'自动游玩'; }
@@ -191,11 +197,12 @@
     pegs[from].pop();
     const d=disk;
     anim={disk:d, from, to, t:0, dur:0.42};
+    if(trail) trailMoves.push([from,to]);
     return true;
   }
 
   function tryManualMove(to){
-    if(anim||over||auto) return;
+    if(anim||over||auto||(trail && !trail.ready)) return;
     if(selected<0){
       if(pegs[to].length>0){ selected=to; }
       return;
@@ -211,8 +218,9 @@
 
   function winGame(){
     over=true; won=true;
-    if(!auto){ if(best===0||moves<best){ best=moves; try{localStorage.setItem('hanoi_best',String(best));}catch(e){} } }
+    if(!auto&&!trail){ if(best===0||moves<best){ best=moves; try{localStorage.setItem('hanoi_best',String(best));}catch(e){} } }
     if(auto){ autoDelay=1.0; elOvTitle.textContent='⚡ 自动通关！'; elOvText.textContent='用了 '+moves+' 步'; elOverlay.classList.add('show'); }
+    else if(trail){ elOvTitle.textContent='挑战完成'; elOvText.textContent='这一轮用了 '+moves+' 步'; elOverlay.classList.add('show'); trail.complete([...trailMoves]); }
     else { elOvTitle.textContent='🎉 通关！'; elOvText.textContent='用了 '+moves+' 步（最优 '+(Math.pow(2,N)-1)+'）'; elOverlay.classList.add('show'); }
   }
 
@@ -229,8 +237,11 @@
     e.preventDefault&&e.preventDefault();
   }
   if(cv&&cv.addEventListener){
-    cv.addEventListener('pointerdown',onDown,{passive:false});
-    cv.addEventListener('touchstart',onDown,{passive:false});
+    if(window.PointerEvent) cv.addEventListener('pointerdown',onDown,{passive:false});
+    else {
+      cv.addEventListener('touchstart',e=>onDown(e.touches[0]),{passive:true});
+      cv.addEventListener('mousedown',onDown,{passive:false});
+    }
   }
   btnAuto&&btnAuto.addEventListener('click',()=>setAuto(!auto));
   btnRestart&&btnRestart.addEventListener('click',()=>{ newGame(); setAuto(false); });
@@ -331,6 +342,7 @@
   if(typeof requestAnimationFrame==='function') requestAnimationFrame(frame);
 
   newGame(); setAuto(false);
+  trail=window.Trail.mount("hanoi", setup=>{ trailSetup=setup; newGame(); });
 
   window.game={
     get autoPlay(){return auto;}, set autoPlay(v){ setAuto(!!v); },

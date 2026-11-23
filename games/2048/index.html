@@ -334,6 +334,7 @@
 
 </style>
 <link rel="stylesheet" href="../../assets/detail.css">
+<link rel="stylesheet" href="../../assets/trail.css">
 <script defer src="../../assets/game-fit.js"></script>
 </head>
 <body class="detail-page game-page" data-layout="standard" data-genre="puzzle">
@@ -404,6 +405,7 @@
   </div>
 </div>
 
+<script src="../../assets/trail.js"></script>
 <script>
 (function() {
   'use strict';
@@ -550,6 +552,7 @@
       this.bindInput();
 
       window.addEventListener('resize', () => this.onResize());
+      this.trail = window.Trail.mount("2048", setup => { this.trailSeed = setup.seed; this.restart(); });
     }
 
     buildBoard() {
@@ -599,6 +602,12 @@
       return { el, inner };
     }
 
+    randomTile() {
+      if (!this.trail) return Math.random();
+      this.trailRandom = (Math.imul(this.trailRandom, 1664525) + 1013904223) >>> 0;
+      return this.trailRandom / 4294967296;
+    }
+
     spawnTile() {
       const empty = [];
       for (let r = 0; r < SIZE; r++)
@@ -606,8 +615,8 @@
           if (this.grid[r][c] === 0) empty.push([r, c]);
       if (empty.length === 0) return false;
 
-      const [r, c] = empty[Math.floor(Math.random() * empty.length)];
-      const val = Math.random() < 0.9 ? 2 : 4;
+      const [r, c] = empty[Math.floor(this.randomTile() * empty.length)];
+      const val = this.randomTile() < 0.9 ? 2 : 4;
       this.grid[r][c] = val;
 
       const id = this.nextTileId++;
@@ -622,10 +631,11 @@
     }
 
     move(dir) {
-      if (this.isMoving || this.over) return false;
+      if (this.isMoving || this.over || (this.trail && !this.trail.ready)) return false;
 
       const { newGrid, scoreGain, changed, movements } = computeMove(this.grid, dir);
       if (!changed) return false;
+      if (this.trail) this.trailMoves.push(dir);
 
       this.isMoving = true;
       this.grid = newGrid;
@@ -662,7 +672,8 @@
       this.updateUI();
 
       // Phase 2: after the slide, resolve merges + spawn a tile
-      setTimeout(() => {
+      this.moveTimer = setTimeout(() => {
+        this.moveTimer = null;
         // Remove absorbed tiles
         for (const [id, tile] of this.tiles) {
           if (tile.absorbed) {
@@ -690,6 +701,17 @@
         this.spawnTile();
         this.updateBest();
 
+        if (this.trail && this.highest >= 128) {
+          this.over = true;
+          this.won = true;
+          const overlay = document.getElementById('overlay-win');
+          overlay.querySelector('h2').textContent = '挑战完成';
+          overlay.querySelector('p').textContent = '合出了 128。';
+          overlay.classList.add('active');
+          this.trail.complete([...this.trailMoves]);
+          this.isMoving = false;
+          return;
+        }
         if (!this.won && this.highest >= 2048) {
           this.won = true;
           document.getElementById('overlay-win').classList.add('active');
@@ -712,6 +734,10 @@
 
     restart() {
       this.stopAuto();
+      clearTimeout(this.moveTimer);
+      this.moveTimer = null;
+      this.trailMoves = [];
+      this.trailRandom = this.trailSeed;
       this.grid = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
       document.getElementById('board').querySelectorAll('.tile').forEach(t => t.remove());
       this.tiles.clear();
@@ -734,7 +760,7 @@
     }
 
     updateBest() {
-      if (this.score > this.bestScore) {
+      if (!this.trail && this.score > this.bestScore) {
         this.bestScore = this.score;
         localStorage.setItem('best2048', this.bestScore);
       }
@@ -759,6 +785,7 @@
     }
 
     startAuto() {
+      if (this.trail) return;
       this.autoPlay = true;
       const btn = document.getElementById('btn-auto');
       btn.textContent = 'Auto: ON';

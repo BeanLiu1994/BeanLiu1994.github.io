@@ -94,6 +94,7 @@
 
 </style>
 <link rel="stylesheet" href="../../assets/detail.css">
+<link rel="stylesheet" href="../../assets/trail.css">
 <script defer src="../../assets/game-fit.js"></script>
 </head>
 <body class="detail-page game-page" data-layout="standard" data-genre="tabletop">
@@ -136,6 +137,7 @@
   </div>
 </div>
 
+<script src="../../assets/trail.js"></script>
 <script>
 (function(){
   'use strict';
@@ -144,6 +146,7 @@
       this.draws=parseInt(localStorage.getItem('bestTTT')||'0');
       this.autoPlay=false; this.autoTimer=null;
       this.build(); this.restart();
+      this.trail=window.Trail.mount("tictactoe", setup=>{ this.trailSeed=setup.seed; this.restart(); });
     }
     build(){
       const g=document.getElementById('grid'); g.innerHTML='';
@@ -154,6 +157,7 @@
       if(!keepAuto) this.stopAuto();
       this.board=Array(9).fill(null);
       this.current='X'; this.over=false; this.winner=null; this.moves=0;
+      this.trailMoves=[];
       this.cells.forEach(c=>{ c.textContent=''; c.className='cell'; });
       document.getElementById('overlay-win').classList.remove('active');
       this.updateUI(); this.bindInput();
@@ -184,20 +188,23 @@
       for(let i=0;i<9;i++){ if(!b[i]){ b[i]=player; const v=this.score(b, player==='X'?'O':'X',1); b[i]=null; opts.push({i,v}); if(player==='X'&&v>best){best=v;move=i;} if(player==='O'&&v<best){best=v;move=i;} } }
       // tie-break: random among equal-best for variety
       const eq=opts.filter(o=>o.v===best);
+      if(this.trail && player==='O') return eq[(this.trailSeed+this.moves*7)%eq.length].i;
       return eq[Math.floor(Math.random()*eq.length)].i;
     }
     place(i){
-      if(this.over||this.board[i]) return;
+      if(this.over||this.board[i]||(this.trail&&!this.trail.ready)) return;
+      if(this.trail&&this.current==='X') this.trailMoves.push(i);
       this.board[i]=this.current; this.moves++;
       const c=this.cells[i]; c.textContent=this.current; c.classList.add(this.current==='X'?'x':'o');
       const w=this.winnerOf(this.board);
       if(w){
         this.over=true;
-        if(w.who==='draw'){ const sc=this.draws+1; this.draws=sc; localStorage.setItem('bestTTT',this.draws);
+        if(w.who==='draw'){ if(!this.trail){ this.draws++; localStorage.setItem('bestTTT',this.draws); }
           document.getElementById('win-title').textContent='Draw'; document.getElementById('win-msg').textContent='Perfect play — nobody wins'; }
         else { w.line.forEach(k=>this.cells[k].classList.add('win'));
           document.getElementById('win-title').textContent=w.who+' wins'; document.getElementById('win-msg').textContent=w.who==='X'?'You win!':(this.autoPlay?'AI vs AI over':'AI wins'); }
         document.getElementById('overlay-win').classList.add('active'); this.updateUI();
+        if(this.trail && w.who!=='O') this.trail.complete([...this.trailMoves]);
         if(this.autoPlay) this.autoTimer=setTimeout(()=>this.restart(true), 1400);
         return;
       }
@@ -215,7 +222,7 @@
       if(this.autoPlay) document.getElementById('ai-status').textContent='AI: '+this.current+' to move';
     }
     toggleAuto(){ if(this.autoPlay) this.stopAuto(); else { if(this.over) this.restart(); this.startAuto(); } }
-    startAuto(){ this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(), 600); }
+    startAuto(){ if(this.trail) return; this.autoPlay=true; const b=document.getElementById('btn-auto'); b.textContent='Auto: ON'; b.classList.add('auto-on'); document.getElementById('ai-indicator').style.display='flex'; this.updateUI(); if(!this.over) this.autoTimer=setTimeout(()=>this.autoStep(), 600); }
     stopAuto(){ this.autoPlay=false; if(this.autoTimer){ clearTimeout(this.autoTimer); this.autoTimer=null; } const b=document.getElementById('btn-auto'); b.textContent='Auto: OFF'; b.classList.remove('auto-on'); document.getElementById('ai-indicator').style.display='none'; }
     bindInput(){
       if(this._bound) return; this._bound=true;

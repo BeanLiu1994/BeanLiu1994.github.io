@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>三处回声 · Peng Liu</title>
+    <link rel="stylesheet" href="../assets/detail.css">
+    <link rel="stylesheet" href="../assets/trail.css">
+    <script src="../assets/trail.js" defer></script>
+</head>
+<body class="detail-page trail-page">
+<main id="trail-hub" class="trail-hub">
+    <a class="trail-back" href="../">Peng Liu</a>
+    <header class="trail-header">
+        <div class="trail-glyph" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h1>三处回声</h1>
+        <p>三场游戏各藏着一道谜面。把算出的数字按编号连起来，即可打开最后一扇门。</p>
+    </header>
+    <div class="trail-progress">
+        <p id="trail-hub-status" role="status">正在读取印记…</p>
+        <button type="button" id="trail-refresh">刷新线索</button>
+    </div>
+    <ol class="trail-steps">
+        <li data-trail-game="hanoi">
+            <span class="trail-number" aria-hidden="true">01</span>
+            <div><h2>汉诺塔</h2><p class="trail-clue">尚未找到</p></div>
+            <a href="../games/hanoi/?trail=1">进入挑战</a>
+        </li>
+        <li data-trail-game="tictactoe">
+            <span class="trail-number" aria-hidden="true">02</span>
+            <div><h2>井字棋</h2><p class="trail-clue">尚未找到</p></div>
+            <a href="../games/tictactoe/?trail=1">进入挑战</a>
+        </li>
+        <li data-trail-game="2048">
+            <span class="trail-number" aria-hidden="true">03</span>
+            <div><h2>2048</h2><p class="trail-clue">尚未找到</p></div>
+            <a href="../games/2048/?trail=1">进入挑战</a>
+        </li>
+    </ol>
+    <form id="trail-lock" class="trail-lock" hidden>
+        <label for="trail-code">三位口令</label>
+        <div>
+            <input id="trail-code" inputmode="numeric" maxlength="3" autocomplete="off" required>
+            <button type="submit">打开</button>
+        </div>
+        <p id="trail-lock-status" role="status"></p>
+    </form>
+    <section id="trail-ending" class="trail-lock" tabindex="-1" hidden>
+        <h2>门打开了</h2>
+        <p></p>
+    </section>
+</main>
+</body>
+</html>
