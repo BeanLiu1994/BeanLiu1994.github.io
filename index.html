@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Browser games, puzzles, and tools collected by Peng Liu.">
-    <title>Peng Liu · Games &amp; tools</title>
+    <meta name="description" content="A collection of browser games, puzzles, and everyday tools.">
+    <title>Playground · Games &amp; tools</title>
     <link href="assets/home.css" rel="stylesheet">
     <script src="assets/home.js" defer></script>
 </head>
@@ -14,7 +14,7 @@
         <div class="shell header-inner">
             <a class="wordmark" href="./">
                 <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-                Peng Liu
+                Playground
             </a>
             <nav aria-label="Main navigation" class="site-nav">
                 <a href="#games" data-jump="games">Games</a>
@@ -27,19 +27,22 @@
 
     <main id="main" tabindex="-1">
         <section class="hero" aria-labelledby="hero-title">
-            <div class="shell hero-content">
-                <h1 id="hero-title">Games &amp; tools<span>.</span></h1>
-                <p>Take a play break. Find your next shortcut.</p>
-                <div class="hero-actions">
-                    <a class="button button-primary" href="#games" data-jump="games">Browse games</a>
-                    <a class="button button-secondary" href="#tools" data-jump="tools">Explore tools</a>
+            <div class="hero-stage">
+                <div class="shell hero-content">
+                    <h1 id="hero-title">Games &amp; tools<span>.</span></h1>
+                    <p>Take a play break. Find your next shortcut.</p>
+                    <div class="hero-actions">
+                        <a class="button button-primary" href="#games" data-jump="games">Browse games</a>
+                        <a class="button button-secondary" href="#tools" data-jump="tools">Explore tools</a>
+                    </div>
                 </div>
-            </div>
-            <div class="hero-art">
-                <picture>
-                    <source media="(max-width: 600px)" srcset="assets/home-orbit-small.webp" width="768" height="498">
-                    <img src="assets/home-orbit.webp" width="1536" height="888" alt="" fetchpriority="high">
-                </picture>
+                <div class="hero-art">
+                    <picture>
+                        <source media="(max-width: 600px)" srcset="assets/home-orbit-small.webp" width="768" height="498">
+                        <img src="assets/home-orbit.webp" width="1536" height="888" alt="" fetchpriority="high">
+                    </picture>
+                </div>
+                <div class="hero-progress" aria-hidden="true"><span></span></div>
             </div>
         </section>
 
@@ -67,7 +70,7 @@
                 <div class="code-art" aria-hidden="true">
                     <div class="code-bar"><i></i><i></i><i></i><span>example.json</span></div>
                     <pre><code>{
-  <span class="code-key">"project"</span>: <span class="code-string">"Peng Liu"</span>,
+  <span class="code-key">"runtime"</span>: <span class="code-string">"browser"</span>,
   <span class="code-key">"collection"</span>: [
     <span class="code-string">"games"</span>,
     <span class="code-string">"tools"</span>
@@ -259,10 +262,7 @@
             </section>
             <section class="info-card profile-card" aria-labelledby="profile-title">
                 <img class="profile-avatar" src="assets/peng-liu.webp" width="192" height="192" alt="" loading="lazy">
-                <div class="profile-info">
-                    <h2 id="profile-title">Hi, I’m Peng Liu.</h2>
-                    <p>@BeanLiu1994</p>
-                </div>
+                <h2 id="profile-title">Peng Liu</h2>
                 <div class="profile-links">
                     <a href="mailto:njueebeanliu@hotmail.com">Email</a>
                     <a href="https://github.com/BeanLiu1994">GitHub</a>
@@ -274,7 +274,6 @@
 
     <footer class="site-footer">
         <div class="shell footer-inner">
-            <span>Peng Liu</span>
             <a href="#main">Back to top</a>
         </div>
     </footer>

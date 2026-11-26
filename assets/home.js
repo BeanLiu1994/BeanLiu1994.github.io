@@ -102,19 +102,96 @@
 
 (() => {
     const hero = document.querySelector(".hero");
+    const stage = hero.querySelector(".hero-stage");
+    const art = hero.querySelector(".hero-art");
+    const content = hero.querySelector(".hero-content");
+    const progress = hero.querySelector(".hero-progress span");
+    const header = document.querySelector(".site-header");
+    const scenePreference = matchMedia("(prefers-reduced-motion: no-preference) and (min-height: 34rem)");
     const parallax = matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)");
+    const duration = 1000;
+    const copyFadeEnd = .62;
+    let scene;
+    let frame = 0;
 
-    hero.addEventListener("pointermove", event => {
-        if (!parallax.matches || event.pointerType !== "mouse") return;
+    function pausedAnimation(element, keyframes) {
+        const animation = element.animate(keyframes, { duration, fill: "both" });
+        animation.pause();
+        return animation;
+    }
+
+    function renderScene() {
+        frame = 0;
+        if (!scene) return;
 
         const bounds = hero.getBoundingClientRect();
+        const distance = bounds.height - stage.offsetHeight;
+        const fraction = Math.max(0, Math.min(1, (header.offsetHeight - bounds.top) / distance));
+        const time = fraction * duration;
+        if (scene.art.currentTime !== time) {
+            scene.art.currentTime = time;
+            scene.progress.currentTime = time;
+            content.classList.toggle("is-faded", fraction >= copyFadeEnd);
+        }
+
+        const textTime = content.matches(":focus-within") ? 0 : time;
+        if (scene.content.currentTime !== textTime) scene.content.currentTime = textTime;
+    }
+
+    function scheduleFrame() {
+        if (scene && !frame) frame = requestAnimationFrame(renderScene);
+    }
+
+    function syncScene() {
+        if (!scenePreference.matches) {
+            if (scene) Object.values(scene).forEach(animation => animation.cancel());
+            scene = undefined;
+            hero.classList.remove("has-scroll-scene");
+            return;
+        }
+
+        if (!stage.animate || scene) return;
+        hero.classList.add("has-scroll-scene");
+        scene = {
+            content: pausedAnimation(content, [
+                { offset: 0, transform: "translateY(0) scale(1)", opacity: 1 },
+                { offset: .13, transform: "translateY(-.25rem) scale(1)", opacity: 1, easing: "cubic-bezier(.4, 0, .7, 1)" },
+                { offset: copyFadeEnd, transform: "translateY(-5.5rem) scale(.92)", opacity: 0 },
+                { offset: 1, transform: "translateY(-6.5rem) scale(.9)", opacity: 0 },
+            ]),
+            art: pausedAnimation(art, [
+                { offset: 0, transform: "translateY(0) scale(1) rotate(0deg)", opacity: 1, easing: "cubic-bezier(.25, 0, .7, 1)" },
+                { offset: .27, transform: "translateY(-4svh) scale(1.07) rotate(2deg)", opacity: 1, easing: "cubic-bezier(.3, 0, .25, 1)" },
+                { offset: .68, transform: "translateY(-17svh) scale(1.44) rotate(-8deg)", opacity: 1, easing: "cubic-bezier(.4, 0, .65, 1)" },
+                { offset: 1, transform: "translateY(-30svh) scale(1.18) rotate(-13deg)", opacity: .18 },
+            ]),
+            progress: pausedAnimation(progress, [
+                { transform: "scaleX(.16)" },
+                { transform: "scaleX(1)" },
+            ]),
+        };
+        renderScene();
+    }
+
+    window.addEventListener("scroll", scheduleFrame, { passive: true });
+    window.addEventListener("resize", scheduleFrame);
+    window.addEventListener("pageshow", scheduleFrame);
+    content.addEventListener("focusin", scheduleFrame);
+    content.addEventListener("focusout", scheduleFrame);
+    scenePreference.addEventListener("change", syncScene);
+    syncScene();
+
+    stage.addEventListener("pointermove", event => {
+        if (!parallax.matches || event.pointerType !== "mouse") return;
+
+        const bounds = stage.getBoundingClientRect();
         const x = (event.clientX - bounds.left) / bounds.width - 0.5;
         const y = (event.clientY - bounds.top) / bounds.height - 0.5;
         hero.style.setProperty("--orbit-x", `${x * 28}px`);
         hero.style.setProperty("--orbit-y", `${y * 20}px`);
     });
 
-    hero.addEventListener("pointerleave", () => {
+    stage.addEventListener("pointerleave", () => {
         hero.style.removeProperty("--orbit-x");
         hero.style.removeProperty("--orbit-y");
     });
