@@ -22,25 +22,49 @@ export async function streamAnswer(payload, signal, render) {
     let complete = false;
     let model = '';
     let changes;
-    for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+
+    function readLine(line) {
+        if (!line.startsWith('data:')) return;
+        const data = JSON.parse(line.slice(5).trim());
+        if (data.error) throw Error(data.error);
+        if (Array.isArray(data.changes)) changes = data.changes;
+        if (data.done) {
+            complete = true;
+            model = data.model || '';
+        }
+        if (data.text) {
+            answer += data.text;
+            render(answer);
+        }
+    }
+
+    function readChunk(chunk) {
         tail += chunk;
         const lines = tail.split('\n');
         tail = lines.pop();
-        for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const data = JSON.parse(line.slice(5).trim());
-            if (data.error) throw Error(data.error);
-            if (Array.isArray(data.changes)) changes = data.changes;
-            if (data.done) {
-                complete = true;
-                model = data.model || '';
-            }
-            if (data.text) {
-                answer += data.text;
-                render(answer);
-            }
-        }
+        for (const line of lines) readLine(line);
     }
+
+    if (response.body?.getReader) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        try {
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                readChunk(decoder.decode(value, {stream: true}));
+            }
+            readChunk(decoder.decode());
+        } catch (error) {
+            reader.cancel().catch(() => {});
+            throw error;
+        } finally {
+            reader.releaseLock();
+        }
+    } else {
+        readChunk(await response.text());
+    }
+    readLine(tail);
     if (!complete || !answer.trim() && !changes) throw Error('上游没有返回完整回答，请稍后重试。');
     return {answer: answer || '请先查看拟议的文件变更。', model, changes};
 }
