@@ -21,39 +21,63 @@
                 <a href="#tools" data-jump="tools">Tools</a>
                 <a href="#services">Services</a>
             </nav>
-            <a class="header-github" href="https://github.com/BeanLiu1994">GitHub <span aria-hidden="true">↗</span></a>
+            <a class="header-github" href="https://github.com/BeanLiu1994">GitHub</a>
         </div>
     </header>
 
-    <main class="shell" id="main">
+    <main id="main" tabindex="-1">
         <section class="hero" aria-labelledby="hero-title">
-            <div class="hero-art">
-                <img src="assets/playground.webp" width="1280" height="853" alt="" fetchpriority="high">
-            </div>
-            <div class="hero-content">
-                <h1 id="hero-title">Games &amp;<br><span>everyday tools.</span></h1>
-                <p>Play an arcade classic, solve a puzzle, or find a handy tool for your next project.</p>
+            <div class="shell hero-content">
+                <h1 id="hero-title">Games &amp; tools<span>.</span></h1>
+                <p>Take a play break. Find your next shortcut.</p>
                 <div class="hero-actions">
-                    <a class="button button-primary" href="#games" data-jump="games">Browse games <span aria-hidden="true">↓</span></a>
-                    <a class="button button-secondary" href="#tools" data-jump="tools">Find a tool <span aria-hidden="true">↗</span></a>
+                    <a class="button button-primary" href="#games" data-jump="games">Browse games</a>
+                    <a class="button button-secondary" href="#tools" data-jump="tools">Explore tools</a>
                 </div>
             </div>
-        </section>
-
-        <section class="profile-card" aria-labelledby="profile-title">
-            <img class="profile-avatar" src="assets/peng-liu.webp" width="192" height="192" alt="">
-            <div class="profile-info">
-                <h2 id="profile-title">Hi, I’m Peng Liu.</h2>
-                <p>@BeanLiu1994</p>
-            </div>
-            <div class="profile-links">
-                <a href="mailto:njueebeanliu@hotmail.com">Email</a>
-                <a href="https://github.com/BeanLiu1994">GitHub <span aria-hidden="true">↗</span></a>
-                <a class="profile-mark" href="trail/" aria-label="翻看名片背面"><i></i><i></i><i></i></a>
+            <div class="hero-art">
+                <picture>
+                    <source media="(max-width: 600px)" srcset="assets/home-orbit-small.webp" width="768" height="498">
+                    <img src="assets/home-orbit.webp" width="1536" height="888" alt="" fetchpriority="high">
+                </picture>
             </div>
         </section>
 
-        <section class="catalog" id="catalog" aria-labelledby="catalog-title">
+        <section class="shell featured" aria-labelledby="featured-title">
+            <h2 class="sr-only" id="featured-title">Featured game and tool</h2>
+            <article class="feature feature-game">
+                <div class="feature-copy">
+                    <h3>2048 Neon</h3>
+                    <p>Slide, merge, and chase the next tile.</p>
+                    <a class="button feature-button" href="games/2048/">Play 2048</a>
+                </div>
+                <div class="tile-art" aria-hidden="true">
+                    <span></span><span>2</span><span></span><span></span>
+                    <span>4</span><span></span><span class="winning-tile">2048</span><span></span>
+                    <span></span><span>32</span><span>64</span><span></span>
+                    <span>128</span><span>256</span><span>8</span><span>16</span>
+                </div>
+            </article>
+            <article class="feature feature-tool">
+                <div class="feature-copy">
+                    <h3>JSON Formatter</h3>
+                    <p>Format, inspect, and clean up JSON.</p>
+                    <a class="button feature-button" href="tool/json/">Format JSON</a>
+                </div>
+                <div class="code-art" aria-hidden="true">
+                    <div class="code-bar"><i></i><i></i><i></i><span>example.json</span></div>
+                    <pre><code>{
+  <span class="code-key">"project"</span>: <span class="code-string">"Peng Liu"</span>,
+  <span class="code-key">"collection"</span>: [
+    <span class="code-string">"games"</span>,
+    <span class="code-string">"tools"</span>
+  ]
+}</code></pre>
+                </div>
+            </article>
+        </section>
+
+        <section class="shell catalog" id="catalog" aria-labelledby="catalog-title">
             <div class="catalog-heading">
                 <div>
                     <h2 id="catalog-title">Explore the collection</h2>
@@ -228,22 +252,30 @@
             </section>
         </section>
 
-        <section class="catalog-group" id="services" aria-labelledby="services-title">
-            <div class="group-heading">
-                <h3 id="services-title">Services</h3>
-            </div>
-            <ul class="entry-grid">
-                <li><a class="entry" href="https://dki.beanee.eu.org/text/"><span class="entry-icon" aria-hidden="true">📝</span><span>Pastebin 记事本</span></a></li>
-            </ul>
-        </section>
-
+        <div class="shell site-info">
+            <section class="info-card" id="services" aria-labelledby="services-title">
+                <h2 id="services-title">Services</h2>
+                <a class="entry" href="https://dki.beanee.eu.org/text/"><span class="entry-icon" aria-hidden="true">📝</span><span>Pastebin 记事本</span></a>
+            </section>
+            <section class="info-card profile-card" aria-labelledby="profile-title">
+                <img class="profile-avatar" src="assets/peng-liu.webp" width="192" height="192" alt="" loading="lazy">
+                <div class="profile-info">
+                    <h2 id="profile-title">Hi, I’m Peng Liu.</h2>
+                    <p>@BeanLiu1994</p>
+                </div>
+                <div class="profile-links">
+                    <a href="mailto:njueebeanliu@hotmail.com">Email</a>
+                    <a href="https://github.com/BeanLiu1994">GitHub</a>
+                    <a class="profile-mark" href="trail/" aria-label="翻看名片背面"><i></i><i></i><i></i></a>
+                </div>
+            </section>
+        </div>
     </main>
 
-    <footer class="shell site-footer">
-        <span>Peng Liu</span>
-        <div>
-            <a href="mailto:njueebeanliu@hotmail.com">Email</a>
-            <a href="https://github.com/BeanLiu1994">GitHub <span aria-hidden="true">↗</span></a>
+    <footer class="site-footer">
+        <div class="shell footer-inner">
+            <span>Peng Liu</span>
+            <a href="#main">Back to top</a>
         </div>
     </footer>
 </body>

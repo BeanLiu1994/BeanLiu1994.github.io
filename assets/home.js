@@ -99,3 +99,23 @@
     selectFromHash();
     render();
 })();
+
+(() => {
+    const hero = document.querySelector(".hero");
+    const parallax = matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)");
+
+    hero.addEventListener("pointermove", event => {
+        if (!parallax.matches || event.pointerType !== "mouse") return;
+
+        const bounds = hero.getBoundingClientRect();
+        const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+        const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+        hero.style.setProperty("--orbit-x", `${x * 28}px`);
+        hero.style.setProperty("--orbit-y", `${y * 20}px`);
+    });
+
+    hero.addEventListener("pointerleave", () => {
+        hero.style.removeProperty("--orbit-x");
+        hero.style.removeProperty("--orbit-y");
+    });
+})();
