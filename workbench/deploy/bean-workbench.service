@@ -1,0 +1,29 @@
+[Unit]
+Description=Bean Workbench chat API and browser workspace
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/bean-workbench
+ExecStart=/opt/bean-workbench/bin/node /opt/bean-workbench/server.mjs
+LoadCredential=config.json:/etc/bean-workbench/config.json
+StateDirectory=bean-workbench
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

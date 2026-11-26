@@ -1,0 +1,29 @@
+{
+  "name": "bean-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-javascript": "^6.2.4",
+    "@uiw/react-codemirror": "^4.25.0",
+    "diff": "^8.0.2",
+    "esbuild-wasm": "^0.28.2",
+    "fflate": "^0.8.2",
+    "lucide-react": "^0.577.0",
+    "parse5": "^8.1.1",
+    "quickjs-emscripten": "^0.32.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0"
+  }
+}

@@ -1,0 +1,23 @@
+location = /workbench {
+    return 301 /workbench/;
+}
+
+location = /workbench/api/chat {
+    limit_req zone=bean_workbench_chat burst=8 nodelay;
+    limit_req_status 429;
+    client_max_body_size 192k;
+    proxy_buffering off;
+    proxy_connect_timeout 2s;
+    proxy_read_timeout 175s;
+    proxy_http_version 1.1;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_pass http://127.0.0.1:8772;
+}
+
+location /workbench/ {
+    gzip_types application/wasm text/javascript text/css;
+    gzip_vary on;
+    gzip_proxied any;
+    proxy_connect_timeout 2s;
+    proxy_pass http://127.0.0.1:8772;
+}
